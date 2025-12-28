@@ -20,6 +20,7 @@ export interface NavItem {
     href: string;
     icon?: LucideIcon | null;
     isActive?: boolean;
+    subItems?: NavItem[];
 }
 
 export interface SharedData {
@@ -40,4 +41,15 @@ export interface User {
     created_at: string;
     updated_at: string;
     [key: string]: unknown; // This allows for additional properties...
+}
+
+
+interface FlashProps {
+    success?: string;
+    error?: string;
+}
+
+export interface PagePropsWithFlash {
+    flash?: FlashProps; // Make flash optional
+    // Include other expected props
 }
