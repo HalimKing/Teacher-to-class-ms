@@ -17,6 +17,20 @@ class TimeTable extends Model
         'end_time',
     ];
 
+    // today's lectures
+    public static function todaysLectures()
+    {
+        return self::with('course.teacher', 'classroom')
+            ->where('day', now()->format('l'))
+            ->whereHas('course', function($query) {
+                $query->where('teacher_id', auth()->id());
+            })
+            ->orderBy('start_time')
+            ->get();
+    }
+
+    
+
     public function academicYear()
     {
         return $this->belongsTo(AcademicYear::class);

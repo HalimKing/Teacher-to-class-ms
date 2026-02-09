@@ -18,6 +18,11 @@ class Course extends Model
         'credit_hours',
         'teacher_id',
     ];
+
+    // get total number of courses assigned to a teacher
+ 
+    
+
     public function program()
     {
         return $this->belongsTo(Program::class);

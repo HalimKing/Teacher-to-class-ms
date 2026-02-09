@@ -13,6 +13,7 @@ import AppLayout from '@/layouts/app-layout';
 import { Head, Link, usePage, router } from '@inertiajs/react';
 import { PagePropsWithFlash } from '@/types';
 import { ToastContainer, toast, Bounce } from 'react-toastify';
+import { can } from '@/lib/can';
 
 // Update interface for paginated data
 interface Faculty {
@@ -167,6 +168,7 @@ const TeachersIndexPage = ({ facultiesData, search }: TeachersIndexPageProps) =>
                 <h2 className="text-3xl font-extrabold text-slate-900 mb-2"></h2>
                 
               </div>
+              {can('admin.school-management.faculties.create') &&
               <Link
                 href={route('admin.school-management.faculties.create')} 
                 className="mt-4 sm:mt-0 flex items-center justify-center px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-700 hover:from-indigo-700 hover:to-purple-800 text-white font-semibold rounded-xl transition-all duration-200 shadow-md hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-500/50"
@@ -174,6 +176,7 @@ const TeachersIndexPage = ({ facultiesData, search }: TeachersIndexPageProps) =>
                 <Plus className="w-5 h-5 mr-2" />
                 Add Faculty
               </Link>
+              }
             </div>
 
             {/* Teachers Table */}

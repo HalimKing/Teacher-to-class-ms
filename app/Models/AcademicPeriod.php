@@ -11,4 +11,6 @@ class AcademicPeriod extends Model
         'name',
         'status',
     ];
+
+   
 }

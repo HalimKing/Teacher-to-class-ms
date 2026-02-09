@@ -13,6 +13,7 @@ import { Head, Link, usePage, router } from '@inertiajs/react';
 import { PagePropsWithFlash } from '@/types';
 import { ToastContainer, toast, Bounce } from 'react-toastify';
 import { Button } from '@headlessui/react';
+import { can } from '@/lib/can';
 
 interface ClassRoom {
   id: number;
@@ -284,7 +285,7 @@ const AcademicYearIndexPage = ({ academicYearData }: TeachersIndexPageProps) => 
                     Active: {activeAcademicYearCount} of {allAcademicYears.length}
                   </span>
                 </div>
-                
+                {can('admin.school-management.academic-years.create') && (
                 <Link
                   href={route('admin.school-management.academic-years.create')} 
                   className="flex items-center justify-center px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-700 hover:from-indigo-700 hover:to-purple-800 text-white font-semibold rounded-xl transition-all duration-200 shadow-md hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-500/50"
@@ -292,6 +293,7 @@ const AcademicYearIndexPage = ({ academicYearData }: TeachersIndexPageProps) => 
                   <Plus className="w-5 h-5 mr-2" />
                   Add Academic Year
                 </Link>
+                )}
               </div>
             </div>
 
@@ -400,6 +402,7 @@ const AcademicYearIndexPage = ({ academicYearData }: TeachersIndexPageProps) => 
                             
                             <td className="px-6 py-4">
                               <div className="flex items-center space-x-1">
+                                {can('admin.school-management.academic-years.edit') && (
                                 <Link 
                                   title="Edit Academic Year" 
                                   className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -407,6 +410,8 @@ const AcademicYearIndexPage = ({ academicYearData }: TeachersIndexPageProps) => 
                                 >
                                   <Edit className="w-5 h-5" />
                                 </Link>
+                                )}
+                                {can('admin.school-management.academic-years.delete') && (
                                 <Button 
                                   title={
                                     isOnlyActive 
@@ -428,6 +433,7 @@ const AcademicYearIndexPage = ({ academicYearData }: TeachersIndexPageProps) => 
                                 >
                                   <Trash2 className="w-5 h-5" />
                                 </Button>
+                                )}
                               </div>
                             </td>
                           </tr>

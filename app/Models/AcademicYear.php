@@ -13,6 +13,11 @@ class AcademicYear extends Model
         'status',
     ];
 
+     public function scopeCurrent($query)
+    {
+        return $query->where('status', 'active')->first();
+    }
+
     public function timeTables()
     {
         return $this->hasMany(TimeTable::class);

@@ -24,6 +24,7 @@ import { PagePropsWithFlash } from '@/types';
 import { ToastContainer, toast, Bounce } from 'react-toastify';
 import { Button } from '@headlessui/react';
 import ComboBox from '@/components/combobox';
+import { can } from '@/lib/can';
 
 interface AcademicYear {
   id: number;
@@ -369,6 +370,7 @@ const TimeTablesIndexPage = ({
                   </div>
                 </div>
 
+                {can('admin.academics.time-tables.create') && (
                 <Link
                   href={route('admin.academics.time-tables.create')}
                   className="flex items-center justify-center px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-700 hover:from-indigo-700 hover:to-purple-800 text-white font-semibold rounded-xl transition-all duration-200 shadow-md hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-500/50"
@@ -376,6 +378,7 @@ const TimeTablesIndexPage = ({
                   <Plus className="w-5 h-5 mr-2" />
                   Add Time Slot
                 </Link>
+                )}
               </div>
             </div>
 
@@ -713,6 +716,7 @@ const TimeTablesIndexPage = ({
                                     <ChevronDown className="w-5 h-5" />
                                   )}
                                 </button>
+                                {can('admin.academics.time-tables.edit') && (
                                 <Link
                                   href={route('admin.academics.time-tables.edit', timetable.id)}
                                   className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -720,6 +724,9 @@ const TimeTablesIndexPage = ({
                                 >
                                   <Edit className="w-5 h-5" />
                                 </Link>
+                                )}
+
+                                {can('admin.academics.time-tables.delete') && (
                                 <Button
                                   onClick={(e) => {
                                     e.preventDefault();
@@ -735,6 +742,7 @@ const TimeTablesIndexPage = ({
                                 >
                                   <Trash2 className="w-5 h-5" />
                                 </Button>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -764,6 +772,7 @@ const TimeTablesIndexPage = ({
                         Clear Filters
                       </button>
                     )}
+                    {can('admin.academics.time-tables.create') && (
                     <Link
                       href={route('admin.academics.time-tables.create')}
                       className="inline-flex items-center justify-center px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl transition-colors"
@@ -771,6 +780,7 @@ const TimeTablesIndexPage = ({
                       <Plus className="w-5 h-5 mr-2" />
                       Add Time Slot
                     </Link>
+                    )}
                   </div>
                 </div>
               )}

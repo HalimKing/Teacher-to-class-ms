@@ -15,6 +15,7 @@ import { PagePropsWithFlash } from '@/types';
 import { ToastContainer, toast, Bounce } from 'react-toastify';
 import { Button } from '@headlessui/react';
 import axios from 'axios';
+import { can } from '@/lib/can';
 
 // Updated interface with all fields
 interface Course {
@@ -445,6 +446,7 @@ const CourseIndexPage = ({
               </div>
               <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 mt-4 sm:mt-0">
                
+               {can('admin.school-management.courses.create') && (
                 <Link
                   href={route('admin.school-management.courses.create')} 
                   className="flex items-center justify-center px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-700 hover:from-indigo-700 hover:to-purple-800 text-white font-semibold rounded-xl transition-all duration-200 shadow-md hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-500/50"
@@ -452,6 +454,7 @@ const CourseIndexPage = ({
                   <Plus className="w-5 h-5 mr-2" />
                   Add Course
                 </Link>
+              )}
               </div>
             </div>
 
@@ -827,6 +830,7 @@ const CourseIndexPage = ({
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center space-x-1">
+                              {can('admin.school-management.courses.edit') && (
                               <Link 
                                 title="Edit Course" 
                                 className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -834,17 +838,21 @@ const CourseIndexPage = ({
                               >
                                 <Edit className="w-5 h-5" />
                               </Link>
-                              <Button 
-                                title="Delete Course" 
-                                className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  handleDelete(course.id, course.name);
-                                }}
-                               
-                              >
-                                <Trash2 className="w-5 h-5" />
-                              </Button>
+                              )}
+
+                              {can('admin.school-management.courses.delete') && (
+                                <Button 
+                                  title="Delete Course" 
+                                  className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    handleDelete(course.id, course.name);
+                                  }}
+                                
+                                >
+                                  <Trash2 className="w-5 h-5" />
+                                </Button>
+                              )}
                             </div>
                           </td>
                         </tr>

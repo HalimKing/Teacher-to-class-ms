@@ -69,12 +69,18 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                             </Button>
                         </div>
 
-                        <div className="text-center text-sm text-muted-foreground">
-                            Don't have an account?{' '}
-                            <TextLink href={route('register')} tabIndex={5}>
-                                Sign up
-                            </TextLink>
+                      {/* Demo login details */}
+                      <div>
+                        <div className="text-sm text-muted-foreground">
+                          Use the following credentials to log in as a demo teacher:
                         </div>
+                        <div className="mt-2 text-sm text-muted-foreground">
+                          Email: <span className="font-semibold">wacisenopi@mailinator.com</span>
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          Password: <span className="font-semibold">password</span>
+                        </div>
+                      </div>
                     </>
                 )}
             </Form>

@@ -3,6 +3,7 @@ import type { Config } from 'ziggy-js';
 
 export interface Auth {
     user: User;
+    guard: string;
 }
 
 export interface BreadcrumbItem {
@@ -21,6 +22,7 @@ export interface NavItem {
     icon?: LucideIcon | null;
     isActive?: boolean;
     subItems?: NavItem[];
+    permission?: string;
 }
 
 export interface SharedData {
@@ -52,4 +54,17 @@ interface FlashProps {
 export interface PagePropsWithFlash {
     flash?: FlashProps; // Make flash optional
     // Include other expected props
+}
+
+export type AttendanceStatus = 'COMPLETED' | 'PENDING' | 'UPCOMING';
+
+export interface SchoolClass {
+  id: string;
+  shortName: string;
+  fullName: string;
+  subject: string;
+  startTime: string;
+  endTime: string;
+  status: AttendanceStatus;
+  colorClass: string;
 }

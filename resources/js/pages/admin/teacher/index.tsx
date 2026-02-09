@@ -14,6 +14,7 @@ import { Head, Link, router, usePage } from '@inertiajs/react';
 import { ToastContainer, toast, Bounce } from 'react-toastify';
 import { PagePropsWithFlash } from '@/types';
 import Button from '@mui/material/Button';
+import { can } from '@/lib/can';
 
 // Utility function to convert status string to display name
 const formatStatus = (status: string): string => {
@@ -200,6 +201,7 @@ const TeachersIndexPage = ({ teachers, faculties, departments, filters: initialF
                 <h2 className="text-3xl font-extrabold text-slate-900 dark:text-white mb-2">Teachers Overview</h2>
                 <p className="text-slate-600 dark:text-slate-400">Comprehensive management and performance monitoring for teaching staff</p>
               </div>
+              {can('admin.teachers.create') && (
               <Link
                 href={route('admin.teachers.create')} 
                 className="mt-4 sm:mt-0 flex items-center justify-center px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-700 hover:from-indigo-700 hover:to-purple-800 text-white font-semibold rounded-xl transition-all duration-200 shadow-md hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-500/50"
@@ -207,6 +209,7 @@ const TeachersIndexPage = ({ teachers, faculties, departments, filters: initialF
                 <Plus className="w-5 h-5 mr-2" />
                 Add New Teacher
               </Link>
+              )}
             </div>
 
             {/* Filters Section */}

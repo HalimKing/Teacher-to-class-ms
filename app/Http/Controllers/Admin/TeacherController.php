@@ -2,11 +2,15 @@
 
 namespace App\Http\Controllers\Admin;
 
+
 use App\Http\Controllers\Controller;
 use App\Models\Faculty;
 use App\Models\Department;
 use App\Models\Teacher;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Inertia\Inertia;
 
 class TeacherController extends Controller
@@ -58,6 +62,7 @@ class TeacherController extends Controller
      */
     public function create()
     {
+        
         $faculties = Faculty::select('id', 'name')->orderBy('name')->get();
         $facultyOptions = [];
         
@@ -186,5 +191,67 @@ class TeacherController extends Controller
         $teacher->delete();
         return redirect()->route('admin.teachers.index')
             ->with('success', 'Teacher deleted successfully!');
+    }
+
+        public function passwordManagement(Request $request)
+    {
+        $teacher = null;
+        
+        // If employee_id is provided, search for the teacher
+        if ($request->has('employee_id') && !empty($request->employee_id)) {
+            $teacher = Teacher::with(['faculty', 'department'])
+                ->where('employee_id', $request->employee_id)
+                ->first();
+            
+            if (!$teacher) {
+                return Inertia::render('admin/teacher/password-management', [
+                    'teacher' => null,
+                ])->with('error', 'No teacher found with this employee ID.');
+            }
+        }
+
+        return Inertia::render('admin/teacher/password-management', [
+            'teacher' => $teacher,
+        ]);
+    }
+
+   public function resetPassword(Request $request, Teacher $teacher)
+    {
+        try {
+            // Generate a secure random password
+            $newPassword = 'password' . rand(1000, 9999); // Example: you can use a more secure method
+            
+            // Hash and update the password
+            $teacher->password = Hash::make($newPassword);
+            $teacher->password_changed_at = null; // Force password change on next login
+            $teacher->save();
+            
+            // Log the password reset action
+            Log::info('Password reset for teacher', [
+                'teacher_id' => $teacher->id,
+                'employee_id' => $teacher->employee_id,
+                'reset_by' => auth()->id(),
+                'reset_at' => now(),
+            ]);
+            
+            // Optional: Send email notification to teacher
+         
+            
+            // Load relationships for response
+            $teacher->load(['faculty', 'department']);
+            
+            return Inertia::render('admin/teacher/password-management', [
+                'teacher' => $teacher,
+                'generatedPassword' => $newPassword,
+            ])->with('success', 'Password reset successfully! Please provide the new password to the teacher.');
+            
+        } catch (\Exception $e) {
+            Log::error('Password reset failed', [
+                'teacher_id' => $teacher->id,
+                'error' => $e->getMessage(),
+            ]);
+            
+            return back()->with('error', 'Failed to reset password. Please try again.');
+        }
     }
 }

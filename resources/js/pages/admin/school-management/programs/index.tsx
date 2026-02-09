@@ -13,6 +13,7 @@ import { Head, Link, usePage, router } from '@inertiajs/react';
 import { PagePropsWithFlash } from '@/types';
 import { ToastContainer, toast, Bounce } from 'react-toastify';
 import { Button } from '@headlessui/react';
+import { can } from '@/lib/can';
 
 // Simplified interface for Program
 interface Program {
@@ -217,6 +218,7 @@ const ProgramsIndexPage = ({
                 <h2 className="text-3xl font-extrabold text-slate-900 mb-2">Programs</h2>
                 <p className="text-slate-600">Manage academic programs for your institution</p>
               </div>
+              {can('admin.school-management.programs.create') && (
               <Link
                 href={route('admin.school-management.programs.create')} 
                 className="mt-4 sm:mt-0 flex items-center justify-center px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-700 hover:from-indigo-700 hover:to-purple-800 text-white font-semibold rounded-xl transition-all duration-200 shadow-md hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-500/50"
@@ -224,6 +226,7 @@ const ProgramsIndexPage = ({
                 <Plus className="w-5 h-5 mr-2" />
                 Add Program
               </Link>
+              )}
             </div>
 
             {/* Filters Section */}
@@ -376,6 +379,7 @@ const ProgramsIndexPage = ({
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center space-x-1">
+                              {can('admin.school-management.programs.edit') && (
                               <Link 
                                 title="Edit Program" 
                                 className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -383,16 +387,20 @@ const ProgramsIndexPage = ({
                               >
                                 <Edit className="w-5 h-5" />
                               </Link>
-                              <Button 
-                                title="Delete Program" 
-                                className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  handleDelete(program.id, program.name);
-                                }}
-                              >
-                                <Trash2 className="w-5 h-5" />
-                              </Button>
+                              )}
+
+                              {can('admin.school-management.programs.delete') && (
+                                <Button 
+                                  title="Delete Program" 
+                                  className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    handleDelete(program.id, program.name);
+                                  }}
+                                >
+                                  <Trash2 className="w-5 h-5" />
+                                </Button>
+                              )}
                             </div>
                           </td>
                         </tr>

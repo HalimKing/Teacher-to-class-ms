@@ -12,6 +12,7 @@ import AppLayout from '@/layouts/app-layout';
 import { Head, Link, usePage, router } from '@inertiajs/react';
 import { PagePropsWithFlash } from '@/types';
 import { ToastContainer, toast, Bounce } from 'react-toastify';
+import { can } from '@/lib/can';
 
 // Update interfaces
 interface Department {
@@ -188,6 +189,7 @@ const DepartmentIndexPage = ({ departmentData, facultyOptions, search, faculty }
               <div>
                 <h2 className="text-3xl font-extrabold text-slate-900 mb-2">Departments</h2>
               </div>
+              {can('admin.school-management.departments.create') && (
               <Link
                 href={route('admin.school-management.departments.create')} 
                 className="mt-4 sm:mt-0 flex items-center justify-center px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-700 hover:from-indigo-700 hover:to-purple-800 text-white font-semibold rounded-xl transition-all duration-200 shadow-md hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-500/50"
@@ -195,6 +197,7 @@ const DepartmentIndexPage = ({ departmentData, facultyOptions, search, faculty }
                 <Plus className="w-5 h-5 mr-2" />
                 Add Department
               </Link>
+              )}
             </div>
 
             {/* Departments Table */}
@@ -348,9 +351,7 @@ const DepartmentIndexPage = ({ departmentData, facultyOptions, search, faculty }
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center space-x-1">
-                              <button title="View Details" className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
-                                <Eye className="w-5 h-5" />
-                              </button>
+                             {can('admin.school-management.departments.edit') && (
                               <Link 
                                 title="Edit Department" 
                                 className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -358,6 +359,9 @@ const DepartmentIndexPage = ({ departmentData, facultyOptions, search, faculty }
                               >
                                 <Edit className="w-5 h-5" />
                               </Link>
+                             )}
+
+                             {can('admin.school-management.departments.delete') && (
                               <Link 
                                 title="Delete Department" 
                                 method='delete'
@@ -367,6 +371,7 @@ const DepartmentIndexPage = ({ departmentData, facultyOptions, search, faculty }
                               >
                                 <Trash2 className="w-5 h-5" />
                               </Link>
+                             )}
                             </div>
                           </td>
                         </tr>

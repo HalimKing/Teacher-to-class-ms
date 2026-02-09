@@ -9,7 +9,11 @@ class ClassRoom extends Model
     //
     protected $fillable = [
         'name',
-        'capacity'
+        'capacity',
+        'latitude',
+        'longitude',
+        'radius_meters',
+        'is_active',
     ];
 
      public function timeTables()

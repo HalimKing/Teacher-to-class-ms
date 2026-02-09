@@ -53,11 +53,19 @@ class ClassRoomController extends Controller
         $validator = $request->validate([
             'name' => 'required|string|max:255|unique:class_rooms,name',
             'capacity' => 'required|integer|min:1',
+            'latitude' => 'nullable|numeric|min:-90|max:90',
+            'longitude' => 'nullable|numeric|min:-180|max:180',
+            'radius_meters' => 'nullable|numeric|min:0',
+            'is_active' => 'nullable|boolean',
         ]);
         try {
             $classRoom = new ClassRoom();
             $classRoom->name = $request->name;
             $classRoom->capacity = $request->capacity;
+            $classRoom->latitude = $request->latitude;
+            $classRoom->longitude = $request->longitude;
+            $classRoom->radius_meters = $request->radius_meters;
+            $classRoom->is_active = $request->is_active;
             $classRoom->save();
             return redirect()->route('admin.school-management.class-rooms.index')
             ->with('success', 'Successful created!');
@@ -95,10 +103,18 @@ class ClassRoomController extends Controller
         $request->validate([
             'name' => 'required|string|max:255|unique:class_rooms,name,'. $classRoom->id,
             'capacity' => 'required|integer|min:1',
+            'latitude' => 'nullable|numeric|min:-90|max:90',
+            'longitude' => 'nullable|numeric|min:-180|max:180',
+            'radius_meters' => 'nullable|numeric|min:0',
+            'is_active' => 'nullable|boolean',
         ]);
         try {
             $classRoom->name = $request->name;
-            $classRoom->capacity = $request->capacity;  
+            $classRoom->capacity = $request->capacity;
+            $classRoom->latitude = $request->latitude;
+            $classRoom->longitude = $request->longitude;
+            $classRoom->radius_meters = $request->radius_meters;
+            $classRoom->is_active = $request->is_active;
             $classRoom->save();
             return redirect()->route('admin.school-management.class-rooms.index')
             ->with('success', 'Successful updated!');

@@ -3,10 +3,19 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
 
-class Teacher extends Model
+class Teacher extends Authenticatable 
 {
     //
+        /**     * The attributes that are mass assignable.
+     * @var list<string>
+     */
+    use Notifiable;
+
+    protected $guard = 'teacher';
+
     protected $fillable = [
         'first_name',
         'last_name',
