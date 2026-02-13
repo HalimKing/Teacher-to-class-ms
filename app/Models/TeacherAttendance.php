@@ -50,4 +50,8 @@ class TeacherAttendance extends Model
     {
         return $this->belongsTo(TimeTable::class);
     }
+    public function academicYear()
+    {
+        return $this->belongsTo(AcademicYear::class);
+    }
 }

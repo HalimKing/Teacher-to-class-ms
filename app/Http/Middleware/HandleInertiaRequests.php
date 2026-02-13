@@ -6,6 +6,7 @@ use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 use Tighten\Ziggy\Ziggy;
+use App\Models\SystemSetting;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -44,7 +45,7 @@ class HandleInertiaRequests extends Middleware
         return [
             ...parent::share($request),
 
-            'name' => config('app.name'),
+            'name' => 'Teacher-to-Class MS', // Can be used in frontend for display or title
 
             'quote' => [
                 'message' => trim($message),
@@ -65,7 +66,7 @@ class HandleInertiaRequests extends Middleware
                     : (auth()->guard('teacher')->check() ? 'teacher' : null),
             ],
 
-            'ziggy' => fn (): array => [
+            'ziggy' => fn(): array => [
                 ...(new Ziggy)->toArray(),
                 'location' => $request->url(),
             ],
@@ -74,9 +75,12 @@ class HandleInertiaRequests extends Middleware
                 || $request->cookie('sidebar_state') === 'true',
 
             'flash' => [
-                'success' => fn () => $request->session()->get('success'),
-                'error' => fn () => $request->session()->get('error'),
+                'success' => fn() => $request->session()->get('success'),
+                'error' => fn() => $request->session()->get('error'),
             ],
+
+            // Expose system settings (grouped) to the frontend so UI can react to changes
+            'system_settings' => fn() => SystemSetting::getGrouped(),
         ];
     }
 }

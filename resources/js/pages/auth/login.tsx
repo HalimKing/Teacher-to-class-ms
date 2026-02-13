@@ -78,7 +78,7 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                           Email: <span className="font-semibold">wacisenopi@mailinator.com</span>
                         </div>
                         <div className="text-sm text-muted-foreground">
-                          Password: <span className="font-semibold">password</span>
+                  admin. d       Password: <span className="font-semibold">password</span>
                         </div>
                       </div>
                     </>

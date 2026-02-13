@@ -1,14 +1,15 @@
 import { PlaceholderPattern } from '@/components/ui/placeholder-pattern';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head } from '@inertiajs/react';
-import { 
-  GraduationCap, Users, Star, BookOpen, Activity, Search, 
-  MapPin, UserPlus, FileText, Bell, Play, Upload, 
+import { Head, usePage } from '@inertiajs/react';
+import {
+  GraduationCap, Users, Star, BookOpen, Activity, Search,
+  MapPin, UserPlus, FileText, Bell, Play, Upload,
   GraduationCap as GradIcon, Calendar, Building, Filter,
   TrendingUp, Clock, BarChart3, PieChart, Download
 } from 'lucide-react';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import axios from 'axios';
 
 // Import Chart.js components
 import {
@@ -44,248 +45,13 @@ const breadcrumbs: BreadcrumbItem[] = [
   },
 ];
 
-const faculties = [
-  { id: 1, name: 'Computer Science', departments: ['Software Engineering', 'Data Science', 'Cybersecurity'] },
-  { id: 2, name: 'Engineering', departments: ['Mechanical', 'Electrical', 'Civil'] },
-  { id: 3, name: 'Business', departments: ['Finance', 'Marketing', 'Management'] },
-  { id: 4, name: 'Arts & Sciences', departments: ['Mathematics', 'Physics', 'Chemistry'] },
-];
-
 const timeFilters = [
   { id: 'today', label: 'Today' },
   { id: '7days', label: 'Last 7 Days' },
   { id: '30days', label: 'Last 30 Days' },
-  { id: '90days', label: 'Last 90 Days' },
 ];
 
-const recentActivities = [
-  {
-    id: 1,
-    teacher: 'Dr. Sarah Johnson',
-    action: 'Started class session',
-    time: '10 min ago',
-    icon: Play,
-    iconColor: 'text-blue-500',
-    iconBg: 'bg-blue-100 dark:bg-blue-900/20'
-  },
-  {
-    id: 2,
-    teacher: 'Prof. Michael Smith',
-    action: 'Uploaded course materials',
-    time: '15 min ago',
-    icon: Upload,
-    iconColor: 'text-green-500',
-    iconBg: 'bg-green-100 dark:bg-green-900/20'
-  },
-  {
-    id: 3,
-    teacher: 'Dr. Emily Davis',
-    action: 'Submitted grades',
-    time: '30 min ago',
-    icon: GradIcon,
-    iconColor: 'text-purple-500',
-    iconBg: 'bg-purple-100 dark:bg-purple-900/20'
-  },
-  {
-    id: 4,
-    teacher: 'Prof. David Wilson',
-    action: 'Scheduled office hours',
-    time: '45 min ago',
-    icon: Calendar,
-    iconColor: 'text-orange-500',
-    iconBg: 'bg-orange-100 dark:bg-orange-900/20'
-  }
-];
 
-const quickActions = [
-  {
-    id: 1,
-    title: 'Add New Teacher',
-    icon: UserPlus,
-    variant: 'primary'
-  },
-  {
-    id: 2,
-    title: 'Generate Report',
-    icon: FileText,
-    variant: 'secondary'
-  },
-  {
-    id: 3,
-    title: 'Send Notification',
-    icon: Bell,
-    variant: 'secondary'
-  }
-];
-
-const teachers = [
-  {
-    id: 1,
-    name: 'Dr. Sarah Johnson',
-    initials: 'DSJ',
-    subject: 'Computer Science',
-    faculty: 'Computer Science',
-    department: 'Software Engineering',
-    status: 'teaching',
-    statusTime: '2 min ago',
-    topic: 'Data Structures',
-    room: 'A-101',
-    rating: 4.8,
-    classes: 5,
-    avatar: 'bg-purple-500'
-  },
-  {
-    id: 2,
-    name: 'Prof. James Miller',
-    initials: 'PJM',
-    subject: 'Computer Science',
-    faculty: 'Computer Science',
-    department: 'Data Science',
-    status: 'available',
-    statusTime: '1 min ago',
-    topic: 'Machine Learning',
-    room: 'A-203',
-    rating: 4.4,
-    classes: 5,
-    avatar: 'bg-purple-600'
-  },
-  {
-    id: 3,
-    name: 'Dr. Emily Chen',
-    initials: 'DEC',
-    subject: 'Mathematics',
-    faculty: 'Arts & Sciences',
-    department: 'Mathematics',
-    status: 'teaching',
-    statusTime: '5 min ago',
-    topic: 'Linear Algebra',
-    room: 'B-105',
-    rating: 4.9,
-    classes: 7,
-    avatar: 'bg-blue-500'
-  },
-  {
-    id: 4,
-    name: 'Prof. Michael Brown',
-    initials: 'PMB',
-    subject: 'Physics',
-    faculty: 'Engineering',
-    department: 'Mechanical',
-    status: 'offline',
-    statusTime: '1 hour ago',
-    topic: 'Quantum Mechanics',
-    room: 'C-201',
-    rating: 4.6,
-    classes: 4,
-    avatar: 'bg-green-500'
-  },
-  {
-    id: 5,
-    name: 'Dr. Lisa Wang',
-    initials: 'DLW',
-    subject: 'Mathematics',
-    faculty: 'Arts & Sciences',
-    department: 'Mathematics',
-    status: 'available',
-    statusTime: '3 min ago',
-    topic: 'Calculus',
-    room: 'B-302',
-    rating: 4.7,
-    classes: 6,
-    avatar: 'bg-indigo-500'
-  }
-];
-
-const stats = [
-  {
-    title: 'Total Teachers',
-    value: '45',
-    icon: GraduationCap,
-    iconColor: 'text-purple-500',
-    iconBg: 'bg-purple-100 dark:bg-purple-900/20',
-    change: '+2.5%',
-    changeType: 'positive'
-  },
-  {
-    title: 'Active Today',
-    value: '38',
-    icon: Users,
-    iconColor: 'text-green-500',
-    iconBg: 'bg-green-100 dark:bg-green-900/20',
-    change: '+12%',
-    changeType: 'positive'
-  },
-  {
-    title: 'Total Classes',
-    value: '156',
-    icon: BookOpen,
-    iconColor: 'text-blue-500',
-    iconBg: 'bg-blue-100 dark:bg-blue-900/20',
-    change: '+5.3%',
-    changeType: 'positive'
-  },
-  {
-    title: 'Ongoing',
-    value: '12',
-    icon: Activity,
-    iconColor: 'text-purple-500',
-    iconBg: 'bg-purple-100 dark:bg-purple-900/20',
-    change: '-1.2%',
-    changeType: 'negative'
-  }
-];
-
-// Mock attendance data
-const generateAttendanceData = (timeRange: string) => {
-  switch(timeRange) {
-    case 'today':
-      return {
-        labels: ['9 AM', '11 AM', '1 PM', '3 PM', '5 PM'],
-        present: [65, 78, 82, 75, 68],
-        absent: [15, 12, 8, 15, 12],
-        late: [20, 10, 10, 10, 20]
-      };
-    case '7days':
-      return {
-        labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-        present: [78, 82, 85, 80, 83, 45, 35],
-        absent: [12, 8, 10, 15, 7, 25, 35],
-        late: [10, 10, 5, 5, 10, 30, 30]
-      };
-    case '30days':
-    default:
-      return {
-        labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
-        present: [75, 80, 82, 85],
-        absent: [15, 10, 8, 10],
-        late: [10, 10, 10, 5]
-      };
-  }
-};
-
-// Mock faculty distribution data
-const facultyDistributionData = {
-  labels: faculties.map(f => f.name),
-  datasets: [
-    {
-      label: 'Number of Teachers',
-      data: [15, 12, 10, 8],
-      backgroundColor: [
-        'rgba(147, 51, 234, 0.8)',  // Purple
-        'rgba(59, 130, 246, 0.8)',   // Blue
-        'rgba(16, 185, 129, 0.8)',   // Green
-        'rgba(245, 158, 11, 0.8)',   // Orange
-      ],
-      borderColor: [
-        'rgb(147, 51, 234)',
-        'rgb(59, 130, 246)',
-        'rgb(16, 185, 129)',
-        'rgb(245, 158, 11)',
-      ],
-      borderWidth: 1,
-    },
-  ],
-};
 
 const chartOptions = {
   responsive: true,
@@ -297,27 +63,117 @@ const chartOptions = {
   },
 };
 
-export default function Dashboard() {
+interface Teacher {
+  id: number;
+  name: string;
+  initials: string;
+  subject: string;
+  faculty: string;
+  department: string;
+  status: string;
+  statusTime: string;
+  topic: string;
+  room: string;
+  rating: number | string;
+  classes: number;
+  avatar: string;
+}
+
+interface Stat {
+  title: string;
+  value: number | string;
+  change: string;
+  changeType: 'positive' | 'negative' | 'neutral';
+}
+
+interface RecentActivity {
+  id: number;
+  teacher: string;
+  action: string;
+  time: string;
+}
+
+interface DashboardProps {
+  stats: Stat[];
+  recentActivities: RecentActivity[];
+  facultyDistribution: {
+    labels: string[];
+    data: number[];
+  };
+  teachers: Teacher[];
+  initialAttendanceTrend: any;
+}
+
+export default function Dashboard({ stats, recentActivities, facultyDistribution, teachers, initialAttendanceTrend }: DashboardProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [subjectFilter, setSubjectFilter] = useState('All Subjects');
   const [statusFilter, setStatusFilter] = useState('All Status');
   const [facultyFilter, setFacultyFilter] = useState('All Faculties');
   const [departmentFilter, setDepartmentFilter] = useState('All Departments');
   const [timeFilter, setTimeFilter] = useState('30days');
-  const [selectedFaculty, setSelectedFaculty] = useState<string>('');
-  const [selectedDepartment, setSelectedDepartment] = useState<string>('');
+
+  const [attendanceChartData, setAttendanceChartData] = useState(initialAttendanceTrend);
+  const [loadingChart, setLoadingChart] = useState(false);
+
+  // Fetch chart data when filter changes
+  useEffect(() => {
+    // skip initial load as we have data from props
+    if (timeFilter === '30days' && attendanceChartData === initialAttendanceTrend) return;
+
+    const fetchData = async () => {
+      setLoadingChart(true);
+      try {
+        const response = await axios.get(route('admin.dashboard.attendance-data'), {
+          params: { range: timeFilter }
+        });
+        setAttendanceChartData(response.data);
+      } catch (error) {
+        console.error("Failed to fetch chart data", error);
+      } finally {
+        setLoadingChart(false);
+      }
+    };
+
+    fetchData();
+  }, [timeFilter]);
+
+
+  // Helper to map icon to stat title
+  const getIconForStat = (title: string) => {
+    switch (title) {
+      case 'Total Teachers': return GraduationCap;
+      case 'Active Today': return Users;
+      case 'Total Classes': return BookOpen;
+      case 'Ongoing': return Activity;
+      default: return GraduationCap;
+    }
+  };
+
+  const getColorForStat = (title: string) => {
+    switch (title) {
+      case 'Total Teachers': return { color: 'text-purple-500', bg: 'bg-purple-100 dark:bg-purple-900/20' };
+      case 'Active Today': return { color: 'text-green-500', bg: 'bg-green-100 dark:bg-green-900/20' };
+      case 'Total Classes': return { color: 'text-blue-500', bg: 'bg-blue-100 dark:bg-blue-900/20' };
+      case 'Ongoing': return { color: 'text-purple-500', bg: 'bg-purple-100 dark:bg-purple-900/20' };
+      default: return { color: 'text-gray-500', bg: 'bg-gray-100' };
+    }
+  };
+
 
   // Get unique subjects for filter dropdown
   const subjects = useMemo(() => {
     const uniqueSubjects = [...new Set(teachers.map(teacher => teacher.subject))];
     return ['All Subjects', ...uniqueSubjects];
-  }, []);
+  }, [teachers]);
 
   // Get unique faculties
+  // We can use the props teachers list to derive unique faculties dynamically
+  // Or use the facultyDistribution labels if complete. Using teachers list is safer for the dropdown.
   const allFaculties = useMemo(() => {
     const uniqueFaculties = [...new Set(teachers.map(teacher => teacher.faculty))];
     return ['All Faculties', ...uniqueFaculties];
-  }, []);
+  }, [teachers]);
+
 
   // Get departments based on selected faculty
   const departments = useMemo(() => {
@@ -325,77 +181,107 @@ export default function Dashboard() {
       const allDepartments = [...new Set(teachers.map(teacher => teacher.department))];
       return ['All Departments', ...allDepartments];
     }
-    
-    const faculty = faculties.find(f => f.name === facultyFilter);
-    return faculty ? ['All Departments', ...faculty.departments] : ['All Departments'];
-  }, [facultyFilter]);
+
+    // Filter teachers by the selected faculty then get their unique departments
+    const uniqueDepartments = [...new Set(
+      teachers
+        .filter(t => t.faculty === facultyFilter)
+        .map(t => t.department)
+    )];
+    return ['All Departments', ...uniqueDepartments];
+  }, [facultyFilter, teachers]);
 
   // Get unique statuses for filter dropdown
   const statuses = useMemo(() => {
     const uniqueStatuses = [...new Set(teachers.map(teacher => teacher.status))];
-    return ['All Status', ...uniqueStatuses.map(status => 
+    return ['All Status', ...uniqueStatuses.map(status =>
       status.charAt(0).toUpperCase() + status.slice(1)
     )];
-  }, []);
+  }, [teachers]);
 
   // Filter teachers based on search and filters
   const filteredTeachers = useMemo(() => {
     return teachers.filter(teacher => {
       const matchesSearch = teacher.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          teacher.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          teacher.topic.toLowerCase().includes(searchQuery.toLowerCase());
-      
+        teacher.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        teacher.topic.toLowerCase().includes(searchQuery.toLowerCase());
+
       const matchesSubject = subjectFilter === 'All Subjects' || teacher.subject === subjectFilter;
-      
-      const matchesStatus = statusFilter === 'All Status' || 
-                          teacher.status === statusFilter.toLowerCase();
+
+      const matchesStatus = statusFilter === 'All Status' ||
+        teacher.status === statusFilter.toLowerCase();
 
       const matchesFaculty = facultyFilter === 'All Faculties' || teacher.faculty === facultyFilter;
-      
+
       const matchesDepartment = departmentFilter === 'All Departments' || teacher.department === departmentFilter;
 
       return matchesSearch && matchesSubject && matchesStatus && matchesFaculty && matchesDepartment;
     });
-  }, [searchQuery, subjectFilter, statusFilter, facultyFilter, departmentFilter]);
+  }, [searchQuery, subjectFilter, statusFilter, facultyFilter, departmentFilter, teachers]);
 
-  // Generate chart data based on time filter
+  // Generate chart data objects
   const attendanceData = useMemo(() => {
-    const data = generateAttendanceData(timeFilter);
-    
+    // attendanceChartData is the raw data object { labels, present, absent, late }
     return {
-      labels: data.labels,
+      labels: attendanceChartData.labels || [],
       datasets: [
         {
           label: 'Present',
-          data: data.present,
+          data: attendanceChartData.present || [],
           borderColor: 'rgb(16, 185, 129)',
           backgroundColor: 'rgba(16, 185, 129, 0.5)',
           tension: 0.4,
         },
         {
           label: 'Absent',
-          data: data.absent,
+          data: attendanceChartData.absent || [],
           borderColor: 'rgb(239, 68, 68)',
           backgroundColor: 'rgba(239, 68, 68, 0.5)',
           tension: 0.4,
         },
         {
           label: 'Late',
-          data: data.late,
+          data: attendanceChartData.late || [],
           borderColor: 'rgb(245, 158, 11)',
           backgroundColor: 'rgba(245, 158, 11, 0.5)',
           tension: 0.4,
         },
       ],
     };
-  }, [timeFilter]);
+  }, [attendanceChartData]);
 
+  const pieChartData = useMemo(() => {
+    return {
+      labels: facultyDistribution.labels,
+      datasets: [
+        {
+          label: 'Number of Teachers',
+          data: facultyDistribution.data,
+          backgroundColor: [
+            'rgba(147, 51, 234, 0.8)',  // Purple
+            'rgba(59, 130, 246, 0.8)',   // Blue
+            'rgba(16, 185, 129, 0.8)',   // Green
+            'rgba(245, 158, 11, 0.8)',   // Orange
+            'rgba(236, 72, 153, 0.8)',   // Pink
+            'rgba(107, 114, 128, 0.8)',  // Gray
+          ],
+          borderColor: [
+            'white'
+          ],
+          borderWidth: 1,
+        },
+      ],
+    };
+  }, [facultyDistribution]);
+
+
+  // Placeholder for bar chart - could also be dynamic if we had that data
   const barChartData = {
-    labels: faculties.map(f => f.name),
+    labels: facultyDistribution.labels,
     datasets: [
       {
-        label: 'Attendance Rate (%)',
-        data: [92, 88, 85, 90],
+        label: 'Attendance Rate (%)', // This would need real calculation
+        data: facultyDistribution.labels.map(() => Math.floor(Math.random() * (100 - 80 + 1) + 80)), // Mock random 80-100%
         backgroundColor: 'rgba(147, 51, 234, 0.8)',
         borderColor: 'rgb(147, 51, 234)',
         borderWidth: 1,
@@ -409,7 +295,6 @@ export default function Dashboard() {
   };
 
   const handleExportData = () => {
-    // Implement export functionality
     console.log('Exporting data...');
   };
 
@@ -420,7 +305,8 @@ export default function Dashboard() {
         {/* Stats Grid */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4">
           {stats.map((stat, index) => {
-            const Icon = stat.icon;
+            const Icon = getIconForStat(stat.title);
+            const { color, bg } = getColorForStat(stat.title);
             return (
               <div
                 key={index}
@@ -434,16 +320,18 @@ export default function Dashboard() {
                     <p className="text-3xl font-bold text-sidebar-foreground dark:text-sidebar-foreground mt-2">
                       {stat.value}
                     </p>
-                    <div className={`flex items-center gap-1 mt-2 text-sm ${
-                      stat.changeType === 'positive' ? 'text-green-600' : 'text-red-600'
-                    }`}>
-                      <TrendingUp className="h-4 w-4" />
-                      <span>{stat.change}</span>
-                      <span className="text-sidebar-foreground/50">from last month</span>
-                    </div>
+                    {stat.change !== 'N/A' && (
+                      <div className={`flex items-center gap-1 mt-2 text-sm ${stat.changeType === 'positive' ? 'text-green-600' :
+                        stat.changeType === 'negative' ? 'text-red-600' : 'text-gray-500'
+                        }`}>
+                        <TrendingUp className="h-4 w-4" />
+                        <span>{stat.change}</span>
+                        <span className="text-sidebar-foreground/50">from last month</span>
+                      </div>
+                    )}
                   </div>
-                  <div className={`p-3 rounded-lg ${stat.iconBg}`}>
-                    <Icon className={`h-6 w-6 ${stat.iconColor}`} />
+                  <div className={`p-3 rounded-lg ${bg}`}>
+                    <Icon className={`h-6 w-6 ${color}`} />
                   </div>
                 </div>
               </div>
@@ -473,11 +361,10 @@ export default function Dashboard() {
                   <button
                     key={filter.id}
                     onClick={() => setTimeFilter(filter.id)}
-                    className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                      timeFilter === filter.id
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-gray-100 dark:bg-gray-800 text-sidebar-foreground dark:text-sidebar-foreground hover:bg-gray-200 dark:hover:bg-gray-700'
-                    }`}
+                    className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${timeFilter === filter.id
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-gray-100 dark:bg-gray-800 text-sidebar-foreground dark:text-sidebar-foreground hover:bg-gray-200 dark:hover:bg-gray-700'
+                      }`}
                   >
                     {filter.label}
                   </button>
@@ -504,7 +391,11 @@ export default function Dashboard() {
                   </h4>
                   <BarChart3 className="h-5 w-5 text-sidebar-foreground/60" />
                 </div>
-                <Line data={attendanceData} options={chartOptions} />
+                {loadingChart ? (
+                  <div className="flex items-center justify-center h-full">Loading...</div>
+                ) : (
+                  <Line data={attendanceData} options={chartOptions} />
+                )}
               </div>
             </div>
 
@@ -517,7 +408,7 @@ export default function Dashboard() {
                   </h4>
                   <PieChart className="h-5 w-5 text-sidebar-foreground/60" />
                 </div>
-                <Pie data={facultyDistributionData} options={chartOptions} />
+                <Pie data={pieChartData} options={chartOptions} />
               </div>
             </div>
           </div>
@@ -549,7 +440,7 @@ export default function Dashboard() {
                 <span className="text-sm text-sidebar-foreground/60">Filter by:</span>
               </div>
             </div>
-            
+
             {/* Advanced Filters */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
               <div className="relative">
@@ -562,7 +453,7 @@ export default function Dashboard() {
                   className="w-full pl-10 pr-4 py-2 border border-sidebar-border rounded-lg bg-white dark:bg-sidebar-accent text-sidebar-foreground dark:text-sidebar-foreground focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-              <select 
+              <select
                 value={facultyFilter}
                 onChange={(e) => handleFacultyChange(e.target.value)}
                 className="px-4 py-2 border border-sidebar-border rounded-lg bg-white dark:bg-sidebar-accent text-sidebar-foreground dark:text-sidebar-foreground focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -571,7 +462,7 @@ export default function Dashboard() {
                   <option key={faculty} value={faculty}>{faculty}</option>
                 ))}
               </select>
-              <select 
+              <select
                 value={departmentFilter}
                 onChange={(e) => setDepartmentFilter(e.target.value)}
                 className="px-4 py-2 border border-sidebar-border rounded-lg bg-white dark:bg-sidebar-accent text-sidebar-foreground dark:text-sidebar-foreground focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -580,7 +471,7 @@ export default function Dashboard() {
                   <option key={dept} value={dept}>{dept}</option>
                 ))}
               </select>
-              <select 
+              <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="px-4 py-2 border border-sidebar-border rounded-lg bg-white dark:bg-sidebar-accent text-sidebar-foreground dark:text-sidebar-foreground focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -624,11 +515,10 @@ export default function Dashboard() {
                           <div className="flex items-center gap-3">
                             <div className={`w-10 h-10 rounded-lg ${teacher.avatar} flex items-center justify-center text-white font-medium text-sm relative`}>
                               {teacher.initials}
-                              <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${
-                                teacher.status === 'teaching' ? 'bg-blue-500' :
+                              <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${teacher.status === 'teaching' ? 'bg-blue-500' :
                                 teacher.status === 'available' ? 'bg-green-500' :
-                                'bg-gray-400'
-                              }`}></div>
+                                  'bg-gray-400'
+                                }`}></div>
                             </div>
                             <div>
                               <p className="font-medium text-sidebar-foreground dark:text-sidebar-foreground">
@@ -642,13 +532,12 @@ export default function Dashboard() {
                         </td>
                         <td className="py-4 px-2">
                           <div>
-                            <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                              teacher.status === 'teaching' 
-                                ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400'
-                                : teacher.status === 'available'
+                            <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${teacher.status === 'teaching'
+                              ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400'
+                              : teacher.status === 'available'
                                 ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
                                 : 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400'
-                            }`}>
+                              }`}>
                               {teacher.status}
                             </span>
                             <p className="text-xs text-sidebar-foreground/50 dark:text-sidebar-foreground/50 mt-1">
@@ -707,12 +596,12 @@ export default function Dashboard() {
                 Recent Activity
               </h3>
               <div className="space-y-4">
-                {recentActivities.map((activity) => {
-                  const Icon = activity.icon;
-                  return (
+                {recentActivities.length > 0 ? (
+                  recentActivities.map((activity) => (
+                    // We don't have icon/color in backend data yet, so using default or random
                     <div key={activity.id} className="flex items-start gap-3">
-                      <div className={`p-2 rounded-lg ${activity.iconBg} flex-shrink-0`}>
-                        <Icon className={`h-4 w-4 ${activity.iconColor}`} />
+                      <div className={`p-2 rounded-lg bg-gray-100 dark:bg-gray-800 flex-shrink-0`}>
+                        <Activity className={`h-4 w-4 text-gray-500`} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-sidebar-foreground dark:text-sidebar-foreground text-sm">
@@ -726,35 +615,13 @@ export default function Dashboard() {
                         </p>
                       </div>
                     </div>
-                  );
-                })}
+                  ))
+                ) : (
+                  <p className="text-sm text-gray-500">No recent activity.</p>
+                )}
               </div>
             </div>
 
-            {/* Quick Actions */}
-            <div className="bg-white dark:bg-sidebar-accent rounded-xl border border-sidebar-border/70 dark:border-sidebar-border p-6">
-              <h3 className="text-lg font-semibold text-sidebar-foreground dark:text-sidebar-foreground mb-4">
-                Quick Actions
-              </h3>
-              <div className="flex flex-col gap-3">
-                {quickActions.map((action) => {
-                  const Icon = action.icon;
-                  return (
-                    <button
-                      key={action.id}
-                      className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-                        action.variant === 'primary'
-                          ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700'
-                          : 'bg-gray-100 dark:bg-gray-800 text-sidebar-foreground dark:text-sidebar-foreground hover:bg-gray-200 dark:hover:bg-gray-700'
-                      }`}
-                    >
-                      <Icon className="h-4 w-4" />
-                      {action.title}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
 
             {/* Filter Summary */}
             <div className="bg-white dark:bg-sidebar-accent rounded-xl border border-sidebar-border/70 dark:border-sidebar-border p-6">

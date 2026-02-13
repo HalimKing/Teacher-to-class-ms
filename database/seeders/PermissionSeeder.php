@@ -63,6 +63,11 @@ class PermissionSeeder extends Seeder
             'admin.teachers.edit',
             'admin.teachers.delete',
             'admin.teachers.password-management',
+            'admin.settings.view',
+            'admin.settings.edit',
+            'admin.settings.view',
+            'admin.settings.edit',
+            'admin.attendance.view',
         ];
         foreach ($permissions as $permission) {
             Permission::create(['name' => $permission]);

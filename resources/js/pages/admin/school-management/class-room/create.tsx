@@ -125,8 +125,6 @@ const CreateClassRoomPage = () => {
                         InputProps={{
                           inputProps: { 
                             step: "0.000001",
-                            min: -90,
-                            max: 90
                           }
                         }}
                       />
@@ -145,7 +143,6 @@ const CreateClassRoomPage = () => {
                         InputProps={{
                           inputProps: { 
                             step: "0.000001",
-                            min: -180,
                             max: 180
                           }
                         }}

@@ -50,6 +50,12 @@ const teacherNavItems: NavItem[] = [
         permission: 'teacher.records.view',
     },
     {
+        title: 'My Timetable',
+        href: '/teacher/timetable',
+        icon: ClipboardList,
+        permission: 'teacher.timetable.view',
+    },
+    {
         title: 'Reports',
         href: '/teacher/reports',
         icon: BarChart,
@@ -213,7 +219,33 @@ const mainNavItems: NavItem[] = [
                 permission: 'admin.user-management.roles.view',
             }
         ]
-    }
+    },
+    {
+        title: 'Settings & Reports',
+        href: '/admin/settings-reports',
+        icon: Users,
+        permission: 'user-management.view',
+        subItems: [
+             {
+                title: 'System Settings',
+                href: '/admin/settings-reports/settings',
+                icon: Settings,
+                permission: 'admin.settings.view',
+            },
+            {
+                title: 'Attendance Analysis',
+                href: '/admin/settings-reports/attendance-analysis',
+                permission: 'admin.user-management.users.create',
+            },
+            {
+                title: 'Teacher Attendance Report',
+                href: '/admin/attendance',
+                permission: 'admin.attendance.view',
+            },
+            
+        ]
+    },
+   
 ];
 
 const activeItemStyles = 'text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100';

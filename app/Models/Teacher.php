@@ -6,10 +6,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-class Teacher extends Authenticatable 
+class Teacher extends Authenticatable
+
 {
     //
-        /**     * The attributes that are mass assignable.
+    /**     * The attributes that are mass assignable.
      * @var list<string>
      */
     use Notifiable;
@@ -38,7 +39,7 @@ class Teacher extends Authenticatable
 
     public function timeTables()
     {
-        return $this->hasMany(TimeTable::class);
+        return $this->hasManyThrough(TimeTable::class , Course::class);
     }
 
     public function courses()

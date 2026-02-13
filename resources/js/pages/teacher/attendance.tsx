@@ -1,9 +1,10 @@
 import AppLayout from '@/layouts/app-layout';
 import { BreadcrumbItem } from '@/types';
+import { usePage } from '@inertiajs/react';
 import { Circle, GoogleMap, LoadScript, Marker } from '@react-google-maps/api';
+import axios from 'axios';
 import { CheckCircle, Clock, Loader2, Map as MapIcon, MapPin, RefreshCw, XCircle } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import axios from 'axios';
 
 // Types (keep as before)
 interface ClassLocation {
@@ -97,27 +98,27 @@ api.interceptors.request.use(
     },
     (error) => {
         return Promise.reject(error);
-    }
+    },
 );
 
 // Updated helper functions with grace period
 const isBeforeClassStart = (classStartTime: string): boolean => {
     const now = new Date();
     const currentTime = now.getHours() * 60 + now.getMinutes(); // Convert to minutes
-    
+
     const [hours, minutes, seconds = '00'] = classStartTime.split(':').map(Number);
     const classStartTimeInMinutes = hours * 60 + minutes;
-    
+
     return currentTime < classStartTimeInMinutes;
 };
 
 const isClassEnded = (classEndTime: string): boolean => {
     const now = new Date();
     const currentTime = now.getHours() * 60 + now.getMinutes();
-    
+
     const [hours, minutes, seconds = '00'] = classEndTime.split(':').map(Number);
     const classEndTimeInMinutes = hours * 60 + minutes;
-    
+
     return currentTime > classEndTimeInMinutes;
 };
 
@@ -125,10 +126,10 @@ const isClassEnded = (classEndTime: string): boolean => {
 const isAfterCheckoutDeadline = (classEndTime: string): boolean => {
     const now = new Date();
     const currentTime = now.getHours() * 60 + now.getMinutes();
-    
+
     const [hours, minutes, seconds = '00'] = classEndTime.split(':').map(Number);
     const checkoutDeadlineInMinutes = hours * 60 + minutes + 30; // 30 minutes grace period
-    
+
     return currentTime > checkoutDeadlineInMinutes;
 };
 
@@ -136,11 +137,11 @@ const isAfterCheckoutDeadline = (classEndTime: string): boolean => {
 const isCheckoutAllowed = (classEndTime: string): boolean => {
     const now = new Date();
     const currentTime = now.getHours() * 60 + now.getMinutes();
-    
+
     const [hours, minutes, seconds = '00'] = classEndTime.split(':').map(Number);
     const classEndTimeInMinutes = hours * 60 + minutes;
     const checkoutDeadlineInMinutes = classEndTimeInMinutes + 30;
-    
+
     // Check-out is allowed if class has ended but within 30 minutes grace period
     return currentTime >= classEndTimeInMinutes && currentTime <= checkoutDeadlineInMinutes;
 };
@@ -148,13 +149,13 @@ const isCheckoutAllowed = (classEndTime: string): boolean => {
 const isClassActive = (classStartTime: string, classEndTime: string): boolean => {
     const now = new Date();
     const currentTime = now.getHours() * 60 + now.getMinutes();
-    
+
     const [startHours, startMinutes] = classStartTime.split(':').map(Number);
     const [endHours, endMinutes] = classEndTime.split(':').map(Number);
-    
+
     const classStartTimeInMinutes = startHours * 60 + startMinutes;
     const classEndTimeInMinutes = endHours * 60 + endMinutes;
-    
+
     return currentTime >= classStartTimeInMinutes && currentTime <= classEndTimeInMinutes;
 };
 
@@ -168,12 +169,12 @@ function to12Hour(time24: string) {
 const getTimeUntilClassStart = (classStartTime: string): string => {
     const now = new Date();
     const currentTime = now.getHours() * 60 + now.getMinutes();
-    
+
     const [hours, minutes, seconds = '00'] = classStartTime.split(':').map(Number);
     const classStartTimeInMinutes = hours * 60 + minutes;
-    
+
     const diffMins = classStartTimeInMinutes - currentTime;
-    
+
     if (diffMins < 60) {
         return `${diffMins} minute${diffMins !== 1 ? 's' : ''}`;
     } else {
@@ -184,15 +185,15 @@ const getTimeUntilClassStart = (classStartTime: string): string => {
 };
 
 // Get time remaining until checkout deadline
-const getTimeUntilCheckoutDeadline = (classEndTime: string): string => {
+const getTimeUntilCheckoutDeadline = (classEndTime: any, lateCheckInTime: any): string => {
     const now = new Date();
     const currentTime = now.getHours() * 60 + now.getMinutes();
-    
+
     const [hours, minutes, seconds = '00'] = classEndTime.split(':').map(Number);
-    const checkoutDeadlineInMinutes = hours * 60 + minutes + 30;
-    
+    const checkoutDeadlineInMinutes = hours * 60 + minutes + lateCheckInTime;
+
     const diffMins = checkoutDeadlineInMinutes - currentTime;
-    
+
     if (diffMins <= 0) {
         return '0 minutes';
     } else if (diffMins < 60) {
@@ -212,7 +213,15 @@ export default function AttendancePage() {
     const [isWithinRange, setIsWithinRange] = useState(false);
     const [isLoadingLocation, setIsLoadingLocation] = useState(false);
     const [locationError, setLocationError] = useState<string | null>(null);
-    const [mapCenter, setMapCenter] = useState({ lat: 40.7128, lng: -74.006 });
+    const { system_settings: systemSettings } = usePage().props as any;
+    const [lateCheckInTime, setLateCheckInTime] = useState(systemSettings.attendance.late_check_in_minutes.value as any);
+
+    
+
+    const defaultLat = Number(systemSettings?.map?.default_campus_lat?.value ?? import.meta.env.VITE_DEFAULT_CAMPUS_LAT ?? 40.7128);
+    const defaultLng = Number(systemSettings?.map?.default_campus_lng?.value ?? import.meta.env.VITE_DEFAULT_CAMPUS_LNG ?? -74.006);
+
+    const [mapCenter, setMapCenter] = useState({ lat: defaultLat, lng: defaultLng });
     const [isMapLoaded, setIsMapLoaded] = useState(false);
     const [isLoadingApi, setIsLoadingApi] = useState(false);
     const [isLoadingClasses, setIsLoadingClasses] = useState(true);
@@ -238,27 +247,25 @@ export default function AttendancePage() {
         isCheckoutAllowed: false,
         isAfterCheckoutDeadline: false,
         timeUntilStart: '',
-        timeUntilCheckoutDeadline: ''
+        timeUntilCheckoutDeadline: '',
     });
 
-    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+    const apiKey = (systemSettings?.map?.google_maps_api_key?.value as string) || import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
 
     const fetchTodaysClasses = async () => {
         setIsLoadingClasses(true);
         setApiError(null);
         try {
             const response = await api.get<ApiResponse>('/teacher/attendance/todays-classes');
-            
+
             if (response.data.success && response.data.data) {
                 const classesData = response.data.data;
                 setTodaysClasses(classesData);
-                
+
                 let foundActiveCheckIn = false;
-                
-                const checkedInClass = classesData.find((cls: ClassLocation) => 
-                    cls.attendance_status?.status === 'checked_in'
-                );
-                
+
+                const checkedInClass = classesData.find((cls: ClassLocation) => cls.attendance_status?.status === 'checked_in');
+
                 if (checkedInClass) {
                     foundActiveCheckIn = true;
                     setSelectedClass(checkedInClass);
@@ -275,7 +282,7 @@ export default function AttendancePage() {
                     setCheckedInClass(null);
                     setActiveAttendanceId(null);
                     setCheckInTime(null);
-                    
+
                     const firstNonCompleted = classesData.find((cls: ClassLocation) => !cls.is_completed);
                     if (firstNonCompleted) {
                         setSelectedClass(firstNonCompleted);
@@ -284,11 +291,11 @@ export default function AttendancePage() {
                     }
                 }
             } else {
-                setApiError(response.data.message || 'Failed to fetch today\'s classes');
+                setApiError(response.data.message || "Failed to fetch today's classes");
             }
         } catch (error: any) {
-            console.error('Error fetching today\'s classes:', error);
-            setApiError('Unable to load today\'s classes. Please try again.');
+            console.error("Error fetching today's classes:", error);
+            setApiError("Unable to load today's classes. Please try again.");
         } finally {
             setIsLoadingClasses(false);
         }
@@ -303,7 +310,7 @@ export default function AttendancePage() {
                 isCheckoutAllowed: false,
                 isAfterCheckoutDeadline: false,
                 timeUntilStart: '',
-                timeUntilCheckoutDeadline: ''
+                timeUntilCheckoutDeadline: '',
             });
             return;
         }
@@ -314,7 +321,7 @@ export default function AttendancePage() {
         const isCheckoutAllowedNow = isCheckoutAllowed(classData.end_time);
         const isAfterCheckoutDeadlineNow = isAfterCheckoutDeadline(classData.end_time);
         const timeUntilStart = isBeforeStart ? getTimeUntilClassStart(classData.start_time) : '';
-        const timeUntilCheckoutDeadline = isAfterEnd && !isAfterCheckoutDeadlineNow ? getTimeUntilCheckoutDeadline(classData.end_time) : '';
+        const timeUntilCheckoutDeadline = isAfterEnd && !isAfterCheckoutDeadlineNow ? getTimeUntilCheckoutDeadline(classData.end_time, lateCheckInTime) : '';
 
         setTimeValidation({
             isBeforeStart,
@@ -323,7 +330,7 @@ export default function AttendancePage() {
             isCheckoutAllowed: isCheckoutAllowedNow,
             isAfterCheckoutDeadline: isAfterCheckoutDeadlineNow,
             timeUntilStart,
-            timeUntilCheckoutDeadline
+            timeUntilCheckoutDeadline,
         });
     }, []);
 
@@ -340,7 +347,7 @@ export default function AttendancePage() {
             setDistance(null);
             setIsWithinRange(false);
         }
-        
+
         updateTimeValidation(selectedClass);
     }, [userLocation, selectedClass, validatePresence, updateTimeValidation]);
 
@@ -352,26 +359,22 @@ export default function AttendancePage() {
 
     useEffect(() => {
         if (todaysClasses.length > 0) {
-            const checkedInClass = todaysClasses.find(cls => 
-                cls.attendance_status?.status === 'checked_in'
-            );
-            
+            const checkedInClass = todaysClasses.find((cls) => cls.attendance_status?.status === 'checked_in');
+
             if (checkedInClass) {
                 setSelectedClass(checkedInClass);
                 setCheckedInClass(checkedInClass);
                 setCurrentStatus('checked_in');
-                
-                const attendanceRecord = attendanceRecords.find(record => 
-                    record.timetable_id === checkedInClass.timetable_id
-                );
-                
+
+                const attendanceRecord = attendanceRecords.find((record) => record.timetable_id === checkedInClass.timetable_id);
+
                 if (attendanceRecord) {
                     setActiveAttendanceId(attendanceRecord.id);
                     setCheckInTime(attendanceRecord.check_in);
                 }
             }
-            
-            const completedClasses = todaysClasses.filter(cls => cls.is_completed);
+
+            const completedClasses = todaysClasses.filter((cls) => cls.is_completed);
             if (completedClasses.length > 0) {
                 if (!selectedClass && completedClasses[0]) {
                     setSelectedClass(completedClasses[0]);
@@ -427,15 +430,15 @@ export default function AttendancePage() {
                 setApiError('Attendance already completed for this session');
                 return;
             }
-            
+
             if (checkedInClass && checkedInClass.id !== cls.id) {
                 setApiError(`Please check out from ${checkedInClass.name} first`);
                 return;
             }
-            
+
             setSelectedClass(cls);
             updateTimeValidation(cls);
-            
+
             if (!userLocation) {
                 setMapCenter(cls.coordinates);
             }
@@ -447,27 +450,27 @@ export default function AttendancePage() {
             setApiError('Please select a class first');
             return;
         }
-        
+
         if (selectedClass.is_completed) {
             setApiError('Attendance already completed for this session');
             return;
         }
-        
+
         if (!timeValidation.isActive) {
             if (timeValidation.isBeforeStart) {
                 setApiError(`Cannot check in yet. Class starts in ${timeValidation.timeUntilStart}`);
                 return;
             }
-            
+
             if (timeValidation.isAfterEnd) {
                 setApiError('This class has already ended. Cannot check in.');
                 return;
             }
-            
+
             setApiError('Class is not currently active. Check the class schedule.');
             return;
         }
-        
+
         if (!isWithinRange || !userLocation) {
             setApiError('Cannot check in: Location is out of range');
             return;
@@ -488,13 +491,16 @@ export default function AttendancePage() {
                 coordinates: {
                     latitude: userLocation.lat,
                     longitude: userLocation.lng,
-                    accuracy: userLocation.accuracy
+                    accuracy: userLocation.accuracy,
                 },
                 distance: distance,
                 within_range: isWithinRange,
                 status: 'present',
-                location_match: true
+                location_match: true,
             };
+
+            console.log('Late_chek in time: ', lateCheckInTime);
+            
 
             const response = await api.post<ApiResponse>('/teacher/attendance/check-in', checkInData);
 
@@ -536,8 +542,7 @@ export default function AttendancePage() {
 
     const handleCheckOut = async () => {
         // Check if selected class matches the checked-in class
-        const isCorrectClassSelected = selectedClass && checkedInClass && 
-            selectedClass.id === checkedInClass.id;
+        const isCorrectClassSelected = selectedClass && checkedInClass && selectedClass.id === checkedInClass.id;
 
         if (currentStatus !== 'checked_in' || !activeAttendanceId || !userLocation || !isCorrectClassSelected) {
             setApiError('Cannot check out: Please select the same class you checked in for');
@@ -573,15 +578,15 @@ export default function AttendancePage() {
                 coordinates: {
                     latitude: userLocation.lat,
                     longitude: userLocation.lng,
-                    accuracy: userLocation.accuracy
+                    accuracy: userLocation.accuracy,
                 },
                 status: 'present',
                 distance: distance,
-                within_range: isWithinRange
+                within_range: isWithinRange,
             };
 
             const response = await api.post<ApiResponse>('/teacher/attendance/check-out', checkOutData);
-            
+
             if (response.data.success) {
                 const time = now.toLocaleTimeString();
                 setCurrentStatus('checked_out');
@@ -593,11 +598,11 @@ export default function AttendancePage() {
                 setAttendanceRecords((prev) => {
                     const updated = [...prev];
                     if (updated.length > 0) {
-                        updated[0] = { 
-                            ...updated[0], 
+                        updated[0] = {
+                            ...updated[0],
                             check_out: time,
                             status: 'present',
-                            is_completed: true
+                            is_completed: true,
                         };
                     }
                     return updated;
@@ -605,10 +610,10 @@ export default function AttendancePage() {
 
                 await fetchAttendanceRecords();
                 await fetchTodaysClasses();
-                
+
                 const updatedClasses = [...todaysClasses];
-                const classIndex = updatedClasses.findIndex(cls => cls.id === selectedClass.id);
-                
+                const classIndex = updatedClasses.findIndex((cls) => cls.id === selectedClass.id);
+
                 if (classIndex !== -1) {
                     updatedClasses[classIndex] = {
                         ...updatedClasses[classIndex],
@@ -619,13 +624,13 @@ export default function AttendancePage() {
                             check_in_time: checkInTime || '',
                             check_out_time: time,
                             status: 'completed',
-                            location_match: true
-                        }
+                            location_match: true,
+                        },
                     };
-                    
+
                     setTodaysClasses(updatedClasses);
-                    
-                    const nextClass = updatedClasses.find(cls => !cls.is_completed);
+
+                    const nextClass = updatedClasses.find((cls) => !cls.is_completed);
                     if (nextClass) {
                         setSelectedClass(nextClass);
                         updateTimeValidation(nextClass);
@@ -649,7 +654,7 @@ export default function AttendancePage() {
         try {
             const today = new Date().toISOString().split('T')[0];
             const response = await api.get<ApiResponse>(`/teacher/attendance/history?date=${today}`);
-            
+
             if (response.status === 200) {
                 const records = response.data.data.map((record: any) => ({
                     id: record.id,
@@ -661,21 +666,18 @@ export default function AttendancePage() {
                     status: record.status || 'present',
                     location_match: record.location_match || true,
                     is_completed: record.is_completed || record.check_out_time !== null,
-                    coordinates: record.coordinates || undefined
+                    coordinates: record.coordinates || undefined,
                 }));
-                
+
                 setAttendanceRecords(records);
-                
+
                 const activeRecord = records.find((r: AttendanceRecord) => r.check_in && !r.check_out);
                 if (activeRecord) {
                     setCurrentStatus('checked_in');
                     setActiveAttendanceId(activeRecord.id);
                     setCheckInTime(activeRecord.check_in);
-                    
-                    const checkedInClass = todaysClasses.find(c => 
-                        c.id === activeRecord.course_id && 
-                        c.timetable_id === activeRecord.timetable_id
-                    );
+
+                    const checkedInClass = todaysClasses.find((c) => c.id === activeRecord.course_id && c.timetable_id === activeRecord.timetable_id);
                     if (checkedInClass) {
                         setCheckedInClass(checkedInClass);
                         setSelectedClass(checkedInClass);
@@ -716,7 +718,7 @@ export default function AttendancePage() {
                 setApiSuccess(null);
                 setApiError(null);
             }, 5000);
-            
+
             return () => clearTimeout(timer);
         }
     }, [apiSuccess, apiError]);
@@ -731,21 +733,24 @@ export default function AttendancePage() {
         return () => clearInterval(interval);
     }, [selectedClass, updateTimeValidation]);
 
-    const isSelectedClassCheckedIn = selectedClass && checkedInClass && 
-        selectedClass.id === checkedInClass.id;
+    const isSelectedClassCheckedIn = selectedClass && checkedInClass && selectedClass.id === checkedInClass.id;
 
     // Check if check-in should be disabled
-    const isCheckInDisabled = !isWithinRange || 
-        currentStatus !== 'not_checked_in' || 
-        isLoadingApi || 
-        !selectedClass || 
+    const gpsEnforcementEnabled = Boolean(systemSettings?.attendance?.gps_enforcement_enabled?.value ?? true);
+
+    const isCheckInDisabled =
+        (gpsEnforcementEnabled ? !isWithinRange : false) ||
+        currentStatus !== 'not_checked_in' ||
+        isLoadingApi ||
+        !selectedClass ||
         selectedClass.is_completed ||
         !timeValidation.isActive;
 
     // Check if check-out should be disabled
-    const isCheckOutDisabled = currentStatus !== 'checked_in' || 
-        isLoadingApi || 
-        !isSelectedClassCheckedIn || 
+    const isCheckOutDisabled =
+        currentStatus !== 'checked_in' ||
+        isLoadingApi ||
+        !isSelectedClassCheckedIn ||
         selectedClass?.is_completed ||
         !timeValidation.isCheckoutAllowed ||
         timeValidation.isAfterCheckoutDeadline;
@@ -799,7 +804,7 @@ export default function AttendancePage() {
                             </div>
                         </div>
                     )}
-                    
+
                     {apiError && (
                         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
                             <div className="flex items-center">
@@ -824,9 +829,7 @@ export default function AttendancePage() {
                                     </div>
                                 </div>
                                 {selectedClass && checkedInClass.id !== selectedClass.id && (
-                                    <p className="text-sm text-amber-600">
-                                        Select this class above to check out
-                                    </p>
+                                    <p className="text-sm text-amber-600">Select this class above to check out</p>
                                 )}
                             </div>
                         </div>
@@ -837,19 +840,8 @@ export default function AttendancePage() {
                             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                                 {apiKey ? (
                                     <LoadScript googleMapsApiKey={apiKey}>
-                                        <GoogleMap 
-                                            mapContainerStyle={containerStyle} 
-                                            center={mapCenter} 
-                                            zoom={17}
-                                            onLoad={handleMapLoad}
-                                        >
-                                            {userLocation && (
-                                                <Marker
-                                                    position={userLocation}
-                                                    title="Your Location"
-                                                    icon={createUserLocationIcon()}
-                                                />
-                                            )}
+                                        <GoogleMap mapContainerStyle={containerStyle} center={mapCenter} zoom={17} onLoad={handleMapLoad}>
+                                            {userLocation && <Marker position={userLocation} title="Your Location" icon={createUserLocationIcon()} />}
 
                                             {selectedClass && !selectedClass.is_completed && (
                                                 <>
@@ -888,7 +880,9 @@ export default function AttendancePage() {
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-4">
-                                    <div className={`rounded-lg p-3 ${selectedClass?.is_completed ? 'bg-emerald-50 text-emerald-600' : isWithinRange ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}>
+                                    <div
+                                        className={`rounded-lg p-3 ${selectedClass?.is_completed ? 'bg-emerald-50 text-emerald-600' : isWithinRange ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}
+                                    >
                                         {selectedClass?.is_completed ? (
                                             <CheckCircle size={24} />
                                         ) : isWithinRange ? (
@@ -914,32 +908,31 @@ export default function AttendancePage() {
                                 <div className="space-y-4">
                                     <div>
                                         <div className="mb-3 flex items-center justify-between">
-                                            <label className="block text-sm font-semibold text-slate-700">
-                                                Select Current Session
-                                            </label>
+                                            <label className="block text-sm font-semibold text-slate-700">Select Current Session</label>
                                             <span className="text-xs text-slate-500">
-                                                {todaysClasses.filter(c => c.is_completed).length} of {todaysClasses.length} completed
+                                                {todaysClasses.filter((c) => c.is_completed).length} of {todaysClasses.length} completed
                                             </span>
                                         </div>
-                                        <div className="custom-scrollbar grid max-h-[320px] grid-cols-2 max-sm:grid-cols-1 gap-3 overflow-y-auto pr-1">
+                                        <div className="custom-scrollbar grid max-h-[320px] grid-cols-2 gap-3 overflow-y-auto pr-1 max-sm:grid-cols-1">
                                             {todaysClasses.map((c) => {
                                                 const isSelected = selectedClass?.id === c.id;
                                                 const isCheckedIn = checkedInClass?.id === c.id && currentStatus === 'checked_in';
                                                 const isCompleted = c.is_completed;
                                                 const hasAttendance = c.attendance_taken;
-                                                const isOtherCheckedIn = checkedInClass && checkedInClass.id !== c.id && currentStatus === 'checked_in';
+                                                const isOtherCheckedIn =
+                                                    checkedInClass && checkedInClass.id !== c.id && currentStatus === 'checked_in';
                                                 const isClassBeforeStart = isBeforeClassStart(c.start_time);
                                                 const classHasEnded = isClassEnded(c.end_time);
                                                 const isClassActiveNow = isClassActive(c.start_time, c.end_time);
                                                 const isAfterCheckoutDeadlineNow = isAfterCheckoutDeadline(c.end_time);
                                                 const checkoutAllowed = isCheckoutAllowed(c.end_time);
-                                                
+
                                                 let bgColor = 'bg-white';
                                                 let borderColor = 'border-slate-200';
                                                 let textColor = 'text-slate-800';
                                                 let cursorStyle = 'cursor-pointer';
                                                 let hoverStyle = 'hover:border-blue-300 hover:bg-slate-50';
-                                                
+
                                                 if (isCompleted) {
                                                     bgColor = 'bg-emerald-50';
                                                     borderColor = 'border-emerald-200';
@@ -987,7 +980,7 @@ export default function AttendancePage() {
                                                     borderColor = 'border-amber-200';
                                                     textColor = 'text-amber-800';
                                                 }
-                                                
+
                                                 return (
                                                     <button
                                                         key={c.id}
@@ -999,7 +992,11 @@ export default function AttendancePage() {
                                                     >
                                                         <div className="flex items-start justify-between">
                                                             <h4 className={`text-sm font-bold ${textColor}`}>
-                                                                {c.name.toLowerCase().split(' ').map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                                                                {c.name
+                                                                    .toLowerCase()
+                                                                    .split(' ')
+                                                                    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+                                                                    .join(' ')}
                                                             </h4>
                                                             <div className="flex items-center gap-1">
                                                                 {isCompleted && (
@@ -1009,22 +1006,24 @@ export default function AttendancePage() {
                                                                     </div>
                                                                 )}
                                                                 {isCheckedIn && <CheckCircle size={14} className="text-blue-600" />}
-                                                                {isSelected && !isCheckedIn && !isCompleted && <CheckCircle size={14} className="text-blue-600" />}
+                                                                {isSelected && !isCheckedIn && !isCompleted && (
+                                                                    <CheckCircle size={14} className="text-blue-600" />
+                                                                )}
                                                                 {hasAttendance && !isCompleted && !isCheckedIn && (
                                                                     <Clock size={14} className="text-amber-600" />
                                                                 )}
-                                                                {isClassBeforeStart && !isCompleted && (
-                                                                    <Clock size={14} className="text-blue-600" />
-                                                                )}
+                                                                {isClassBeforeStart && !isCompleted && <Clock size={14} className="text-blue-600" />}
                                                                 {isAfterCheckoutDeadlineNow && !isCompleted && (
                                                                     <XCircle size={14} className="text-red-500" />
                                                                 )}
                                                                 {checkoutAllowed && !isCompleted && !isCheckedIn && !isClassBeforeStart && (
                                                                     <Clock size={14} className="text-amber-600" />
                                                                 )}
-                                                                {isClassActiveNow && !isCompleted && !isCheckedIn && !checkoutAllowed && !isClassBeforeStart && (
-                                                                    <CheckCircle size={14} className="text-green-600" />
-                                                                )}
+                                                                {isClassActiveNow &&
+                                                                    !isCompleted &&
+                                                                    !isCheckedIn &&
+                                                                    !checkoutAllowed &&
+                                                                    !isClassBeforeStart && <CheckCircle size={14} className="text-green-600" />}
                                                             </div>
                                                         </div>
 
@@ -1037,10 +1036,12 @@ export default function AttendancePage() {
                                                             </div>
                                                             <div className="flex items-center gap-1.5 text-xs text-slate-500">
                                                                 <Clock size={12} />
-                                                                <span>{to12Hour(c.start_time)} - {to12Hour(c.end_time)}</span>
+                                                                <span>
+                                                                    {to12Hour(c.start_time)} - {to12Hour(c.end_time)}
+                                                                </span>
                                                             </div>
                                                         </div>
-                                                        
+
                                                         {isCompleted && c.attendance_status && (
                                                             <div className="mt-2">
                                                                 <div className="flex items-center gap-1 text-xs font-medium text-emerald-600">
@@ -1048,48 +1049,48 @@ export default function AttendancePage() {
                                                                     <span>Attendance Completed</span>
                                                                 </div>
                                                                 <div className="mt-1 text-[10px] text-emerald-500">
-                                                                    In: {c.attendance_status.check_in_time} • 
-                                                                    Out: {c.attendance_status.check_out_time || '--'}
+                                                                    In: {c.attendance_status.check_in_time} • Out:{' '}
+                                                                    {c.attendance_status.check_out_time || '--'}
                                                                 </div>
                                                             </div>
                                                         )}
-                                                        
+
                                                         {isCheckedIn && (
-                                                            <div className="mt-2 text-xs font-medium text-blue-600">
-                                                                ✓ Currently checked in
-                                                            </div>
+                                                            <div className="mt-2 text-xs font-medium text-blue-600">✓ Currently checked in</div>
                                                         )}
-                                                        
+
                                                         {hasAttendance && !isCompleted && !isCheckedIn && (
                                                             <div className="mt-2 text-xs font-medium text-amber-600">
                                                                 ⚠ Attendance started but not completed
                                                             </div>
                                                         )}
-                                                        
+
                                                         {isClassBeforeStart && !isCompleted && !isCheckedIn && (
                                                             <div className="mt-2 text-xs font-medium text-blue-600">
                                                                 ⏰ Starts in {getTimeUntilClassStart(c.start_time)}
                                                             </div>
                                                         )}
-                                                        
+
                                                         {checkoutAllowed && !isCompleted && (
                                                             <div className="mt-2 text-xs font-medium text-amber-600">
-                                                                ⏰ Check-out available for {getTimeUntilCheckoutDeadline(c.end_time)}
+                                                                ⏰ Check-out available for {getTimeUntilCheckoutDeadline(c.end_time, lateCheckInTime)}
                                                             </div>
                                                         )}
-                                                        
+
                                                         {isAfterCheckoutDeadlineNow && !isCompleted && (
-                                                            <div className="mt-2 text-xs font-medium text-red-600">
-                                                                ❌ Check-out deadline passed
-                                                            </div>
+                                                            <div className="mt-2 text-xs font-medium text-red-600">❌ Check-out deadline passed</div>
                                                         )}
-                                                        
-                                                        {isClassActiveNow && !isCompleted && !isCheckedIn && !checkoutAllowed && !isClassBeforeStart && (
-                                                            <div className="mt-2 text-xs font-medium text-green-600">
-                                                                ✅ Class is currently active
-                                                            </div>
-                                                        )}
-                                                        
+
+                                                        {isClassActiveNow &&
+                                                            !isCompleted &&
+                                                            !isCheckedIn &&
+                                                            !checkoutAllowed &&
+                                                            !isClassBeforeStart && (
+                                                                <div className="mt-2 text-xs font-medium text-green-600">
+                                                                    ✅ Class is currently active
+                                                                </div>
+                                                            )}
+
                                                         {isOtherCheckedIn && (
                                                             <div className="mt-2 text-xs font-medium text-amber-600">
                                                                 Check out of current session first
@@ -1101,18 +1102,16 @@ export default function AttendancePage() {
                                         </div>
                                     </div>
 
-                                    {todaysClasses.some(c => c.is_completed) && (
+                                    {todaysClasses.some((c) => c.is_completed) && (
                                         <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
                                             <div className="flex items-center justify-between">
                                                 <div className="flex items-center gap-2">
                                                     <CheckCircle size={16} className="text-emerald-600" />
                                                     <span className="text-sm font-medium text-emerald-700">
-                                                        {todaysClasses.filter(c => c.is_completed).length} session(s) completed
+                                                        {todaysClasses.filter((c) => c.is_completed).length} session(s) completed
                                                     </span>
                                                 </div>
-                                                <span className="text-xs text-emerald-600">
-                                                    These sessions are locked
-                                                </span>
+                                                <span className="text-xs text-emerald-600">These sessions are locked</span>
                                             </div>
                                         </div>
                                     )}
@@ -1134,15 +1133,13 @@ export default function AttendancePage() {
                                                     </div>
                                                 </div>
                                             )}
-                                            
+
                                             {timeValidation.isActive && !timeValidation.isBeforeStart && !timeValidation.isAfterEnd && (
                                                 <div className="rounded-lg border border-green-200 bg-green-50 p-3">
                                                     <div className="flex items-center gap-2">
                                                         <CheckCircle size={16} className="text-green-600" />
                                                         <div>
-                                                            <p className="text-sm font-medium text-green-700">
-                                                                Class is currently in session
-                                                            </p>
+                                                            <p className="text-sm font-medium text-green-700">Class is currently in session</p>
                                                             <p className="text-xs text-green-600">
                                                                 Check-in available until {to12Hour(selectedClass.end_time)}
                                                             </p>
@@ -1150,7 +1147,7 @@ export default function AttendancePage() {
                                                     </div>
                                                 </div>
                                             )}
-                                            
+
                                             {timeValidation.isCheckoutAllowed && (
                                                 <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
                                                     <div className="flex items-center gap-2">
@@ -1160,24 +1157,20 @@ export default function AttendancePage() {
                                                                 Check-out available for {timeValidation.timeUntilCheckoutDeadline}
                                                             </p>
                                                             <p className="text-xs text-amber-600">
-                                                                Class ended at {to12Hour(selectedClass.end_time)} • Grace period: 30 minutes
+                                                                Class ended at {to12Hour(selectedClass.end_time)} • {`Grace period: ${lateCheckInTime} minutes`}
                                                             </p>
                                                         </div>
                                                     </div>
                                                 </div>
                                             )}
-                                            
+
                                             {timeValidation.isAfterCheckoutDeadline && (
                                                 <div className="rounded-lg border border-red-200 bg-red-50 p-3">
                                                     <div className="flex items-center gap-2">
                                                         <XCircle size={16} className="text-red-600" />
                                                         <div>
-                                                            <p className="text-sm font-medium text-red-700">
-                                                                Check-out deadline has passed
-                                                            </p>
-                                                            <p className="text-xs text-red-600">
-                                                                Please contact administration for assistance
-                                                            </p>
+                                                            <p className="text-sm font-medium text-red-700">Check-out deadline has passed</p>
+                                                            <p className="text-xs text-red-600">Please contact administration for assistance</p>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -1228,8 +1221,8 @@ export default function AttendancePage() {
                                                     </p>
                                                     {selectedClass.attendance_status && (
                                                         <p className="mt-1 text-xs text-emerald-500">
-                                                            Checked in at {selectedClass.attendance_status.check_in_time} • 
-                                                            Checked out at {selectedClass.attendance_status.check_out_time}
+                                                            Checked in at {selectedClass.attendance_status.check_in_time} • Checked out at{' '}
+                                                            {selectedClass.attendance_status.check_out_time}
                                                         </p>
                                                     )}
                                                 </div>
@@ -1244,7 +1237,7 @@ export default function AttendancePage() {
                                             className={`flex flex-col items-center gap-1 rounded-xl px-4 py-3 font-bold text-white shadow-sm transition-all ${
                                                 !isCheckInDisabled
                                                     ? 'bg-blue-600 hover:bg-blue-700'
-                                                    : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                                    : 'cursor-not-allowed bg-slate-200 text-slate-400'
                                             }`}
                                         >
                                             {isLoadingApi && currentStatus === 'not_checked_in' ? (
@@ -1260,8 +1253,8 @@ export default function AttendancePage() {
                                             onClick={handleCheckOut}
                                             className={`flex flex-col items-center gap-1 rounded-xl px-4 py-3 font-bold text-white shadow-sm transition-all ${
                                                 !isCheckOutDisabled
-                                                    ? 'bg-slate-800 hover:bg-slate-900' 
-                                                    : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                                    ? 'bg-slate-800 hover:bg-slate-900'
+                                                    : 'cursor-not-allowed bg-slate-200 text-slate-400'
                                             }`}
                                         >
                                             {isLoadingApi && currentStatus === 'checked_in' ? (
@@ -1272,11 +1265,11 @@ export default function AttendancePage() {
                                             <span>{getCheckOutButtonText()}</span>
                                         </button>
                                     </div>
-                                    
+
                                     {currentStatus === 'checked_in' && !isSelectedClassCheckedIn && selectedClass && (
                                         <div className="rounded-lg border border-amber-100 bg-amber-50 p-3 text-sm text-amber-700">
                                             <p className="font-medium">Select "{checkedInClass?.name}" to check out</p>
-                                            <p className="text-xs mt-1">You can only check out from the class you checked in to.</p>
+                                            <p className="mt-1 text-xs">You can only check out from the class you checked in to.</p>
                                         </div>
                                     )}
                                 </div>
@@ -1292,39 +1285,38 @@ export default function AttendancePage() {
                                         </div>
                                     ) : (
                                         attendanceRecords.map((record) => {
-                                            const classInfo = todaysClasses.find(c => 
-                                                c.id === record.course_id && 
-                                                c.timetable_id === record.timetable_id
+                                            const classInfo = todaysClasses.find(
+                                                (c) => c.id === record.course_id && c.timetable_id === record.timetable_id,
                                             );
-                                            
+
                                             return (
                                                 <div
                                                     key={record.id}
                                                     className={`flex items-center justify-between rounded-lg border p-3 ${
-                                                        record.is_completed 
-                                                            ? 'border-emerald-100 bg-emerald-50' 
-                                                            : 'border-slate-100 bg-slate-50'
+                                                        record.is_completed ? 'border-emerald-100 bg-emerald-50' : 'border-slate-100 bg-slate-50'
                                                     }`}
                                                 >
                                                     <div>
-                                                        <p className="text-sm font-bold text-slate-800">
-                                                            {classInfo?.name || 'Unknown Class'}
-                                                        </p>
+                                                        <p className="text-sm font-bold text-slate-800">{classInfo?.name || 'Unknown Class'}</p>
                                                         <p className="text-xs text-slate-500">
                                                             In: {record.check_in} • Out: {record.check_out || '--'}
                                                         </p>
-                                                        <p className="text-xs text-slate-400">
-                                                            {record.date}
-                                                        </p>
+                                                        <p className="text-xs text-slate-400">{record.date}</p>
                                                     </div>
                                                     <div className="text-right">
-                                                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold tracking-tight uppercase ${
-                                                            record.is_completed ? 'bg-emerald-100 text-emerald-700' :
-                                                            record.status === 'present' ? 'bg-green-100 text-green-700' :
-                                                            record.status === 'late' ? 'bg-yellow-100 text-yellow-700' :
-                                                            record.status === 'absent' ? 'bg-red-100 text-red-700' :
-                                                            'bg-blue-100 text-blue-700'
-                                                        }`}>
+                                                        <span
+                                                            className={`rounded-full px-2 py-0.5 text-[10px] font-bold tracking-tight uppercase ${
+                                                                record.is_completed
+                                                                    ? 'bg-emerald-100 text-emerald-700'
+                                                                    : record.status === 'present'
+                                                                      ? 'bg-green-100 text-green-700'
+                                                                      : record.status === 'late'
+                                                                        ? 'bg-yellow-100 text-yellow-700'
+                                                                        : record.status === 'absent'
+                                                                          ? 'bg-red-100 text-red-700'
+                                                                          : 'bg-blue-100 text-blue-700'
+                                                            }`}
+                                                        >
                                                             {record.status}
                                                         </span>
                                                         <div className="mt-1 flex items-center justify-end gap-1">
@@ -1336,7 +1328,11 @@ export default function AttendancePage() {
                                                                 <XCircle size={10} className="text-red-500" />
                                                             )}
                                                             <p className="text-[10px] text-slate-400">
-                                                                {record.is_completed ? 'Completed' : record.location_match ? 'Verified GPS' : 'GPS Mismatch'}
+                                                                {record.is_completed
+                                                                    ? 'Completed'
+                                                                    : record.location_match
+                                                                      ? 'Verified GPS'
+                                                                      : 'GPS Mismatch'}
                                                             </p>
                                                         </div>
                                                     </div>

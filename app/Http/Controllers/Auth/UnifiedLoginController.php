@@ -5,6 +5,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use App\Http\Controllers\Controller;
+use App\Models\SystemSetting;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Route;
 
 class UnifiedLoginController extends Controller
@@ -17,7 +19,7 @@ class UnifiedLoginController extends Controller
         ]);
     }
 
-    public function login(Request $request)
+    public function login(Request $request): RedirectResponse
     {
         $credentials = $request->validate([
             'email' => 'required|email',
