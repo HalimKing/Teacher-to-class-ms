@@ -7,10 +7,16 @@ import {
   Edit,
   Trash2,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Download,
+  Upload,
+  FileSpreadsheet,
+  FileText,
+  X
 } from 'lucide-react';
 import AppLayout from '@/layouts/app-layout';
 import { Head, Link, router, usePage } from '@inertiajs/react';
+import { useForm } from '@inertiajs/react';
 import { ToastContainer, toast, Bounce } from 'react-toastify';
 import { PagePropsWithFlash } from '@/types';
 import Button from '@mui/material/Button';
@@ -67,6 +73,12 @@ const TeachersIndexPage = ({ teachers, faculties, departments, filters: initialF
   const [selectedDepartment, setSelectedDepartment] = useState(initialFilters.department || 'all');
 
   const { flash } = usePage().props as PagePropsWithFlash;
+
+  const importForm = useForm({ file: null as File | null });
+  const [previewRows, setPreviewRows] = useState<any[]>([]);
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [confirmLoading, setConfirmLoading] = useState(false);
   
   // Debounce search
   useEffect(() => {
@@ -148,6 +160,106 @@ const TeachersIndexPage = ({ teachers, faculties, departments, filters: initialF
     router.get(route('admin.teachers.index'));
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      importForm.setData('file', e.target.files[0]);
+    }
+  };
+
+  const handlePreview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!importForm.data.file) {
+      toast.error('Please select a file to preview', {
+        position: 'top-right',
+        autoClose: 3000,
+        theme: 'dark',
+      });
+      return;
+    }
+    setPreviewLoading(true);
+    const fd = new FormData();
+    fd.append('file', importForm.data.file as File);
+    const token = (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '';
+    try {
+      const res = await fetch(route('admin.teachers.preview'), {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'X-CSRF-TOKEN': token, Accept: 'application/json' },
+        body: fd,
+      });
+
+      if (!res.ok) {
+        let errorMessage = 'Unable to preview file.';
+        try {
+          const j = await res.json();
+          if (j.errors?.file) errorMessage = Array.isArray(j.errors.file) ? j.errors.file.join(', ') : j.errors.file;
+          else if (j.error) errorMessage = j.error;
+          else if (j.message) errorMessage = j.message;
+        } catch (e) {
+          try { errorMessage = (await res.text()) || `Server error (${res.status})`; } catch { /* ignore */ }
+        }
+        toast.error(errorMessage, { position: 'top-right', autoClose: 5000, theme: 'dark' });
+        setPreviewLoading(false);
+        return;
+      }
+
+      const json = await res.json();
+      if (json.error) {
+        toast.error(json.error, { position: 'top-right', autoClose: 5000, theme: 'dark' });
+        setPreviewLoading(false);
+        return;
+      }
+
+      setPreviewRows(json.rows || []);
+      setShowPreview(true);
+    } catch (err) {
+      console.error('Preview error:', err);
+      toast.error(err instanceof Error ? err.message : 'Unable to preview file.', {
+        position: 'top-right',
+        autoClose: 5000,
+        theme: 'dark',
+      });
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handleConfirmImport = async () => {
+    if (!importForm.data.file) return;
+    setConfirmLoading(true);
+    const fd = new FormData();
+    fd.append('file', importForm.data.file as File);
+    const token = (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '';
+    try {
+      const res = await fetch(route('admin.teachers.confirm-import'), {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'X-CSRF-TOKEN': token, Accept: 'application/json' },
+        body: fd,
+      });
+      const json = await res.json();
+      if (res.ok) {
+        toast.success(`Imported ${json.imported} rows, skipped ${json.skipped}`, {
+          position: 'top-right',
+          autoClose: 5000,
+          theme: 'dark',
+        });
+        router.reload();
+      } else {
+        toast.error(json.error || 'Import failed', {
+          position: 'top-right',
+          autoClose: 5000,
+          theme: 'dark',
+        });
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Import failed', { position: 'top-right', autoClose: 5000, theme: 'dark' });
+    } finally {
+      setConfirmLoading(false);
+    }
+  };
+
   const handleDelete = (teacherId: number) => {
     if (confirm('Are you sure you want to delete this teacher?')) {
       router.delete(route('admin.teachers.destroy', teacherId), {
@@ -210,6 +322,83 @@ const TeachersIndexPage = ({ teachers, faculties, departments, filters: initialF
                 Add New Teacher
               </Link>
               )}
+            </div>
+
+            {/* Import/Export Card */}
+            <div className="mb-6 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Import & Export</h2>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-3">
+                  <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300">Export Data</h3>
+                  <div className="flex flex-wrap gap-2">
+                    <a
+                      href={route('admin.teachers.export', 'excel')}
+                      className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+                    >
+                      <FileSpreadsheet className="h-4 w-4" />
+                      Export XLSX
+                    </a>
+                    <a
+                      href={route('admin.teachers.export', 'csv')}
+                      className="inline-flex items-center gap-2 rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2"
+                    >
+                      <FileText className="h-4 w-4" />
+                      Export CSV
+                    </a>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300">Import Data</h3>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                    <div className="flex-1">
+                      <a
+                        href={route('admin.teachers.template')}
+                        className="mb-2 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                      >
+                        <Download className="h-4 w-4" />
+                        Download Template
+                      </a>
+                      <form onSubmit={handlePreview} className="mt-2" encType="multipart/form-data">
+                        <label className="mb-2 block text-xs font-medium text-slate-700 dark:text-slate-300">Upload File</label>
+                        <div className="flex gap-2">
+                          <label className="flex flex-1 cursor-pointer items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-4 py-2 text-sm text-slate-700 dark:text-slate-300 transition-colors hover:bg-slate-50 dark:hover:bg-slate-600 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500">
+                            <Upload className="h-4 w-4 text-slate-500" />
+                            <span className="flex-1 truncate">
+                              {importForm.data.file ? importForm.data.file.name : 'Choose file...'}
+                            </span>
+                            <input
+                              type="file"
+                              name="file"
+                              onChange={handleFileChange}
+                              accept=".csv,.xlsx,.xls"
+                              className="hidden"
+                            />
+                          </label>
+                          {importForm.data.file && (
+                            <button
+                              type="button"
+                              onClick={() => importForm.setData('file', null)}
+                              className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-600"
+                              title="Clear file"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          )}
+                          <button
+                            type="submit"
+                            disabled={previewLoading || !importForm.data.file}
+                            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                          >
+                            {previewLoading ? 'Loading...' : 'Preview'}
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Filters Section */}
@@ -376,6 +565,114 @@ const TeachersIndexPage = ({ teachers, faculties, departments, filters: initialF
         </div>
       </div>
       <ToastContainer />
+      {showPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
+            onClick={() => setShowPreview(false)}
+          />
+          <div className="relative w-full max-w-5xl max-h-[90vh] rounded-xl bg-white dark:bg-slate-800 shadow-2xl border border-slate-200 dark:border-slate-700">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 px-6 py-4">
+              <div>
+                <h3 className="text-xl font-semibold text-slate-900 dark:text-white">Import Preview</h3>
+                <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                  Review {previewRows.length} row{previewRows.length !== 1 ? 's' : ''} before importing
+                </p>
+              </div>
+              <button
+                onClick={() => setShowPreview(false)}
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-600"
+                title="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="overflow-auto max-h-[calc(90vh-180px)] p-6">
+              <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
+                <table className="w-full">
+                  <thead className="bg-slate-50 dark:bg-slate-700/50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">Line</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">Name</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">Employee ID</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">Faculty / Dept</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">Status</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">Errors</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 dark:divide-slate-700 bg-white dark:bg-slate-800">
+                    {previewRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-500">No data to preview</td>
+                      </tr>
+                    ) : (
+                      previewRows.map((r: any, i: number) => (
+                        <tr
+                          key={i}
+                          className={`transition-colors ${
+                            r.errors.length > 0
+                              ? 'bg-red-50/50 dark:bg-red-900/20 hover:bg-red-50 dark:hover:bg-red-900/30'
+                              : r.exists
+                              ? 'bg-amber-50/50 dark:bg-amber-900/20 hover:bg-amber-50 dark:hover:bg-amber-900/30'
+                              : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'
+                          }`}
+                        >
+                          <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-slate-900 dark:text-white">{r.line}</td>
+                          <td className="px-4 py-3 text-sm text-slate-900 dark:text-white">{[r.data.first_name, r.data.last_name].filter(Boolean).join(' ') || '-'}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{r.data.employee_id ?? '-'}</td>
+                          <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{[r.data.faculty, r.data.department].filter(Boolean).join(' / ') || '-'}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-sm">
+                            {r.errors.length > 0 ? (
+                              <span className="inline-flex items-center rounded-full bg-red-100 dark:bg-red-900/30 px-2.5 py-0.5 text-xs font-medium text-red-800 dark:text-red-200">Error</span>
+                            ) : r.exists ? (
+                              <span className="inline-flex items-center rounded-full bg-amber-100 dark:bg-amber-900/30 px-2.5 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200">Exists</span>
+                            ) : (
+                              <span className="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900/30 px-2.5 py-0.5 text-xs font-medium text-green-800 dark:text-green-200">New</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-red-600 dark:text-red-400">
+                            {r.errors.length > 0 ? r.errors.join(', ') : '-'}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50 px-6 py-4">
+              <div className="text-sm text-slate-600 dark:text-slate-400">
+                {previewRows.filter((r: any) => r.errors.length === 0).length} valid row
+                {previewRows.filter((r: any) => r.errors.length === 0).length !== 1 ? 's' : ''} ready to import
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowPreview(false)}
+                  className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 transition-colors hover:bg-slate-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmImport}
+                  disabled={confirmLoading || previewRows.filter((r: any) => r.errors.length === 0).length === 0}
+                  className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                >
+                  {confirmLoading ? (
+                    <span className="flex items-center gap-2">
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                      Importing...
+                    </span>
+                  ) : (
+                    'Confirm Import'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </AppLayout>
   );
 };

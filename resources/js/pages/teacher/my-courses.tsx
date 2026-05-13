@@ -12,7 +12,8 @@ import {
   Leaf,
   TestTube,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { X } from 'lucide-react';
 
 const breadcrumbs: BreadcrumbItem[] = [
   {
@@ -91,24 +92,90 @@ const courseIcons: { [key: string]: any } = {
 
 interface Course {
   id: number;
-  title: string;
-subtitle: string;
-code: string;
-student_size: number;
-total_hours: number;
-icone: string;
+  // API may use `name` instead of `title`.
+  title?: string;
+  name?: string;
+  subtitle?: string;
+  code?: string;
+  student_size?: number;
+  total_hours?: number;
+  icone?: string;
+  icon?: string;
 }
 
 export default function MyCoursesPage({ coursesData }: { coursesData: Course[] }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'active' | 'archived'>('active');
+  const [showModal, setShowModal] = useState(false);
+  // controls the animated visibility state (used to animate close before unmount)
+  const [modalVisible, setModalVisible] = useState(false);
+  const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
+  const modalRef = useRef<HTMLDivElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const triggerRef = useRef<HTMLElement | null>(null);
+
+  // focus trap + keyboard handling
+  useEffect(() => {
+    if (!showModal) return;
+
+    // focus first focusable element when modal is visible
+    const focusWhenReady = () => {
+      const el = closeButtonRef.current ?? modalRef.current?.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])') as HTMLElement | null;
+      el?.focus();
+    };
+
+    if (modalVisible) focusWhenReady();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setModalVisible(false);
+        setTimeout(() => {
+          setShowModal(false);
+          setSelectedCourse(null);
+          triggerRef.current?.focus();
+        }, 200);
+      }
+
+      if (e.key === 'Tab') {
+        const container = modalRef.current;
+        if (!container) return;
+        const focusable = Array.from(container.querySelectorAll<HTMLElement>("button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])")).filter(el => !el.hasAttribute('disabled'));
+        if (focusable.length === 0) {
+          e.preventDefault();
+          return;
+        }
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [showModal, modalVisible]);
   const page = usePage<SharedData>();
   const { auth } = page.props;
 
-  const filteredCourses = coursesData.filter(course => 
-    course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    course.subtitle.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const q = searchQuery.trim().toLowerCase();
+  const filteredCourses = (coursesData || []).filter(course => {
+    if (!q) return true;
+    const title = (course.title ?? course.name ?? '').toString().toLowerCase();
+    const subtitle = (course.subtitle ?? '').toString().toLowerCase();
+    const code = (course.code ?? '').toString().toLowerCase();
+
+    return (
+      title.includes(q) ||
+      subtitle.includes(q) ||
+      code.includes(q)
+    );
+  });
 
   return (
     <AppLayout breadcrumbs={breadcrumbs}>
@@ -234,7 +301,17 @@ export default function MyCoursesPage({ coursesData }: { coursesData: Course[] }
 
     {/* Action Buttons */}
     <div className="flex items-center gap-2">
-      <button className="flex-1 px-3 py-2 text-sm font-medium text-sidebar-foreground dark:text-sidebar-foreground border border-sidebar-border/50 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+      <button
+        onClick={(e) => {
+          // remember trigger to restore focus
+          triggerRef.current = e.currentTarget as HTMLElement;
+          setSelectedCourse(course);
+          setShowModal(true);
+          // start enter animation on next tick
+          setTimeout(() => setModalVisible(true), 10);
+        }}
+        className="flex-1 px-3 py-2 text-sm font-medium text-sidebar-foreground dark:text-sidebar-foreground border border-sidebar-border/50 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+      >
         View Details
       </button>
       <button className="flex-1 px-3 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors">
@@ -273,6 +350,91 @@ export default function MyCoursesPage({ coursesData }: { coursesData: Course[] }
           </div>
         )}
       </div>
+
+      {/* Course Details Modal */}
+      {showModal && selectedCourse && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" aria-hidden={!modalVisible}>
+          {/* overlay */}
+          <div
+            className={`absolute inset-0 bg-black/50 transition-opacity duration-200 ${modalVisible ? 'opacity-100' : 'opacity-0'}`}
+            onClick={() => {
+              // trigger close with animation
+              setModalVisible(false);
+              setTimeout(() => {
+                setShowModal(false);
+                setSelectedCourse(null);
+                // restore focus
+                triggerRef.current?.focus();
+              }, 200);
+            }}
+          />
+
+          <div
+            ref={modalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="course-modal-title"
+            className={`relative z-50 w-full max-w-2xl bg-white dark:bg-sidebar-accent rounded-xl p-6 shadow-lg transform transition-all duration-200 ${modalVisible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-95'}`}
+          >
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h2 id="course-modal-title" className="text-xl font-bold text-sidebar-foreground">{selectedCourse.title ?? selectedCourse.name}</h2>
+                <p className="text-sm text-sidebar-foreground/60">{selectedCourse.subtitle}</p>
+              </div>
+              <button
+                ref={closeButtonRef}
+                onClick={() => {
+                  setModalVisible(false);
+                  setTimeout(() => {
+                    setShowModal(false);
+                    setSelectedCourse(null);
+                    triggerRef.current?.focus();
+                  }, 200);
+                }}
+                className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
+                aria-label="Close"
+              >
+                <X className="h-4 w-4 text-sidebar-foreground/70" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm text-sidebar-foreground/60">Code</p>
+                <div className="text-sm font-medium text-sidebar-foreground">{selectedCourse.code || 'N/A'}</div>
+
+                <p className="text-sm text-sidebar-foreground/60 mt-4">Students</p>
+                <div className="text-sm font-medium text-sidebar-foreground">{selectedCourse.student_size ?? 'N/A'}</div>
+              </div>
+
+              <div>
+                <p className="text-sm text-sidebar-foreground/60">Total Hours</p>
+                <div className="text-sm font-medium text-sidebar-foreground">{selectedCourse.total_hours ?? 'N/A'}</div>
+
+                <p className="text-sm text-sidebar-foreground/60 mt-4">Status</p>
+                <div className="text-sm font-medium text-green-600 dark:text-green-400">Active</div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  setModalVisible(false);
+                  setTimeout(() => {
+                    setShowModal(false);
+                    setSelectedCourse(null);
+                    triggerRef.current?.focus();
+                  }, 200);
+                }}
+                className="px-4 py-2 rounded-lg border border-sidebar-border/50"
+              >
+                Close
+              </button>
+              <button className="px-4 py-2 rounded-lg bg-blue-600 text-white">Manage Attendance</button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppLayout>
   );
 }

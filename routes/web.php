@@ -21,6 +21,8 @@ use App\Http\Controllers\TeacherCoursesController;
 use App\Http\Controllers\UserController;
 
 use App\Http\Controllers\Teacher\TimeTableController as TeacherTimeTableController;
+use App\Http\Controllers\Teacher\SessionReminderController;
+use App\Http\Controllers\Teacher\NotificationController;
 
 use App\Http\Controllers\AdminAttendanceController;
 use App\Models\AcademicPeriod;
@@ -76,6 +78,16 @@ Route::middleware('auth:teacher')->group(function () {
 
     Route::get('/teacher/my-courses', [TeacherCoursesController::class, 'index'])
         ->name('teacher.my-courses');
+
+    // Session reminders for teachers
+    Route::get('/teacher/reminders', [SessionReminderController::class, 'index'])->name('teacher.reminders.index');
+    Route::post('/teacher/reminders', [SessionReminderController::class, 'store'])->name('teacher.reminders.store');
+    Route::put('/teacher/reminders/{reminder}', [SessionReminderController::class, 'update'])->name('teacher.reminders.update');
+    Route::post('/teacher/reminders/{reminder}/resend', [SessionReminderController::class, 'resend'])->name('teacher.reminders.resend');
+    Route::delete('/teacher/reminders/{reminder}', [SessionReminderController::class, 'destroy'])->name('teacher.reminders.destroy');
+
+    Route::post('/teacher/notifications/{id}/read', [NotificationController::class, 'markAsRead'])->name('teacher.notifications.mark-read');
+    Route::post('/teacher/notifications/read-all', [NotificationController::class, 'markAllAsRead'])->name('teacher.notifications.mark-all-read');
 });
 
 Route::middleware(['auth:web', 'verified'])->group(function () {
@@ -124,6 +136,15 @@ Route::middleware(['auth:web', 'verified'])->group(function () {
 
             Route::post('teachers/{teacher}/reset-password', [TeacherController::class, 'resetPassword'])
                 ->name('teachers.reset-password');
+            Route::get('teachers/template', [TeacherController::class, 'template'])
+                ->name('teachers.template');
+            Route::get('teachers/export/{format}', [TeacherController::class, 'export'])
+                ->name('teachers.export')
+                ->where('format', 'excel|csv');
+            Route::post('teachers/preview', [TeacherController::class, 'preview'])
+                ->name('teachers.preview');
+            Route::post('teachers/confirm-import', [TeacherController::class, 'confirmImport'])
+                ->name('teachers.confirm-import');
             Route::resource('/teachers', TeacherController::class)
                 ->only(['create', 'store'])
                 ->middleware('permission:admin.teachers.create');
@@ -143,7 +164,19 @@ Route::middleware(['auth:web', 'verified'])->group(function () {
             Route::prefix('school-management')->name('school-management.')->group(
                 function () {
 
+                    Route::get('faculties/template', [FacultyController::class, 'template'])
+                            ->name('faculties.template');
                     Route::resource('faculties', FacultyController::class);
+                    Route::get('faculties/export/{format}', [FacultyController::class, 'export'])
+                        ->name('faculties.export')
+                        ->where('format', 'excel|csv');
+                    
+                    Route::post('faculties/preview', [FacultyController::class, 'preview'])
+                        ->name('faculties.preview');
+                    Route::post('faculties/confirm-import', [FacultyController::class, 'confirmImport'])
+                        ->name('faculties.confirm-import');
+                    Route::post('faculties/import', [FacultyController::class, 'import'])
+                        ->name('faculties.import');
                     // Route::resource('faculties', FacultyController::class)
                     //     ->only(['create', 'store'])
                     //     ->middleware('permission:admin.school-management.faculties.create');
@@ -157,6 +190,17 @@ Route::middleware(['auth:web', 'verified'])->group(function () {
                     //     ->only(['destroy'])
                     //     ->middleware('permission:admin.school-management.faculties.delete');
 
+                    Route::get('departments/template', [DepartmentController::class, 'template'])
+                        ->name('departments.template');
+                    Route::get('departments/export/{format}', [DepartmentController::class, 'export'])
+                        ->name('departments.export')
+                        ->where('format', 'excel|csv');
+                    Route::post('departments/preview', [DepartmentController::class, 'preview'])
+                        ->name('departments.preview');
+                    Route::post('departments/confirm-import', [DepartmentController::class, 'confirmImport'])
+                        ->name('departments.confirm-import');
+                    Route::post('departments/import', [DepartmentController::class, 'import'])
+                        ->name('departments.import');
                     Route::resource('departments', DepartmentController::class);
 
                     // Departments routes
@@ -175,6 +219,15 @@ Route::middleware(['auth:web', 'verified'])->group(function () {
 
 
                     // Class Rooms routes
+                    Route::get('class-rooms/template', [ClassRoomController::class, 'template'])
+                        ->name('class-rooms.template');
+                    Route::get('class-rooms/export/{format}', [ClassRoomController::class, 'export'])
+                        ->name('class-rooms.export')
+                        ->where('format', 'excel|csv');
+                    Route::post('class-rooms/preview', [ClassRoomController::class, 'preview'])
+                        ->name('class-rooms.preview');
+                    Route::post('class-rooms/confirm-import', [ClassRoomController::class, 'confirmImport'])
+                        ->name('class-rooms.confirm-import');
                     Route::resource('class-rooms', ClassRoomController::class)
                         ->only(['create', 'store'])
                         ->middleware('permission:admin.school-management.class-rooms.create');
@@ -223,6 +276,15 @@ Route::middleware(['auth:web', 'verified'])->group(function () {
 
 
                     // Programs routes
+                    Route::get('programs/template', [ProgramController::class, 'template'])
+                        ->name('programs.template');
+                    Route::get('programs/export/{format}', [ProgramController::class, 'export'])
+                        ->name('programs.export')
+                        ->where('format', 'excel|csv');
+                    Route::post('programs/preview', [ProgramController::class, 'preview'])
+                        ->name('programs.preview');
+                    Route::post('programs/confirm-import', [ProgramController::class, 'confirmImport'])
+                        ->name('programs.confirm-import');
                     Route::resource('programs', ProgramController::class)
                         ->only(['create', 'store'])
                         ->middleware('permission:admin.school-management.programs.create');
@@ -242,6 +304,15 @@ Route::middleware(['auth:web', 'verified'])->group(function () {
 
 
                     // Courses routes
+                    Route::get('courses/template', [CourseController::class, 'template'])
+                        ->name('courses.template');
+                    Route::get('courses/export/{format}', [CourseController::class, 'export'])
+                        ->name('courses.export')
+                        ->where('format', 'excel|csv');
+                    Route::post('courses/preview', [CourseController::class, 'preview'])
+                        ->name('courses.preview');
+                    Route::post('courses/confirm-import', [CourseController::class, 'confirmImport'])
+                        ->name('courses.confirm-import');
                     Route::resource('courses', CourseController::class)
                         ->only(['create', 'store'])
                         ->middleware('permission:admin.school-management.courses.create');

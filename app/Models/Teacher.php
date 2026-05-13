@@ -24,6 +24,7 @@ class Teacher extends Authenticatable
         'phone',
         'faculty_id',
         'department_id',
+        'employee_id',
         'title',
     ];
 
@@ -45,5 +46,10 @@ class Teacher extends Authenticatable
     public function courses()
     {
         return $this->hasMany(Course::class);
+    }
+
+    public function sessionReminders()
+    {
+        return $this->hasMany(SessionReminder::class);
     }
 }

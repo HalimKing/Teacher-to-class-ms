@@ -16,7 +16,7 @@ import { useInitials } from '@/hooks/use-initials';
 import { cn } from '@/lib/utils';
 import { type BreadcrumbItem, type NavItem, type SharedData } from '@/types';
 import { Link, router, usePage } from '@inertiajs/react';
-import { LayoutGrid, Menu, Search, ChevronDown, ChevronRight, Users, Book, Settings, LogOut, BookOpen, UserCheck, ClipboardList, BarChart, Folder } from 'lucide-react';
+import { LayoutGrid, Menu, Search, ChevronDown, ChevronRight, Users, Book, Settings, LogOut, BookOpen, UserCheck, ClipboardList, BarChart, Folder, Bell } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import AppLogo from './app-logo';
 import AppLogoIcon from './app-logo-icon';
@@ -54,6 +54,12 @@ const teacherNavItems: NavItem[] = [
         href: '/teacher/timetable',
         icon: ClipboardList,
         permission: 'teacher.timetable.view',
+    },
+    {
+        title: 'Reminders',
+        href: '/teacher/reminders',
+        icon: Bell,
+        permission: 'admin.teachers.view',
     },
     {
         title: 'Reports',
@@ -503,7 +509,70 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
             <Search className="!size-5 opacity-80 group-hover:opacity-100" />
         </Button>
     </div>
-    
+
+    {/* Teacher: Notifications (session reminders) */}
+    {isTeacher && (
+        <div className="relative hidden md:block">
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="relative h-9 w-9 cursor-pointer">
+                        <Bell className="h-5 w-5" />
+                        {(page.props as { unreadNotificationsCount?: number }).unreadNotificationsCount > 0 && (
+                            <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+                                {(page.props as { unreadNotificationsCount?: number }).unreadNotificationsCount}
+                            </span>
+                        )}
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-80" align="end" sideOffset={8}>
+                    <div className="flex items-center justify-between border-b px-3 py-2">
+                        <span className="font-semibold">Notifications</span>
+                        {(page.props as { unreadNotificationsCount?: number }).unreadNotificationsCount > 0 && (
+                            <Link
+                                href={route('teacher.notifications.mark-all-read')}
+                                method="post"
+                                as="button"
+                                className="text-xs text-blue-600 hover:underline"
+                            >
+                                Mark all read
+                            </Link>
+                        )}
+                    </div>
+                    <div className="max-h-[320px] overflow-y-auto">
+                        {((page.props as { unreadNotifications?: Array<{ id: string; data: { title?: string; message?: string; session?: string; url?: string }; created_at: string }> }).unreadNotifications?.length ?? 0) > 0 ? (
+                            (page.props as { unreadNotifications?: Array<{ id: string; data: { title?: string; message?: string; session?: string; url?: string }; created_at: string }> }).unreadNotifications?.map((n) => (
+                                <Link
+                                    key={n.id}
+                                    href={n.data?.url ?? '/teacher/reminders'}
+                                    method="get"
+                                    className="block border-b px-3 py-2.5 text-left text-sm transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                                >
+                                    <p className="font-medium text-sidebar-foreground">{n.data?.title ?? 'Reminder'}</p>
+                                    {n.data?.session && (
+                                        <p className="mt-0.5 text-xs text-sidebar-foreground/60">{n.data.session}</p>
+                                    )}
+                                    <p className="mt-0.5 text-xs text-sidebar-foreground/50">
+                                        {new Date(n.created_at).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
+                                    </p>
+                                </Link>
+                            ))
+                        ) : (
+                            <p className="px-3 py-6 text-center text-sm text-sidebar-foreground/60">No new notifications</p>
+                        )}
+                    </div>
+                    <div className="border-t px-3 py-2">
+                        <Link
+                            href="/teacher/reminders"
+                            className="text-sm font-medium text-blue-600 hover:underline"
+                        >
+                            View all reminders →
+                        </Link>
+                    </div>
+                </DropdownMenuContent>
+            </DropdownMenu>
+        </div>
+    )}
+
     <DropdownMenu>
         <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="h-9 w-9 sm:h-10 sm:w-10 rounded-full p-0.5 sm:p-1">

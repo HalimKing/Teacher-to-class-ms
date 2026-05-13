@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Teacher;
 use App\Http\Controllers\Controller;
 use App\Models\AcademicYear;
 use App\Models\Course;
+use App\Models\SessionReminder;
 use App\Models\TeacherAttendance;
 use App\Models\TimeTable;
 use Carbon\Carbon;
@@ -66,15 +67,30 @@ class DashboardController extends Controller
         // Get teacher profile data
         $profileData = $this->getTeacherProfileData();
 
-        // For debugging
-        // dd($upcomingClasses);
+        // Upcoming session reminders (next 7 days)
+        $upcomingReminders = SessionReminder::with('timetable.course', 'timetable.classRoom')
+            ->where('teacher_id', auth()->id())
+            ->where('reminder_at', '>=', now())
+            ->whereNull('triggered_at')
+            ->orderBy('reminder_at')
+            ->limit(5)
+            ->get()
+            ->map(function ($r) {
+                return [
+                    'id' => $r->id,
+                    'title' => $r->title,
+                    'reminder_at' => $r->reminder_at->toIso8601String(),
+                    'session' => $r->timetable ? $r->timetable->course?->name . ' – ' . $r->timetable->day : null,
+                ];
+            });
 
         return inertia('teacher/dashboard', [
             'todayLectures' => $upcomingClasses,
             'upcomingClasses' => $upcomingClasses,
             'attendanceData' => $attendanceData,
             'metricsData' => $metricsData,
-            'profileData' => $profileData
+            'profileData' => $profileData,
+            'upcomingReminders' => $upcomingReminders,
         ]);
     }
 

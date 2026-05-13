@@ -71,7 +71,7 @@ class TeacherAttendanceController extends Controller
     public function getTodaysClasses(Request $request)
     {
         $Lectures = TimeTable::todaysLectures();
-        $teacherId = auth()->id();
+        $teacherId = auth('teacher')->id();
         $today = Carbon::now()->format('Y-m-d');
 
         $todaysClasses = [];
@@ -156,7 +156,7 @@ class TeacherAttendanceController extends Controller
         }
 
         // Check if user already has an active check-in for today
-        $existingActiveAttendance = TeacherAttendance::where('teacher_id', auth()->id())
+        $existingActiveAttendance = TeacherAttendance::where('teacher_id', auth('teacher')->id())
             ->where('date', Carbon::now()->format('Y-m-d'))
             ->whereNull('check_out_time')
             ->first();
@@ -171,7 +171,7 @@ class TeacherAttendanceController extends Controller
         // Check if class start_time => current_time
         $classStartTime = Carbon::parse($timetable->start_time);
         if ($classStartTime->gt(Carbon::now())) {
-            AttendanceActivityLog::logAttempt('attempt_failed', auth()->id(), (int) $request->timetable_id, [
+            AttendanceActivityLog::logAttempt('attempt_failed', auth('teacher')->id(), (int) $request->timetable_id, [
                 'reason' => 'class_not_started',
                 'coordinates' => $request->coordinates,
                 'distance' => $request->distance,
@@ -186,7 +186,7 @@ class TeacherAttendanceController extends Controller
         // System setting: enforce GPS — reject if out of range
         $gpsEnforcement = SystemSetting::getValue('gps_enforcement_enabled', true);
         if ($gpsEnforcement && !$request->within_range) {
-            AttendanceActivityLog::logAttempt('attempt_failed', auth()->id(), (int) $request->timetable_id, [
+            AttendanceActivityLog::logAttempt('attempt_failed', auth('teacher')->id(), (int) $request->timetable_id, [
                 'reason' => 'out_of_range',
                 'coordinates' => $request->coordinates,
                 'distance' => $request->distance,
@@ -207,7 +207,7 @@ class TeacherAttendanceController extends Controller
         try {
             $attendance = new TeacherAttendance();
             $attendance->classroom_id = $timetable->class_room_id;
-            $attendance->teacher_id = auth()->id();
+            $attendance->teacher_id = auth('teacher')->id();
             $attendance->course_id = $request->course_id;
             $attendance->timetable_id = $request->timetable_id;
             $attendance->academic_year_id = $timetable->academic_year_id;
@@ -218,11 +218,10 @@ class TeacherAttendanceController extends Controller
             $attendance->check_in_distance = $request->distance;
             $attendance->check_in_within_range = $request->within_range;
             $attendance->status = $status;
-            $attendance->check_in_status = $status === 'late' ? 'late' : 'present';
 
             $attendance->save();
 
-            AttendanceActivityLog::logAttempt('check_in', auth()->id(), (int) $request->timetable_id, [
+            AttendanceActivityLog::logAttempt('check_in', auth('teacher')->id(), (int) $request->timetable_id, [
                 'attendance_id' => $attendance->id,
                 'coordinates' => $request->coordinates,
                 'distance' => $request->distance,
@@ -260,7 +259,7 @@ class TeacherAttendanceController extends Controller
         $attendance = TeacherAttendance::find($request->attendance_id);
 
         // Verify the attendance belongs to the current teacher
-        if ($attendance->teacher_id !== auth()->id()) {
+        if ($attendance->teacher_id !== auth('teacher')->id()) {
             return response()->json([
                 'success' => false,
                 'message' => 'You are not authorized to check out this attendance record'
@@ -288,7 +287,7 @@ class TeacherAttendanceController extends Controller
 
         $gpsEnforcement = SystemSetting::getValue('gps_enforcement_enabled', true);
         if ($gpsEnforcement && $request->has('within_range') && !$request->boolean('within_range')) {
-            AttendanceActivityLog::logAttempt('attempt_failed', auth()->id(), (int) $attendance->timetable_id, [
+            AttendanceActivityLog::logAttempt('attempt_failed', auth('teacher')->id(), (int) $attendance->timetable_id, [
                 'reason' => 'check_out_out_of_range',
                 'attendance_id' => $attendance->id,
                 'coordinates' => $request->coordinates,
@@ -320,7 +319,7 @@ class TeacherAttendanceController extends Controller
             $attendance->status = $status;
             $attendance->save();
 
-            AttendanceActivityLog::logAttempt('check_out', auth()->id(), (int) $attendance->timetable_id, [
+            AttendanceActivityLog::logAttempt('check_out', auth('teacher')->id(), (int) $attendance->timetable_id, [
                 'attendance_id' => $attendance->id,
                 'coordinates' => $request->coordinates,
                 'distance' => $request->input('distance'),
@@ -348,7 +347,7 @@ class TeacherAttendanceController extends Controller
             ? Carbon::parse($request->date)->format('Y-m-d')
             : Carbon::now()->format('Y-m-d');
 
-        $attendance = TeacherAttendance::where('teacher_id', auth()->id())
+        $attendance = TeacherAttendance::where('teacher_id', auth('teacher')->id())
             ->where('date', $date)
             ->with(['course', 'classroom'])
             ->orderBy('check_in_time', 'desc')
@@ -385,7 +384,7 @@ class TeacherAttendanceController extends Controller
     // Optional: Add endpoint to get specific attendance by timetable_id
     public function getAttendanceByTimetable($timetableId)
     {
-        $attendance = TeacherAttendance::where('teacher_id', auth()->id())
+        $attendance = TeacherAttendance::where('teacher_id', auth('teacher')->id())
             ->where('timetable_id', $timetableId)
             ->where('date', Carbon::now()->format('Y-m-d'))
             ->with(['course', 'classroom'])

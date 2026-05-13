@@ -17,6 +17,7 @@ class Course extends Model
         'course_type',
         'credit_hours',
         'teacher_id',
+        'student_size',
     ];
 
     // get total number of courses assigned to a teacher

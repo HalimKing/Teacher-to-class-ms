@@ -17,8 +17,12 @@ class ClassRoomFactory extends Factory
     public function definition(): array
     {
         return [
-            //
             'name' => $this->faker->unique()->word() . ' Class',
+            'capacity' => $this->faker->numberBetween(20, 200),
+            'latitude' => null,
+            'longitude' => null,
+            'radius_meters' => 50,
+            'is_active' => true,
         ];
     }
 }

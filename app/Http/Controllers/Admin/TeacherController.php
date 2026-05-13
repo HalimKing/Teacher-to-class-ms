@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Admin;
 
-
 use App\Http\Controllers\Controller;
 use App\Models\Faculty;
 use App\Models\Department;
@@ -12,6 +11,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Inertia\Inertia;
+use Maatwebsite\Excel\Facades\Excel;
 
 class TeacherController extends Controller
 {   
@@ -253,5 +253,447 @@ class TeacherController extends Controller
             
             return back()->with('error', 'Failed to reset password. Please try again.');
         }
+    }
+
+    /**
+     * Export teachers to CSV
+     */
+    public function export($format = 'excel')
+    {
+        $fileName = 'teachers_' . now()->format('Ymd_His') . '.csv';
+        $headers = [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"{$fileName}\"",
+        ];
+
+        $callback = function () {
+            $out = fopen('php://output', 'w');
+            fputcsv($out, ['ID', 'First Name', 'Last Name', 'Email', 'Phone', 'Employee ID', 'Faculty', 'Department', 'Title', 'Created At', 'Updated At']);
+            Teacher::with(['faculty', 'department'])->chunk(200, function ($teachers) use ($out) {
+                foreach ($teachers as $t) {
+                    fputcsv($out, [
+                        $t->id,
+                        $t->first_name,
+                        $t->last_name,
+                        $t->email,
+                        $t->phone ?? '',
+                        $t->employee_id ?? '',
+                        $t->faculty->name ?? '',
+                        $t->department->name ?? '',
+                        $t->title ?? '',
+                        optional($t->created_at)->toDateTimeString(),
+                        optional($t->updated_at)->toDateTimeString(),
+                    ]);
+                }
+            });
+            fclose($out);
+        };
+
+        return response()->streamDownload($callback, $fileName, $headers);
+    }
+
+    /**
+     * Download template for teacher import
+     */
+    public function template()
+    {
+        $fileName = 'teachers_template_' . now()->format('Ymd') . '.csv';
+        $headers = [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"{$fileName}\"",
+        ];
+
+        $callback = function () {
+            $out = fopen('php://output', 'w');
+            fputcsv($out, ['# IMPORT RULES AND INSTRUCTIONS']);
+            fputcsv($out, ['# 1. first_name, last_name, email, phone, employee_id, faculty, department, title are REQUIRED']);
+            fputcsv($out, ['# 2. faculty and department must match existing names exactly. Department must belong to faculty']);
+            fputcsv($out, ['# 3. title must be one of: Prof., Dr., Mr., Ms.']);
+            fputcsv($out, ['# 4. email and employee_id must be unique']);
+            fputcsv($out, ['# 5. Do not modify the header row. Remove instruction rows before uploading']);
+            fputcsv($out, ['# 6. Duplicate employee_id will update existing teacher']);
+            fputcsv($out, ['']);
+            fputcsv($out, ['first_name', 'last_name', 'email', 'phone', 'employee_id', 'faculty', 'department', 'title']);
+            fputcsv($out, ['John', 'Doe', 'john.doe@example.com', '+1234567890', 'EMP001', 'Faculty of Engineering', 'Computer Science', 'Dr.']);
+            fputcsv($out, ['Jane', 'Smith', 'jane.smith@example.com', '+0987654321', 'EMP002', 'Faculty of Science', 'Mathematics', 'Prof.']);
+            fclose($out);
+        };
+
+        return response()->streamDownload($callback, $fileName, $headers);
+    }
+
+    /**
+     * Preview uploaded file and return parsed rows with validation (JSON)
+     */
+    public function preview(Request $request)
+    {
+        $request->validate([
+            'file' => [
+                'required',
+                'file',
+                function ($attribute, $value, $fail) {
+                    if (!$value) {
+                        $fail('The file field is required.');
+                        return;
+                    }
+                    $ext = strtolower($value->getClientOriginalExtension());
+                    if (!in_array($ext, ['xlsx', 'xls', 'csv'])) {
+                        $fail('The file must be a file of type: xlsx, xls, csv.');
+                    }
+                },
+            ],
+        ]);
+
+        $file = $request->file('file');
+        if (!$file) {
+            return response()->json(['error' => 'No file uploaded'], 422);
+        }
+
+        $ext = strtolower($file->getClientOriginalExtension());
+        $rows = [];
+
+        if ($ext === 'csv') {
+            $path = $file->getRealPath();
+            if (($handle = fopen($path, 'r')) !== false) {
+                $header = null;
+                $line = 0;
+                while (($row = fgetcsv($handle)) !== false) {
+                    $line++;
+                    $firstCell = trim($row[0] ?? '');
+                    if (empty($firstCell) || strpos($firstCell, '#') === 0) {
+                        continue;
+                    }
+                    $header = $row;
+                    break;
+                }
+
+                if ($header === null) {
+                    fclose($handle);
+                    return response()->json(['error' => 'Header row not found in CSV file'], 422);
+                }
+
+                $normalizedHeader = array_map(fn($h) => strtolower(trim(str_replace(' ', '_', $h))), $header);
+                $seen = [];
+                while (($data = fgetcsv($handle)) !== false) {
+                    $line++;
+                    $firstCell = trim($data[0] ?? '');
+                    if (empty($firstCell) || strpos($firstCell, '#') === 0) {
+                        continue;
+                    }
+
+                    $row = [];
+                    foreach ($normalizedHeader as $i => $key) {
+                        $row[$key] = $data[$i] ?? null;
+                    }
+
+                    $errors = [];
+                    if (empty($row['first_name'])) {
+                        $errors[] = 'First name is required';
+                    }
+                    if (empty($row['last_name'])) {
+                        $errors[] = 'Last name is required';
+                    }
+                    if (empty($row['email'])) {
+                        $errors[] = 'Email is required';
+                    } elseif (!filter_var(trim($row['email']), FILTER_VALIDATE_EMAIL)) {
+                        $errors[] = 'Invalid email format';
+                    }
+                    if (empty($row['phone'])) {
+                        $errors[] = 'Phone is required';
+                    }
+                    if (empty($row['employee_id'])) {
+                        $errors[] = 'Employee ID is required';
+                    }
+                    if (empty($row['faculty'])) {
+                        $errors[] = 'Faculty is required';
+                    } else {
+                        if (!Faculty::where('name', trim($row['faculty']))->exists()) {
+                            $errors[] = 'Faculty "' . $row['faculty'] . '" not found';
+                        }
+                    }
+                    if (empty($row['department'])) {
+                        $errors[] = 'Department is required';
+                    } elseif (!empty($row['faculty'])) {
+                        $faculty = Faculty::where('name', trim($row['faculty']))->first();
+                        if ($faculty) {
+                            $dept = Department::where('name', trim($row['department']))->where('faculty_id', $faculty->id)->first();
+                            if (!$dept) {
+                                $errors[] = 'Department "' . $row['department'] . '" not found or does not belong to faculty';
+                            }
+                        }
+                    }
+                    $title = trim($row['title'] ?? '');
+                    if (empty($title)) {
+                        $errors[] = 'Title is required';
+                    } elseif (!in_array($title, ['Prof.', 'Dr.', 'Mr.', 'Ms.'])) {
+                        $errors[] = 'Title must be Prof., Dr., Mr., or Ms.';
+                    }
+
+                    $empKey = strtolower(trim($row['employee_id'] ?? ''));
+                    if ($empKey && isset($seen[$empKey])) {
+                        $errors[] = 'Duplicate employee_id in file (line ' . $seen[$empKey] . ')';
+                    } elseif ($empKey) {
+                        $seen[$empKey] = $line;
+                    }
+
+                    $exists = !empty($row['employee_id']) && Teacher::where('employee_id', $row['employee_id'])->exists();
+
+                    $rows[] = [
+                        'line' => $line,
+                        'data' => $row,
+                        'errors' => $errors,
+                        'exists' => $exists,
+                    ];
+                }
+                fclose($handle);
+            }
+        } else {
+            try {
+                $array = Excel::toArray([], $file);
+                if (!empty($array) && isset($array[0])) {
+                    $sheet = $array[0];
+                    $headerRowIndex = 0;
+                    for ($i = 0; $i < count($sheet); $i++) {
+                        $firstCell = trim($sheet[$i][0] ?? '');
+                        if (!empty($firstCell) && strpos($firstCell, '#') !== 0) {
+                            $headerRowIndex = $i;
+                            break;
+                        }
+                    }
+                    $header = array_map(fn($h) => strtolower(trim(str_replace(' ', '_', (string)$h))), $sheet[$headerRowIndex] ?? []);
+                    $seen = [];
+                    for ($i = $headerRowIndex + 1; $i < count($sheet); $i++) {
+                        $data = $sheet[$i];
+                        $firstCell = trim($data[0] ?? '');
+                        if (empty($firstCell) || strpos($firstCell, '#') === 0) {
+                            continue;
+                        }
+                        $row = [];
+                        foreach ($header as $j => $key) {
+                            $row[$key] = isset($data[$j]) ? (is_string($data[$j]) ? trim($data[$j]) : $data[$j]) : null;
+                        }
+
+                        $errors = [];
+                        if (empty($row['first_name'])) {
+                            $errors[] = 'First name is required';
+                        }
+                        if (empty($row['last_name'])) {
+                            $errors[] = 'Last name is required';
+                        }
+                        if (empty($row['email'])) {
+                            $errors[] = 'Email is required';
+                        } elseif (!filter_var(trim((string)$row['email']), FILTER_VALIDATE_EMAIL)) {
+                            $errors[] = 'Invalid email format';
+                        }
+                        if (empty($row['phone'])) {
+                            $errors[] = 'Phone is required';
+                        }
+                        if (empty($row['employee_id'])) {
+                            $errors[] = 'Employee ID is required';
+                        }
+                        if (empty($row['faculty'])) {
+                            $errors[] = 'Faculty is required';
+                        } else {
+                            if (!Faculty::where('name', trim($row['faculty']))->exists()) {
+                                $errors[] = 'Faculty "' . $row['faculty'] . '" not found';
+                            }
+                        }
+                        if (empty($row['department'])) {
+                            $errors[] = 'Department is required';
+                        } elseif (!empty($row['faculty'])) {
+                            $faculty = Faculty::where('name', trim($row['faculty']))->first();
+                            if ($faculty) {
+                                $dept = Department::where('name', trim($row['department']))->where('faculty_id', $faculty->id)->first();
+                                if (!$dept) {
+                                    $errors[] = 'Department not found or does not belong to faculty';
+                                }
+                            }
+                        }
+                        $title = trim((string)($row['title'] ?? ''));
+                        if (empty($title)) {
+                            $errors[] = 'Title is required';
+                        } elseif (!in_array($title, ['Prof.', 'Dr.', 'Mr.', 'Ms.'])) {
+                            $errors[] = 'Title must be Prof., Dr., Mr., or Ms.';
+                        }
+
+                        $line = $i + 1;
+                        $empKey = strtolower(trim($row['employee_id'] ?? ''));
+                        if ($empKey && isset($seen[$empKey])) {
+                            $errors[] = 'Duplicate employee_id in file (line ' . $seen[$empKey] . ')';
+                        } elseif ($empKey) {
+                            $seen[$empKey] = $line;
+                        }
+                        $exists = !empty($row['employee_id']) && Teacher::where('employee_id', $row['employee_id'])->exists();
+                        $rows[] = ['line' => $line, 'data' => $row, 'errors' => $errors, 'exists' => $exists];
+                    }
+                }
+            } catch (\Throwable $e) {
+                return response()->json(['error' => 'Unable to parse uploaded file: ' . $e->getMessage()], 422);
+            }
+        }
+
+        return response()->json(['rows' => $rows]);
+    }
+
+    /**
+     * Confirm import: parse file and persist teachers (JSON)
+     */
+    public function confirmImport(Request $request)
+    {
+        $request->validate([
+            'file' => [
+                'required',
+                'file',
+                function ($attribute, $value, $fail) {
+                    if (!$value) {
+                        $fail('The file field is required.');
+                        return;
+                    }
+                    $ext = strtolower($value->getClientOriginalExtension());
+                    if (!in_array($ext, ['xlsx', 'xls', 'csv'])) {
+                        $fail('The file must be a file of type: xlsx, xls, csv.');
+                    }
+                },
+            ],
+        ]);
+
+        $file = $request->file('file');
+        $ext = strtolower($file->getClientOriginalExtension());
+        $rows = [];
+
+        if ($ext === 'csv') {
+            $path = $file->getRealPath();
+            if (($handle = fopen($path, 'r')) !== false) {
+                $header = null;
+                while (($row = fgetcsv($handle)) !== false) {
+                    $firstCell = trim($row[0] ?? '');
+                    if (empty($firstCell) || strpos($firstCell, '#') === 0) {
+                        continue;
+                    }
+                    $header = $row;
+                    break;
+                }
+                if ($header === null) {
+                    fclose($handle);
+                    return response()->json(['error' => 'Header row not found in CSV file'], 422);
+                }
+                $normalizedHeader = array_map(fn($h) => strtolower(trim(str_replace(' ', '_', $h))), $header);
+                while (($data = fgetcsv($handle)) !== false) {
+                    $firstCell = trim($data[0] ?? '');
+                    if (empty($firstCell) || strpos($firstCell, '#') === 0) {
+                        continue;
+                    }
+                    $row = [];
+                    foreach ($normalizedHeader as $i => $key) {
+                        $row[$key] = $data[$i] ?? null;
+                    }
+                    $rows[] = $row;
+                }
+                fclose($handle);
+            }
+        } else {
+            try {
+                $array = Excel::toArray([], $file);
+                if (!empty($array) && isset($array[0])) {
+                    $sheet = $array[0];
+                    $headerRowIndex = 0;
+                    for ($i = 0; $i < count($sheet); $i++) {
+                        $firstCell = trim($sheet[$i][0] ?? '');
+                        if (!empty($firstCell) && strpos($firstCell, '#') !== 0) {
+                            $headerRowIndex = $i;
+                            break;
+                        }
+                    }
+                    $header = array_map(fn($h) => strtolower(trim(str_replace(' ', '_', $h))), $sheet[$headerRowIndex] ?? []);
+                    for ($i = $headerRowIndex + 1; $i < count($sheet); $i++) {
+                        $data = $sheet[$i];
+                        $firstCell = trim($data[0] ?? '');
+                        if (empty($firstCell) || strpos($firstCell, '#') === 0) {
+                            continue;
+                        }
+                        $row = [];
+                        foreach ($header as $j => $key) {
+                            $row[$key] = isset($data[$j]) ? (is_string($data[$j]) ? trim($data[$j]) : $data[$j]) : null;
+                        }
+                        $rows[] = $row;
+                    }
+                }
+            } catch (\Throwable $e) {
+                return response()->json(['error' => 'Unable to parse uploaded file: ' . $e->getMessage()], 422);
+            }
+        }
+
+        $imported = 0;
+        $skipped = 0;
+        $failed = [];
+
+        foreach ($rows as $idx => $r) {
+            $firstName = trim($r['first_name'] ?? '');
+            $lastName = trim($r['last_name'] ?? '');
+            $email = trim($r['email'] ?? '');
+            $phone = trim($r['phone'] ?? '');
+            $employeeId = trim($r['employee_id'] ?? '');
+            $facultyName = trim($r['faculty'] ?? '');
+            $departmentName = trim($r['department'] ?? '');
+            $title = trim($r['title'] ?? '');
+
+            if (empty($firstName) || empty($lastName) || empty($email) || empty($phone) || empty($employeeId)) {
+                $skipped++;
+                $failed[] = ['index' => $idx, 'reason' => 'Required field missing (first_name, last_name, email, phone, employee_id)'];
+                continue;
+            }
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $skipped++;
+                $failed[] = ['index' => $idx, 'reason' => 'Invalid email format'];
+                continue;
+            }
+            if (empty($facultyName)) {
+                $skipped++;
+                $failed[] = ['index' => $idx, 'reason' => 'Faculty is required'];
+                continue;
+            }
+            $faculty = Faculty::where('name', $facultyName)->first();
+            if (!$faculty) {
+                $skipped++;
+                $failed[] = ['index' => $idx, 'reason' => 'Faculty "' . $facultyName . '" not found'];
+                continue;
+            }
+            if (empty($departmentName)) {
+                $skipped++;
+                $failed[] = ['index' => $idx, 'reason' => 'Department is required'];
+                continue;
+            }
+            $department = Department::where('name', $departmentName)->where('faculty_id', $faculty->id)->first();
+            if (!$department) {
+                $skipped++;
+                $failed[] = ['index' => $idx, 'reason' => 'Department "' . $departmentName . '" not found or does not belong to faculty'];
+                continue;
+            }
+            if (!in_array($title, ['Prof.', 'Dr.', 'Mr.', 'Ms.'])) {
+                $skipped++;
+                $failed[] = ['index' => $idx, 'reason' => 'Title must be Prof., Dr., Mr., or Ms.'];
+                continue;
+            }
+
+            try {
+                Teacher::updateOrCreate(
+                    ['employee_id' => $employeeId],
+                    [
+                        'first_name' => $firstName,
+                        'last_name' => $lastName,
+                        'email' => $email,
+                        'phone' => $phone,
+                        'faculty_id' => $faculty->id,
+                        'department_id' => $department->id,
+                        'title' => $title,
+                    ]
+                );
+                $imported++;
+            } catch (\Throwable $e) {
+                $failed[] = ['index' => $idx, 'reason' => $e->getMessage()];
+            }
+        }
+
+        return response()->json(['imported' => $imported, 'skipped' => $skipped, 'failed' => $failed]);
     }
 }

@@ -8,10 +8,11 @@ use App\Models\AcademicYear;
 use App\Models\Course;
 use App\Models\Level;
 use App\Models\Program;
-use App\Models\Teacher; // Add this import
+use App\Models\Teacher;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Http\JsonResponse;
+use Maatwebsite\Excel\Facades\Excel;
 
 class CourseController extends Controller
 {
@@ -407,5 +408,485 @@ class CourseController extends Controller
         $course->delete();
         return redirect()->route('admin.school-management.courses.index')
             ->with('success', 'Course deleted successfully.');
+    }
+
+    /**
+     * Export courses to CSV
+     */
+    public function export($format = 'excel')
+    {
+        $fileName = 'courses_' . now()->format('Ymd_His') . '.csv';
+        $headers = [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"{$fileName}\"",
+        ];
+
+        $callback = function () {
+            $out = fopen('php://output', 'w');
+            fputcsv($out, ['ID', 'Course Code', 'Name', 'Program', 'Level', 'Academic Year', 'Academic Period', 'Course Type', 'Credit Hours', 'Student Size', 'Teacher', 'Created At', 'Updated At']);
+            Course::with(['program', 'level', 'academicYear', 'academicPeriod', 'teacher'])->chunk(200, function ($courses) use ($out) {
+                foreach ($courses as $c) {
+                    $teacherName = $c->teacher
+                        ? trim($c->teacher->first_name . ' ' . $c->teacher->last_name)
+                        : '';
+                    fputcsv($out, [
+                        $c->id,
+                        $c->course_code,
+                        $c->name,
+                        $c->program->name ?? '',
+                        $c->level->name ?? '',
+                        $c->academicYear->name ?? '',
+                        $c->academicPeriod->name ?? '',
+                        $c->course_type ?? '',
+                        $c->credit_hours ?? '',
+                        $c->student_size ?? '',
+                        $teacherName,
+                        optional($c->created_at)->toDateTimeString(),
+                        optional($c->updated_at)->toDateTimeString(),
+                    ]);
+                }
+            });
+            fclose($out);
+        };
+
+        return response()->streamDownload($callback, $fileName, $headers);
+    }
+
+    /**
+     * Download template for course import
+     */
+    public function template()
+    {
+        $fileName = 'courses_template_' . now()->format('Ymd') . '.csv';
+        $headers = [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"{$fileName}\"",
+        ];
+
+        $callback = function () {
+            $out = fopen('php://output', 'w');
+            fputcsv($out, ['# IMPORT RULES AND INSTRUCTIONS']);
+            fputcsv($out, ['# 1. course_code is REQUIRED - Must be unique']);
+            fputcsv($out, ['# 2. name is REQUIRED']);
+            fputcsv($out, ['# 3. program is REQUIRED - Must match an existing program name exactly']);
+            fputcsv($out, ['# 4. level, academic_year, academic_period, teacher are OPTIONAL - Match existing names']);
+            fputcsv($out, ['# 5. course_type is REQUIRED - Must be "core" or "elective"']);
+            fputcsv($out, ['# 6. credit_hours and student_size are OPTIONAL - Numeric (integer)']);
+            fputcsv($out, ['# 7. Do not modify the header row. Remove instruction rows before uploading']);
+            fputcsv($out, ['# 8. Duplicate course_code will update existing course']);
+            fputcsv($out, ['']);
+            fputcsv($out, ['course_code', 'name', 'program', 'level', 'academic_year', 'academic_period', 'course_type', 'credit_hours', 'student_size', 'teacher']);
+            fputcsv($out, ['CS101', 'Introduction to Programming', 'BSc Computer Science', 'Level 100', '2024/2025', 'Semester 1', 'core', '3', '50', '']);
+            fputcsv($out, ['MATH201', 'Calculus II', 'BSc Mathematics', 'Level 200', '2024/2025', 'Semester 1', 'core', '4', '45', '']);
+            fclose($out);
+        };
+
+        return response()->streamDownload($callback, $fileName, $headers);
+    }
+
+    /**
+     * Preview uploaded file and return parsed rows with validation (JSON)
+     */
+    public function preview(Request $request)
+    {
+        $request->validate([
+            'file' => [
+                'required',
+                'file',
+                function ($attribute, $value, $fail) {
+                    if (!$value) {
+                        $fail('The file field is required.');
+                        return;
+                    }
+                    $ext = strtolower($value->getClientOriginalExtension());
+                    if (!in_array($ext, ['xlsx', 'xls', 'csv'])) {
+                        $fail('The file must be a file of type: xlsx, xls, csv.');
+                    }
+                },
+            ],
+        ]);
+
+        $file = $request->file('file');
+        if (!$file) {
+            return response()->json(['error' => 'No file uploaded'], 422);
+        }
+
+        $ext = strtolower($file->getClientOriginalExtension());
+        $rows = [];
+
+        if ($ext === 'csv') {
+            $path = $file->getRealPath();
+            if (($handle = fopen($path, 'r')) !== false) {
+                $header = null;
+                $line = 0;
+                while (($row = fgetcsv($handle)) !== false) {
+                    $line++;
+                    $firstCell = trim($row[0] ?? '');
+                    if (empty($firstCell) || strpos($firstCell, '#') === 0) {
+                        continue;
+                    }
+                    $header = $row;
+                    break;
+                }
+
+                if ($header === null) {
+                    fclose($handle);
+                    return response()->json(['error' => 'Header row not found in CSV file'], 422);
+                }
+
+                $normalizedHeader = array_map(fn($h) => strtolower(trim($h)), $header);
+                $seen = [];
+                while (($data = fgetcsv($handle)) !== false) {
+                    $line++;
+                    $firstCell = trim($data[0] ?? '');
+                    if (empty($firstCell) || strpos($firstCell, '#') === 0) {
+                        continue;
+                    }
+
+                    $row = [];
+                    foreach ($normalizedHeader as $i => $key) {
+                        $row[$key] = $data[$i] ?? null;
+                    }
+
+                    $errors = [];
+                    if (empty($row['course_code'])) {
+                        $errors[] = 'Course code is required';
+                    }
+                    if (empty($row['name'])) {
+                        $errors[] = 'Name is required';
+                    }
+                    if (empty($row['program'])) {
+                        $errors[] = 'Program is required';
+                    } else {
+                        if (!Program::where('name', trim($row['program']))->exists()) {
+                            $errors[] = 'Program "' . $row['program'] . '" not found';
+                        }
+                    }
+                    if (!empty($row['level']) && !Level::where('name', trim($row['level']))->exists()) {
+                        $errors[] = 'Level "' . $row['level'] . '" not found';
+                    }
+                    if (!empty($row['academic_year']) && !AcademicYear::where('name', trim($row['academic_year']))->exists()) {
+                        $errors[] = 'Academic year "' . $row['academic_year'] . '" not found';
+                    }
+                    if (!empty($row['academic_period']) && !AcademicPeriod::where('name', trim($row['academic_period']))->exists()) {
+                        $errors[] = 'Academic period "' . $row['academic_period'] . '" not found';
+                    }
+                    $courseType = strtolower(trim($row['course_type'] ?? ''));
+                    if (empty($courseType)) {
+                        $errors[] = 'Course type is required';
+                    } elseif (!in_array($courseType, ['core', 'elective'])) {
+                        $errors[] = 'Course type must be "core" or "elective"';
+                    }
+                    if (!empty($row['credit_hours']) && !is_numeric(trim($row['credit_hours']))) {
+                        $errors[] = 'Credit hours must be numeric';
+                    }
+                    if (!empty($row['student_size']) && (!is_numeric(trim($row['student_size'])) || (int) $row['student_size'] < 0)) {
+                        $errors[] = 'Student size must be a non-negative number';
+                    }
+                    if (!empty($row['teacher'])) {
+                        $teacherName = trim($row['teacher']);
+                        $found = Teacher::whereRaw("CONCAT(first_name, ' ', last_name) = ?", [$teacherName])->exists();
+                        if (!$found) {
+                            $errors[] = 'Teacher "' . $teacherName . '" not found';
+                        }
+                    }
+
+                    $codeKey = strtolower(trim($row['course_code'] ?? ''));
+                    if ($codeKey && isset($seen[$codeKey])) {
+                        $errors[] = 'Duplicate course_code in file (line ' . $seen[$codeKey] . ')';
+                    } elseif ($codeKey) {
+                        $seen[$codeKey] = $line;
+                    }
+
+                    $exists = false;
+                    if (!empty($row['course_code'])) {
+                        $exists = Course::where('course_code', $row['course_code'])->exists();
+                    }
+
+                    $rows[] = [
+                        'line' => $line,
+                        'data' => $row,
+                        'errors' => $errors,
+                        'exists' => $exists,
+                    ];
+                }
+                fclose($handle);
+            }
+        } else {
+            try {
+                $array = Excel::toArray([], $file);
+                if (!empty($array) && isset($array[0])) {
+                    $sheet = $array[0];
+                    $headerRowIndex = 0;
+                    for ($i = 0; $i < count($sheet); $i++) {
+                        $firstCell = trim($sheet[$i][0] ?? '');
+                        if (!empty($firstCell) && strpos($firstCell, '#') !== 0) {
+                            $headerRowIndex = $i;
+                            break;
+                        }
+                    }
+                    $header = array_map(fn($h) => strtolower(trim($h)), $sheet[$headerRowIndex] ?? []);
+                    $seen = [];
+                    for ($i = $headerRowIndex + 1; $i < count($sheet); $i++) {
+                        $data = $sheet[$i];
+                        $firstCell = trim($data[0] ?? '');
+                        if (empty($firstCell) || strpos($firstCell, '#') === 0) {
+                            continue;
+                        }
+                        $row = [];
+                        foreach ($header as $j => $key) {
+                            $row[$key] = isset($data[$j]) ? (is_string($data[$j]) ? trim($data[$j]) : $data[$j]) : null;
+                        }
+
+                        $errors = [];
+                        if (empty($row['course_code'])) {
+                            $errors[] = 'Course code is required';
+                        }
+                        if (empty($row['name'])) {
+                            $errors[] = 'Name is required';
+                        }
+                        if (empty($row['program'])) {
+                            $errors[] = 'Program is required';
+                        } else {
+                            if (!Program::where('name', trim($row['program']))->exists()) {
+                                $errors[] = 'Program "' . $row['program'] . '" not found';
+                            }
+                        }
+                        if (!empty($row['level']) && !Level::where('name', trim($row['level']))->exists()) {
+                            $errors[] = 'Level "' . $row['level'] . '" not found';
+                        }
+                        if (!empty($row['academic_year']) && !AcademicYear::where('name', trim($row['academic_year']))->exists()) {
+                            $errors[] = 'Academic year "' . $row['academic_year'] . '" not found';
+                        }
+                        if (!empty($row['academic_period']) && !AcademicPeriod::where('name', trim($row['academic_period']))->exists()) {
+                            $errors[] = 'Academic period "' . $row['academic_period'] . '" not found';
+                        }
+                        $courseType = strtolower(trim((string)($row['course_type'] ?? '')));
+                        if (empty($courseType)) {
+                            $errors[] = 'Course type is required';
+                        } elseif (!in_array($courseType, ['core', 'elective'])) {
+                            $errors[] = 'Course type must be "core" or "elective"';
+                        }
+                        if (!empty($row['credit_hours']) && !is_numeric(trim((string)$row['credit_hours']))) {
+                            $errors[] = 'Credit hours must be numeric';
+                        }
+                        if (!empty($row['student_size']) && (!is_numeric(trim((string)$row['student_size'])) || (int) $row['student_size'] < 0)) {
+                            $errors[] = 'Student size must be a non-negative number';
+                        }
+                        if (!empty($row['teacher'])) {
+                            $teacherName = trim((string)$row['teacher']);
+                            $found = Teacher::whereRaw("CONCAT(first_name, ' ', last_name) = ?", [$teacherName])->exists();
+                            if (!$found) {
+                                $errors[] = 'Teacher "' . $teacherName . '" not found';
+                            }
+                        }
+
+                        $line = $i + 1;
+                        $codeKey = strtolower(trim($row['course_code'] ?? ''));
+                        if ($codeKey && isset($seen[$codeKey])) {
+                            $errors[] = 'Duplicate course_code in file (line ' . $seen[$codeKey] . ')';
+                        } elseif ($codeKey) {
+                            $seen[$codeKey] = $line;
+                        }
+                        $exists = !empty($row['course_code']) && Course::where('course_code', $row['course_code'])->exists();
+                        $rows[] = ['line' => $line, 'data' => $row, 'errors' => $errors, 'exists' => $exists];
+                    }
+                }
+            } catch (\Throwable $e) {
+                return response()->json(['error' => 'Unable to parse uploaded file: ' . $e->getMessage()], 422);
+            }
+        }
+
+        return response()->json(['rows' => $rows]);
+    }
+
+    /**
+     * Confirm import: parse file and persist courses (JSON)
+     */
+    public function confirmImport(Request $request)
+    {
+        $request->validate([
+            'file' => [
+                'required',
+                'file',
+                function ($attribute, $value, $fail) {
+                    if (!$value) {
+                        $fail('The file field is required.');
+                        return;
+                    }
+                    $ext = strtolower($value->getClientOriginalExtension());
+                    if (!in_array($ext, ['xlsx', 'xls', 'csv'])) {
+                        $fail('The file must be a file of type: xlsx, xls, csv.');
+                    }
+                },
+            ],
+        ]);
+
+        $file = $request->file('file');
+        $ext = strtolower($file->getClientOriginalExtension());
+        $rows = [];
+
+        if ($ext === 'csv') {
+            $path = $file->getRealPath();
+            if (($handle = fopen($path, 'r')) !== false) {
+                $header = null;
+                while (($row = fgetcsv($handle)) !== false) {
+                    $firstCell = trim($row[0] ?? '');
+                    if (empty($firstCell) || strpos($firstCell, '#') === 0) {
+                        continue;
+                    }
+                    $header = $row;
+                    break;
+                }
+                if ($header === null) {
+                    fclose($handle);
+                    return response()->json(['error' => 'Header row not found in CSV file'], 422);
+                }
+                $normalizedHeader = array_map(fn($h) => strtolower(trim($h)), $header);
+                while (($data = fgetcsv($handle)) !== false) {
+                    $firstCell = trim($data[0] ?? '');
+                    if (empty($firstCell) || strpos($firstCell, '#') === 0) {
+                        continue;
+                    }
+                    $row = [];
+                    foreach ($normalizedHeader as $i => $key) {
+                        $row[$key] = $data[$i] ?? null;
+                    }
+                    $rows[] = $row;
+                }
+                fclose($handle);
+            }
+        } else {
+            try {
+                $array = Excel::toArray([], $file);
+                if (!empty($array) && isset($array[0])) {
+                    $sheet = $array[0];
+                    $headerRowIndex = 0;
+                    for ($i = 0; $i < count($sheet); $i++) {
+                        $firstCell = trim($sheet[$i][0] ?? '');
+                        if (!empty($firstCell) && strpos($firstCell, '#') !== 0) {
+                            $headerRowIndex = $i;
+                            break;
+                        }
+                    }
+                    $header = array_map(fn($h) => strtolower(trim($h)), $sheet[$headerRowIndex] ?? []);
+                    for ($i = $headerRowIndex + 1; $i < count($sheet); $i++) {
+                        $data = $sheet[$i];
+                        $firstCell = trim($data[0] ?? '');
+                        if (empty($firstCell) || strpos($firstCell, '#') === 0) {
+                            continue;
+                        }
+                        $row = [];
+                        foreach ($header as $j => $key) {
+                            $row[$key] = isset($data[$j]) ? (is_string($data[$j]) ? trim($data[$j]) : $data[$j]) : null;
+                        }
+                        $rows[] = $row;
+                    }
+                }
+            } catch (\Throwable $e) {
+                return response()->json(['error' => 'Unable to parse uploaded file: ' . $e->getMessage()], 422);
+            }
+        }
+
+        $imported = 0;
+        $skipped = 0;
+        $failed = [];
+
+        foreach ($rows as $idx => $r) {
+            $courseCode = trim($r['course_code'] ?? '');
+            $name = trim($r['name'] ?? '');
+            $programName = trim($r['program'] ?? '');
+            $levelName = trim($r['level'] ?? '');
+            $academicYearName = trim($r['academic_year'] ?? '');
+            $academicPeriodName = trim($r['academic_period'] ?? '');
+            $courseType = strtolower(trim($r['course_type'] ?? ''));
+            $creditHours = isset($r['credit_hours']) && $r['credit_hours'] !== '' ? (int) $r['credit_hours'] : 0;
+            $studentSize = null;
+            if (isset($r['student_size']) && $r['student_size'] !== '') {
+                $val = (int) $r['student_size'];
+                if ($val >= 0) {
+                    $studentSize = $val;
+                }
+            }
+            $teacherName = trim($r['teacher'] ?? '');
+
+            if (empty($courseCode)) {
+                $skipped++;
+                $failed[] = ['index' => $idx, 'reason' => 'Course code is required'];
+                continue;
+            }
+            if (empty($name)) {
+                $skipped++;
+                $failed[] = ['index' => $idx, 'reason' => 'Name is required'];
+                continue;
+            }
+            if (empty($programName)) {
+                $skipped++;
+                $failed[] = ['index' => $idx, 'reason' => 'Program is required'];
+                continue;
+            }
+            $program = Program::where('name', $programName)->first();
+            if (!$program) {
+                $skipped++;
+                $failed[] = ['index' => $idx, 'reason' => 'Program "' . $programName . '" not found'];
+                continue;
+            }
+            if (!in_array($courseType, ['core', 'elective'])) {
+                $skipped++;
+                $failed[] = ['index' => $idx, 'reason' => 'Course type must be core or elective'];
+                continue;
+            }
+
+            $levelId = null;
+            if (!empty($levelName)) {
+                $level = Level::where('name', $levelName)->first();
+                if ($level) {
+                    $levelId = $level->id;
+                }
+            }
+            $academicYearId = null;
+            if (!empty($academicYearName)) {
+                $ay = AcademicYear::where('name', $academicYearName)->first();
+                if ($ay) {
+                    $academicYearId = $ay->id;
+                }
+            }
+            $academicPeriodId = null;
+            if (!empty($academicPeriodName)) {
+                $ap = AcademicPeriod::where('name', $academicPeriodName)->first();
+                if ($ap) {
+                    $academicPeriodId = $ap->id;
+                }
+            }
+            $teacherId = null;
+            if (!empty($teacherName)) {
+                $teacher = Teacher::whereRaw("CONCAT(first_name, ' ', last_name) = ?", [$teacherName])->first();
+                if ($teacher) {
+                    $teacherId = $teacher->id;
+                }
+            }
+
+            try {
+                Course::updateOrCreate(
+                    ['course_code' => $courseCode],
+                    [
+                        'name' => $name,
+                        'program_id' => $program->id,
+                        'level_id' => $levelId,
+                        'academic_year_id' => $academicYearId,
+                        'academic_period_id' => $academicPeriodId,
+                        'course_type' => $courseType,
+                        'credit_hours' => $creditHours,
+                        'student_size' => $studentSize,
+                        'teacher_id' => $teacherId,
+                    ]
+                );
+                $imported++;
+            } catch (\Throwable $e) {
+                $failed[] = ['index' => $idx, 'reason' => $e->getMessage()];
+            }
+        }
+
+        return response()->json(['imported' => $imported, 'skipped' => $skipped, 'failed' => $failed]);
     }
 }

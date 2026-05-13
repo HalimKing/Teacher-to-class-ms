@@ -1,6 +1,6 @@
 import AppLayout from '@/layouts/app-layout';
 import { SharedData, type BreadcrumbItem } from '@/types';
-import { Head, usePage } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import { AlertCircle, Bell, BookOpen as BookIcon, Calendar, CheckCircle, Clock, Clock as ClockIcon, Users } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -103,18 +103,27 @@ interface TeacherProfile {
     upcomingOfficeHours: string;
 }
 
+interface UpcomingReminder {
+    id: number;
+    title: string;
+    reminder_at: string;
+    session: string | null;
+}
+
 export default function TeacherDashboard({
     upcomingClasses,
     todayLectures,
     attendanceData,
     metricsData,
     profileData,
+    upcomingReminders = [],
 }: {
     upcomingClasses: any[];
     todayLectures: TodayLectures[];
     attendanceData: AttendanceData;
     metricsData: MetricsData;
     profileData: TeacherProfile;
+    upcomingReminders?: UpcomingReminder[];
 }) {
     const [timeFilter, setTimeFilter] = useState('week');
     const [activeTab, setActiveTab] = useState('overview');
@@ -257,10 +266,13 @@ export default function TeacherDashboard({
                             </div>
                         </div>
                         <div className="flex w-full items-center gap-2 lg:w-auto lg:gap-3">
-                            <button className="flex-1 rounded-lg bg-white/20 px-3 py-2 text-sm font-medium transition-colors hover:bg-white/30 lg:flex-none lg:px-4">
-                                <Bell className="mr-2 inline h-4 w-4" />
-                                Notifications
-                            </button>
+                            <Link
+                                href="/teacher/reminders"
+                                className="flex-1 rounded-lg bg-white/20 px-3 py-2 text-sm font-medium transition-colors hover:bg-white/30 lg:flex-none lg:px-4 inline-flex items-center justify-center gap-2"
+                            >
+                                <Bell className="h-4 w-4" />
+                                Reminders
+                            </Link>
                         </div>
                     </div>
                 </div>
@@ -432,6 +444,38 @@ export default function TeacherDashboard({
                                 ))}
                             </div>
                         </div>
+
+                        {/* Upcoming Reminders */}
+                        {upcomingReminders.length > 0 && (
+                            <div className="mb-6 rounded-xl border border-sidebar-border/70 bg-white p-4 shadow-sm dark:border-sidebar-border dark:bg-sidebar-accent">
+                                <div className="mb-3 flex items-center justify-between">
+                                    <h4 className="font-medium text-sidebar-foreground dark:text-sidebar-foreground">Upcoming Reminders</h4>
+                                    <Link
+                                        href="/teacher/reminders"
+                                        className="text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400"
+                                    >
+                                        View all
+                                    </Link>
+                                </div>
+                                <ul className="space-y-2">
+                                    {upcomingReminders.map((r) => (
+                                        <li
+                                            key={r.id}
+                                            className="flex items-start gap-2 rounded-lg border border-sidebar-border/30 p-2 dark:border-sidebar-border/50"
+                                        >
+                                            <Bell className="mt-0.5 h-4 w-4 flex-shrink-0 text-sidebar-foreground/60" />
+                                            <div className="min-w-0 flex-1">
+                                                <p className="truncate text-sm font-medium text-sidebar-foreground">{r.title}</p>
+                                                <p className="text-xs text-sidebar-foreground/60">
+                                                    {new Date(r.reminder_at).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
+                                                    {r.session && ` · ${r.session}`}
+                                                </p>
+                                            </div>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
 
                         {/* Attendance Chart */}
                         <div className="mb-6 rounded-xl bg-gray-50 p-4 dark:bg-gray-800">

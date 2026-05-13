@@ -66,6 +66,19 @@ class HandleInertiaRequests extends Middleware
                     : (auth()->guard('teacher')->check() ? 'teacher' : null),
             ],
 
+            // For teachers: recent unread notifications (e.g. session reminders)
+            'unreadNotifications' => fn() => auth()->guard('teacher')->check() && $user
+                ? $user->unreadNotifications()->latest()->take(10)->get()->map(fn ($n) => [
+                    'id' => $n->id,
+                    'type' => $n->type,
+                    'data' => $n->data,
+                    'created_at' => $n->created_at->toIso8601String(),
+                ])->toArray()
+                : [],
+            'unreadNotificationsCount' => fn() => auth()->guard('teacher')->check() && $user
+                ? $user->unreadNotifications()->count()
+                : 0,
+
             'ziggy' => fn(): array => [
                 ...(new Ziggy)->toArray(),
                 'location' => $request->url(),
