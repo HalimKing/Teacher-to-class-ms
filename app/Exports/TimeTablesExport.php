@@ -29,21 +29,22 @@ class TimeTablesExport implements FromCollection, WithHeadings
     {
         return $this->timeTables->map(function ($timetable) {
             return [
-                'day' => $timetable->day,
+                'day' => $timetable->day_of_week ?? $timetable->day,
                 'start_time' => $this->formatTimeForExport($timetable->start_time),
                 'end_time' => $this->formatTimeForExport($timetable->end_time),
                 'duration' => $this->calculateDuration($timetable->start_time, $timetable->end_time),
+                'staff_type' => ucfirst($timetable->staff_type ?? 'lecturer'),
                 'course_code' => $timetable->course->course_code ?? 'N/A',
                 'course_name' => $timetable->course->name ?? 'N/A',
                 'program' => $timetable->course->program->name ?? 'N/A',
                 'program_code' => $timetable->course->program->program_code ?? 'N/A',
                 'classroom' => $timetable->classRoom->name ?? 'N/A',
                 'classroom_capacity' => $timetable->classRoom->capacity ?? 'N/A',
-                'teacher' => $timetable->course->teacher ? 
-                    $timetable->course->teacher->title . ' ' . 
-                    $timetable->course->teacher->first_name . ' ' . 
-                    $timetable->course->teacher->last_name : 'Not Assigned',
-                'teacher_id' => $timetable->course->teacher->employee_id ?? 'N/A',
+                'teacher' => $timetable->teacher ? 
+                    $timetable->teacher->title . ' ' . 
+                    $timetable->teacher->first_name . ' ' . 
+                    $timetable->teacher->last_name : 'Not Assigned',
+                'teacher_id' => $timetable->teacher->employee_id ?? 'N/A',
                 'academic_year' => $timetable->academicYear->name ?? 'N/A',
                 'academic_year_period' => ($timetable->course->academicPeriod->name ?? ''),
             ];
@@ -60,6 +61,7 @@ class TimeTablesExport implements FromCollection, WithHeadings
             'Start Time',
             'End Time',
             'Duration',
+            'Staff Type',
             'Course Code',
             'Course Name',
             'Program',

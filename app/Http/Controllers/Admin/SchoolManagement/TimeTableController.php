@@ -14,6 +14,9 @@ use Inertia\Inertia;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\TimeTablesExport;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
+use Throwable;
 
 class TimeTableController extends Controller
 {
@@ -22,7 +25,7 @@ class TimeTableController extends Controller
      */
     public function index(Request $request)
     {
-        $query = TimeTable::with(['academicYear', 'course.program', 'course.teacher', 'classRoom'])
+        $query = TimeTable::with(['academicYear', 'course.program', 'course.teacher', 'classRoom', 'teacher'])
             ->latest();
 
         // Apply filters
@@ -46,13 +49,15 @@ class TimeTableController extends Controller
         }
 
         if ($request->filled('teacher_id')) {
-            $query->whereHas('course', function ($q) use ($request) {
-                $q->where('teacher_id', $request->teacher_id);
-            });
+            $query->where('teacher_id', $request->teacher_id);
+        }
+
+        if ($request->filled('staff_type') && in_array($request->staff_type, Teacher::STAFF_TYPES, true)) {
+            $query->where('staff_type', $request->staff_type);
         }
 
         if ($request->filled('day')) {
-            $query->where('day', $request->day);
+            $query->where('day_of_week', $request->day);
         }
 
         $timeTables = $query->paginate(10);
@@ -90,6 +95,17 @@ class TimeTableController extends Controller
                     'label' => $room->name . ' - Capacity: ' . $room->capacity
                 ];
             }),
+            'teacherOptions' => Teacher::orderBy('last_name')->orderBy('first_name')->get()->map(function ($teacher) {
+                return [
+                    'value' => $teacher->id,
+                    'label' => trim("{$teacher->title} {$teacher->first_name} {$teacher->last_name}") . ' (' . ucfirst($teacher->staff_type) . ')',
+                    'staff_type' => $teacher->staff_type,
+                ];
+            }),
+            'staffTypeOptions' => [
+                ['value' => Teacher::STAFF_TYPE_LECTURER, 'label' => 'Lecturer'],
+                ['value' => Teacher::STAFF_TYPE_ADMINISTRATOR, 'label' => 'Administrator'],
+            ],
             'dayOptions' => [
                 ['value' => 'Monday', 'label' => 'Monday'],
                 ['value' => 'Tuesday', 'label' => 'Tuesday'],
@@ -99,7 +115,7 @@ class TimeTableController extends Controller
                 ['value' => 'Saturday', 'label' => 'Saturday'],
                 ['value' => 'Sunday', 'label' => 'Sunday'],
             ],
-            'filters' => $request->only(['academic_year_id', 'program_id', 'course_id', 'class_room_id', 'teacher_id', 'day']),
+            'filters' => $request->only(['academic_year_id', 'program_id', 'course_id', 'class_room_id', 'teacher_id', 'staff_type', 'day']),
         ]);
     }
 
@@ -109,7 +125,7 @@ class TimeTableController extends Controller
     public function export(Request $request, $format = 'excel')
     {
         // Apply the same filters as index method
-        $query = TimeTable::with(['academicYear', 'course.program', 'course.teacher', 'classRoom'])
+        $query = TimeTable::with(['academicYear', 'course.program', 'course.teacher', 'classRoom', 'teacher'])
             ->latest();
 
         // Apply filters (same as index method)
@@ -132,13 +148,15 @@ class TimeTableController extends Controller
         }
 
         if ($request->filled('teacher_id')) {
-            $query->whereHas('course', function ($q) use ($request) {
-                $q->where('teacher_id', $request->teacher_id);
-            });
+            $query->where('teacher_id', $request->teacher_id);
+        }
+
+        if ($request->filled('staff_type') && in_array($request->staff_type, Teacher::STAFF_TYPES, true)) {
+            $query->where('staff_type', $request->staff_type);
         }
 
         if ($request->filled('day')) {
-            $query->where('day', $request->day);
+            $query->where('day_of_week', $request->day);
         }
 
         $timeTables = $query->get();
@@ -178,6 +196,7 @@ class TimeTableController extends Controller
                 'Duration',
                 'Course Code',
                 'Course Name',
+                'Staff Type',
                 'Program',
                 'Program Code',
                 'Classroom',
@@ -198,15 +217,16 @@ class TimeTableController extends Controller
                     'Duration' => $this->calculateDuration($timetable->start_time, $timetable->end_time),
                     'Course Code' => $timetable->course->course_code ?? 'N/A',
                     'Course Name' => $timetable->course->name ?? 'N/A',
+                    'Staff Type' => ucfirst($timetable->staff_type ?? Teacher::STAFF_TYPE_LECTURER),
                     'Program' => $timetable->course->program->name ?? 'N/A',
                     'Program Code' => $timetable->course->program->program_code ?? 'N/A',
                     'Classroom' => $timetable->classRoom->name ?? 'N/A',
                     'Classroom Capacity' => $timetable->classRoom->capacity ?? 'N/A',
-                    'Teacher' => $timetable->course->teacher ? 
-                        $timetable->course->teacher->title . ' ' . 
-                        $timetable->course->teacher->first_name . ' ' . 
-                        $timetable->course->teacher->last_name : 'Not Assigned',
-                    'Teacher ID' => $timetable->course->teacher->employee_id ?? 'N/A',
+                    'Teacher' => $timetable->teacher ? 
+                        $timetable->teacher->title . ' ' . 
+                        $timetable->teacher->first_name . ' ' . 
+                        $timetable->teacher->last_name : 'Not Assigned',
+                    'Teacher ID' => $timetable->teacher->employee_id ?? 'N/A',
                     'Academic Year' => $timetable->academicYear->name ?? 'N/A',
                     'Academic Year Period' => $timetable->course->academicPeriod->name ?? '',
                 ];
@@ -330,6 +350,17 @@ class TimeTableController extends Controller
             'academicYear' => $academicYear,
             'courses' => $courses,
             'classRooms' => $classRooms,
+            'teachers' => Teacher::orderBy('last_name')->orderBy('first_name')->get()->map(function ($teacher) {
+                return [
+                    'value' => $teacher->id,
+                    'label' => trim("{$teacher->title} {$teacher->first_name} {$teacher->last_name}") . ' (' . ucfirst($teacher->staff_type) . ')',
+                    'staff_type' => $teacher->staff_type,
+                ];
+            }),
+            'staffTypeOptions' => [
+                ['value' => Teacher::STAFF_TYPE_LECTURER, 'label' => 'Lecturer'],
+                ['value' => Teacher::STAFF_TYPE_ADMINISTRATOR, 'label' => 'Administrator'],
+            ],
             'days' => ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
         ]);
     }
@@ -341,76 +372,105 @@ class TimeTableController extends Controller
     {
         $validated = $request->validate([
             'academic_year_id' => 'required|exists:academic_years,id',
-            'course_id' => 'required|exists:courses,id',
+            'staff_type' => ['required', Rule::in(Teacher::STAFF_TYPES)],
+            'teacher_id' => 'required|exists:teachers,id',
+            'course_id' => 'required_if:staff_type,lecturer|nullable|exists:courses,id',
             'class_room_id' => 'required|exists:class_rooms,id',
-            'day' => 'required|string|in:Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday',
+            'day' => 'required_if:staff_type,lecturer|nullable|string|in:Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday',
+            'days' => 'exclude_unless:staff_type,administrator|required|array|min:1',
+            'days.*' => 'string|in:Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday',
             'start_time' => 'required|date_format:H:i',
             'end_time' => 'required|date_format:H:i|after:start_time',
             'create_another' => 'nullable|boolean',
         ]);
 
-        // Get the course to check teacher
-        $course = Course::with('teacher')->findOrFail($validated['course_id']);
-        $teacherId = $course->teacher_id;
-
-        // Check for time conflicts for classroom
-        $classroomConflict = TimeTable::where('academic_year_id', $validated['academic_year_id'])
-            ->where('class_room_id', $validated['class_room_id'])
-            ->where('day', $validated['day'])
-            ->where(function ($query) use ($validated) {
-                $query->where(function ($q) use ($validated) {
-                    $q->where('start_time', '<', $validated['end_time'])
-                      ->where('end_time', '>', $validated['start_time']);
-                });
-            })
-            ->exists();
-
-        if ($classroomConflict) {
-            return back()->withErrors([
-                'start_time' => 'Time slot conflicts with existing schedule for this classroom on the selected day.'
-            ]);
+        $teacher = Teacher::findOrFail($validated['teacher_id']);
+        if ($teacher->staff_type !== $validated['staff_type']) {
+            return back()->withErrors(['teacher_id' => 'Selected staff member does not match the selected staff type.']);
         }
 
-        // Check for teacher conflict if course has a teacher assigned
-        if ($teacherId) {
-            $teacherConflict = TimeTable::where('academic_year_id', $validated['academic_year_id'])
-                ->whereHas('course', function ($q) use ($teacherId) {
-                    $q->where('teacher_id', $teacherId);
-                })
-                ->where('day', $validated['day'])
-                ->where(function ($query) use ($validated) {
-                    $query->where(function ($q) use ($validated) {
-                        $q->where('start_time', '<', $validated['end_time'])
-                          ->where('end_time', '>', $validated['start_time']);
-                    });
-                })
-                ->exists();
+        if ($validated['staff_type'] === Teacher::STAFF_TYPE_LECTURER) {
+            $course = Course::findOrFail($validated['course_id']);
+            if (empty($course->course_code) || empty($course->name)) {
+                return back()->withErrors(['course_id' => 'Lecturer timetables require a course code and course title.']);
+            }
+        } else {
+            $validated['course_id'] = null;
+        }
 
-            if ($teacherConflict) {
-                return back()->withErrors([
-                    'course_id' => 'Teacher already has a scheduled class during this time slot.'
-                ]);
+        $scheduleDays = $validated['staff_type'] === Teacher::STAFF_TYPE_ADMINISTRATOR
+            ? array_values(array_unique($validated['days']))
+            : [$validated['day']];
+
+        if ($validated['staff_type'] === Teacher::STAFF_TYPE_LECTURER) {
+            foreach ($scheduleDays as $day) {
+                $scheduleData = array_merge($validated, ['day' => $day]);
+
+                // Check for time conflicts for classroom
+                $classroomConflict = TimeTable::where('academic_year_id', $scheduleData['academic_year_id'])
+                    ->where('class_room_id', $scheduleData['class_room_id'])
+                    ->where('day_of_week', $day)
+                    ->where(function ($query) use ($scheduleData) {
+                        $query->where(function ($q) use ($scheduleData) {
+                            $q->where('start_time', '<', $scheduleData['end_time'])
+                              ->where('end_time', '>', $scheduleData['start_time']);
+                        });
+                    })
+                    ->exists();
+
+                if ($classroomConflict) {
+                    return back()->withErrors([
+                        'start_time' => "Time slot conflicts with existing schedule for this classroom on {$day}."
+                    ]);
+                }
+
+                if ($this->hasStaffOverlap($scheduleData)) {
+                    return back()->withErrors([
+                        'start_time' => "Selected staff member already has a schedule during this time slot on {$day}."
+                    ]);
+                }
+
+                if ($this->hasDuplicateEntry($scheduleData)) {
+                    return back()->withErrors([
+                        'start_time' => "Duplicate timetable entry already exists for this staff member on {$day}."
+                    ]);
+                }
             }
         }
 
-        // Create the timetable entry
-        TimeTable::create([
-            'academic_year_id' => $validated['academic_year_id'],
-            'course_id' => $validated['course_id'],
-            'class_room_id' => $validated['class_room_id'],
-            'day' => $validated['day'],
-            'start_time' => $validated['start_time'],
-            'end_time' => $validated['end_time'],
-        ]);
+        try {
+            DB::transaction(function () use ($scheduleDays, $validated) {
+                foreach ($scheduleDays as $day) {
+                    TimeTable::create([
+                        'academic_year_id' => $validated['academic_year_id'],
+                        'teacher_id' => $validated['teacher_id'],
+                        'staff_type' => $validated['staff_type'],
+                        'course_id' => $validated['course_id'],
+                        'class_room_id' => $validated['class_room_id'],
+                        'day' => $day,
+                        'day_of_week' => $day,
+                        'start_time' => $validated['start_time'],
+                        'end_time' => $validated['end_time'],
+                    ]);
+                }
+            });
+        } catch (Throwable $e) {
+            report($e);
+
+            return back()
+                ->withInput()
+                ->withErrors(['error' => 'Unable to create the time slot. Please check the selected staff, class room, and time, then try again.'])
+                ->with('error', 'Unable to create the time slot. Please check the selected staff, class room, and time, then try again.');
+        }
 
         $createAnother = $request->boolean('create_another', false);
 
         if ($createAnother) {
-            return back()->with('success', 'Time table entry created successfully. Add another?');
+            return back()->with('success', count($scheduleDays) . ' time table entr' . (count($scheduleDays) === 1 ? 'y' : 'ies') . ' created successfully. Add another?');
         }
 
         return redirect()->route('admin.academics.time-tables.index')
-            ->with('success', 'Time table entry created successfully.');
+            ->with('success', count($scheduleDays) . ' time table entr' . (count($scheduleDays) === 1 ? 'y' : 'ies') . ' created successfully.');
     }
 
     /**
@@ -426,7 +486,7 @@ class TimeTableController extends Controller
      */
     public function edit(string $id)
     {
-        $timeTable = TimeTable::with(['academicYear', 'course.teacher', 'course.program', 'classRoom'])
+        $timeTable = TimeTable::with(['academicYear', 'course.teacher', 'course.program', 'classRoom', 'teacher'])
             ->findOrFail($id);
 
         // Get all courses for the academic year
@@ -474,6 +534,17 @@ class TimeTableController extends Controller
             'academicYear' => $timeTable->academicYear,
             'courses' => $courses,
             'classRooms' => $classRooms,
+            'teachers' => Teacher::orderBy('last_name')->orderBy('first_name')->get()->map(function ($teacher) {
+                return [
+                    'value' => $teacher->id,
+                    'label' => trim("{$teacher->title} {$teacher->first_name} {$teacher->last_name}") . ' (' . ucfirst($teacher->staff_type) . ')',
+                    'staff_type' => $teacher->staff_type,
+                ];
+            }),
+            'staffTypeOptions' => [
+                ['value' => Teacher::STAFF_TYPE_LECTURER, 'label' => 'Lecturer'],
+                ['value' => Teacher::STAFF_TYPE_ADMINISTRATOR, 'label' => 'Administrator'],
+            ],
             'days' => ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
             'currentCourse' => $currentCourse,
             'currentClassRoom' => $currentClassRoom,
@@ -489,43 +560,34 @@ class TimeTableController extends Controller
         
         $validated = $request->validate([
             'academic_year_id' => 'required|exists:academic_years,id',
-            'course_id' => 'required|exists:courses,id',
+            'staff_type' => ['required', Rule::in(Teacher::STAFF_TYPES)],
+            'teacher_id' => 'required|exists:teachers,id',
+            'course_id' => 'required_if:staff_type,lecturer|nullable|exists:courses,id',
             'class_room_id' => 'required|exists:class_rooms,id',
             'day' => 'required|string|in:Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday',
             'start_time' => 'required|date_format:H:i',
             'end_time' => 'required|date_format:H:i|after:start_time',
         ]);
 
-        // Get the course to check teacher
-        $course = Course::with('teacher')->findOrFail($validated['course_id']);
-        $teacherId = $course->teacher_id;
-
-        // Check for classroom time conflicts (excluding current record)
-        $classroomConflict = TimeTable::where('academic_year_id', $validated['academic_year_id'])
-            ->where('class_room_id', $validated['class_room_id'])
-            ->where('day', $validated['day'])
-            ->where('id', '!=', $id)
-            ->where(function ($query) use ($validated) {
-                $query->where(function ($q) use ($validated) {
-                    $q->where('start_time', '<', $validated['end_time'])
-                      ->where('end_time', '>', $validated['start_time']);
-                });
-            })
-            ->exists();
-
-        if ($classroomConflict) {
-            return back()->withErrors([
-                'start_time' => 'Time slot conflicts with existing schedule for this classroom on the selected day.'
-            ]);
+        $teacher = Teacher::findOrFail($validated['teacher_id']);
+        if ($teacher->staff_type !== $validated['staff_type']) {
+            return back()->withErrors(['teacher_id' => 'Selected staff member does not match the selected staff type.']);
         }
 
-        // Check for teacher conflict if course has a teacher assigned (excluding current record)
-        if ($teacherId) {
-            $teacherConflict = TimeTable::where('academic_year_id', $validated['academic_year_id'])
-                ->whereHas('course', function ($q) use ($teacherId) {
-                    $q->where('teacher_id', $teacherId);
-                })
-                ->where('day', $validated['day'])
+        if ($validated['staff_type'] === Teacher::STAFF_TYPE_LECTURER) {
+            $course = Course::findOrFail($validated['course_id']);
+            if (empty($course->course_code) || empty($course->name)) {
+                return back()->withErrors(['course_id' => 'Lecturer timetables require a course code and course title.']);
+            }
+        } else {
+            $validated['course_id'] = null;
+        }
+
+        if ($validated['staff_type'] === Teacher::STAFF_TYPE_LECTURER) {
+            // Check for classroom time conflicts (excluding current record)
+            $classroomConflict = TimeTable::where('academic_year_id', $validated['academic_year_id'])
+                ->where('class_room_id', $validated['class_room_id'])
+                ->where('day_of_week', $validated['day'])
                 ->where('id', '!=', $id)
                 ->where(function ($query) use ($validated) {
                     $query->where(function ($q) use ($validated) {
@@ -535,14 +597,36 @@ class TimeTableController extends Controller
                 })
                 ->exists();
 
-            if ($teacherConflict) {
+            if ($classroomConflict) {
                 return back()->withErrors([
-                    'course_id' => 'Teacher already has a scheduled class during this time slot.'
+                    'start_time' => 'Time slot conflicts with existing schedule for this classroom on the selected day.'
+                ]);
+            }
+
+            if ($this->hasStaffOverlap($validated, (int) $id)) {
+                return back()->withErrors([
+                    'start_time' => 'Selected staff member already has a schedule during this time slot.'
+                ]);
+            }
+
+            if ($this->hasDuplicateEntry($validated, (int) $id)) {
+                return back()->withErrors([
+                    'start_time' => 'Duplicate timetable entry already exists for this staff member.'
                 ]);
             }
         }
 
-        $timeTable->update($validated);
+        $timeTable->update([
+            'academic_year_id' => $validated['academic_year_id'],
+            'teacher_id' => $validated['teacher_id'],
+            'staff_type' => $validated['staff_type'],
+            'course_id' => $validated['course_id'],
+            'class_room_id' => $validated['class_room_id'],
+            'day' => $validated['day'],
+            'day_of_week' => $validated['day'],
+            'start_time' => $validated['start_time'],
+            'end_time' => $validated['end_time'],
+        ]);
 
         return redirect()->route('admin.academics.time-tables.index')
             ->with('success', 'Time table entry updated successfully.');
@@ -558,6 +642,97 @@ class TimeTableController extends Controller
             ->with('success', 'Time table entry deleted successfully.');
     }
 
+    public function bulkAssign(Request $request)
+    {
+        $validated = $request->validate([
+            'academic_year_id' => 'required|exists:academic_years,id',
+            'staff_type' => ['required', Rule::in(Teacher::STAFF_TYPES)],
+            'teacher_ids' => 'required|array|min:1',
+            'teacher_ids.*' => 'required|exists:teachers,id',
+            'course_id' => 'required_if:staff_type,lecturer|nullable|exists:courses,id',
+            'class_room_id' => 'required|exists:class_rooms,id',
+            'day' => 'required|string|in:Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday',
+            'start_time' => 'required|date_format:H:i',
+            'end_time' => 'required|date_format:H:i|after:start_time',
+        ]);
+
+        $created = 0;
+        $skipped = [];
+
+        foreach ($validated['teacher_ids'] as $teacherId) {
+            $data = $validated;
+            $data['teacher_id'] = $teacherId;
+            unset($data['teacher_ids']);
+
+            $teacher = Teacher::find($teacherId);
+            if (!$teacher || $teacher->staff_type !== $validated['staff_type']) {
+                $skipped[] = ['teacher_id' => $teacherId, 'reason' => 'Staff type mismatch'];
+                continue;
+            }
+
+            if ($validated['staff_type'] === Teacher::STAFF_TYPE_ADMINISTRATOR) {
+                $data['course_id'] = null;
+            }
+
+            if ($validated['staff_type'] === Teacher::STAFF_TYPE_LECTURER && ($this->hasStaffOverlap($data) || $this->hasDuplicateEntry($data))) {
+                $skipped[] = ['teacher_id' => $teacherId, 'reason' => 'Duplicate or overlapping schedule'];
+                continue;
+            }
+
+            TimeTable::create([
+                'academic_year_id' => $data['academic_year_id'],
+                'teacher_id' => $data['teacher_id'],
+                'staff_type' => $data['staff_type'],
+                'course_id' => $data['course_id'],
+                'class_room_id' => $data['class_room_id'],
+                'day' => $data['day'],
+                'day_of_week' => $data['day'],
+                'start_time' => $data['start_time'],
+                'end_time' => $data['end_time'],
+            ]);
+            $created++;
+        }
+
+        return back()->with('success', "Bulk assignment complete. Created {$created} schedule(s), skipped " . count($skipped) . '.');
+    }
+
+    public function report(Request $request)
+    {
+        $query = TimeTable::with(['teacher', 'course.program', 'classRoom', 'academicYear'])
+            ->orderBy('day_of_week')
+            ->orderBy('start_time');
+
+        if ($request->filled('staff_type') && in_array($request->staff_type, Teacher::STAFF_TYPES, true)) {
+            $query->where('staff_type', $request->staff_type);
+        }
+
+        if ($request->filled('day')) {
+            $query->where('day_of_week', $request->day);
+        }
+
+        if ($request->filled('teacher_id')) {
+            $query->where('teacher_id', $request->teacher_id);
+        }
+
+        $records = $query->get()->map(function (TimeTable $timeTable) {
+            return [
+                'staff_name' => $timeTable->teacher ? trim("{$timeTable->teacher->title} {$timeTable->teacher->first_name} {$timeTable->teacher->last_name}") : 'Unassigned',
+                'staff_type' => $timeTable->staff_type,
+                'course_code' => $timeTable->course?->course_code,
+                'course_title' => $timeTable->course?->name,
+                'classroom' => $timeTable->classRoom?->name,
+                'day' => $timeTable->day_of_week,
+                'start_time' => $timeTable->start_time,
+                'end_time' => $timeTable->end_time,
+            ];
+        });
+
+        return response()->json([
+            'success' => true,
+            'data' => $records,
+        ]);
+    }
+
     /**
      * Check for time conflicts
      */
@@ -565,20 +740,34 @@ class TimeTableController extends Controller
     {
         $validated = $request->validate([
             'academic_year_id' => 'required|exists:academic_years,id',
-            'course_id' => 'required|exists:courses,id',
-            'class_room_id' => 'required|exists:class_rooms,id',
+            'staff_type' => ['nullable', Rule::in(Teacher::STAFF_TYPES)],
+            'teacher_id' => 'nullable|exists:teachers,id',
+            'course_id' => 'nullable|exists:courses,id',
+            'class_room_id' => 'nullable|exists:class_rooms,id',
             'day' => 'required|string|in:Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday',
             'start_time' => 'required|date_format:H:i',
             'end_time' => 'required|date_format:H:i|after:start_time',
             'exclude_id' => 'nullable|exists:time_tables,id',
         ]);
 
-        // Get the course to check teacher
-        $course = Course::with('teacher')->findOrFail($validated['course_id']);
-        $teacherId = $course->teacher_id;
+        $staffType = $validated['staff_type'] ?? Teacher::STAFF_TYPE_LECTURER;
+
+        if ($staffType === Teacher::STAFF_TYPE_ADMINISTRATOR) {
+            return response()->json([
+                'has_conflict' => false,
+                'conflict_type' => '',
+                'classroom_name' => '',
+                'staff_type' => $staffType,
+            ]);
+        }
+
+        $teacherId = $validated['teacher_id'] ?? null;
+        if (!$teacherId && !empty($validated['course_id'])) {
+            $teacherId = Course::find($validated['course_id'])?->teacher_id;
+        }
 
         $query = TimeTable::where('academic_year_id', $validated['academic_year_id'])
-            ->where('day', $validated['day'])
+            ->where('day_of_week', $validated['day'])
             ->where(function ($query) use ($validated) {
                 $query->where(function ($q) use ($validated) {
                     $q->where('start_time', '<', $validated['end_time'])
@@ -598,13 +787,13 @@ class TimeTableController extends Controller
         $classroomName = '';
 
         foreach ($conflicts as $conflict) {
-            if ($conflict->class_room_id == $validated['class_room_id']) {
+            if (!empty($validated['class_room_id']) && $conflict->class_room_id == $validated['class_room_id']) {
                 $hasClassroomConflict = true;
                 $classroomName = $conflict->classRoom->name ?? '';
             }
             
             // Check for teacher conflict
-            if ($teacherId && $conflict->course && $conflict->course->teacher_id == $teacherId) {
+            if ($teacherId && (int) $conflict->teacher_id === (int) $teacherId) {
                 $hasTeacherConflict = true;
             }
         }
@@ -621,7 +810,43 @@ class TimeTableController extends Controller
             'has_conflict' => $hasClassroomConflict || $hasTeacherConflict,
             'conflict_type' => $conflictType,
             'classroom_name' => $classroomName,
+            'staff_type' => $staffType,
         ]);
+    }
+
+    private function hasStaffOverlap(array $data, ?int $excludeId = null): bool
+    {
+        $query = TimeTable::where('academic_year_id', $data['academic_year_id'])
+            ->where('teacher_id', $data['teacher_id'])
+            ->where('day_of_week', $data['day'])
+            ->where(function ($query) use ($data) {
+                $query->where('start_time', '<', $data['end_time'])
+                    ->where('end_time', '>', $data['start_time']);
+            });
+
+        if ($excludeId) {
+            $query->where('id', '!=', $excludeId);
+        }
+
+        return $query->exists();
+    }
+
+    private function hasDuplicateEntry(array $data, ?int $excludeId = null): bool
+    {
+        $query = TimeTable::where('academic_year_id', $data['academic_year_id'])
+            ->where('teacher_id', $data['teacher_id'])
+            ->where('staff_type', $data['staff_type'])
+            ->where('course_id', $data['course_id'])
+            ->where('class_room_id', $data['class_room_id'])
+            ->where('day_of_week', $data['day'])
+            ->where('start_time', $data['start_time'])
+            ->where('end_time', $data['end_time']);
+
+        if ($excludeId) {
+            $query->where('id', '!=', $excludeId);
+        }
+
+        return $query->exists();
     }
 
     /**

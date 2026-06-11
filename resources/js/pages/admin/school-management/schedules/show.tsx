@@ -43,7 +43,7 @@ export default function AdminSchedulesShow() {
                             <h3 className="mt-4 font-semibold">Requested</h3>
                             <div>{schedule.new_date} • {schedule.new_start_time} - {schedule.new_end_time}</div>
 
-                            <h3 className="mt-4 font-semibold">Venue</h3>
+                            <h3 className="mt-4 font-semibold">Class Room</h3>
                             <div>{schedule.classroom ? schedule.classroom.name : '—'}</div>
                         </div>
 

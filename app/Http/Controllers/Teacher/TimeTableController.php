@@ -17,10 +17,9 @@ class TimeTableController extends Controller
         $teacherId = auth()->id();
 
         $query = TimeTable::with(['academicYear', 'course.program', 'course.teacher', 'classRoom'])
-            ->whereHas('course', function ($q) use ($teacherId) {
-                $q->where('teacher_id', $teacherId);
-            })
-            ->orderBy('day')
+            ->where('teacher_id', $teacherId)
+            ->where('staff_type', \App\Models\Teacher::STAFF_TYPE_LECTURER)
+            ->orderBy('day_of_week')
             ->orderBy('start_time');
 
         $timeTables = $query->get();
@@ -34,7 +33,7 @@ class TimeTableController extends Controller
             'timeTables' => $timeTables->map(function ($t) {
                 return [
                     'id' => $t->id,
-                    'day' => $t->day,
+                    'day' => $t->day_of_week ?? $t->day,
                     'start_time' => $t->start_time,
                     'end_time' => $t->end_time,
                     'course' => $t->course ? ['id' => $t->course->id, 'name' => $t->course->name, 'course_code' => $t->course->course_code] : null,
@@ -97,10 +96,9 @@ class TimeTableController extends Controller
         $format = $request->get('format', 'csv');
 
         $timeTables = TimeTable::with(['academicYear', 'course.program', 'course.teacher', 'classRoom'])
-            ->whereHas('course', function ($q) use ($teacherId) {
-                $q->where('teacher_id', $teacherId);
-            })
-            ->orderBy('day')
+            ->where('teacher_id', $teacherId)
+            ->where('staff_type', \App\Models\Teacher::STAFF_TYPE_LECTURER)
+            ->orderBy('day_of_week')
             ->orderBy('start_time')
             ->get();
 
@@ -139,7 +137,7 @@ class TimeTableController extends Controller
             fputcsv($out, ['Day', 'Start Time', 'End Time', 'Course Code', 'Course Name', 'Program', 'Classroom', 'Academic Year']);
             foreach ($timeTables as $t) {
                 fputcsv($out, [
-                    $t->day,
+                    $t->day_of_week ?? $t->day,
                     $t->start_time,
                     $t->end_time,
                     $t->course->course_code ?? '',

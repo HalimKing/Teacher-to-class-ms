@@ -65,20 +65,24 @@ interface Teacher {
   last_name: string;
   employee_id: string;
   title: string;
+  staff_type?: string;
 }
 
 interface TimeTable {
   id: number;
   academic_year_id: number;
   course_id: number;
-  class_room_id: number;
+  class_room_id: number | null;
   teacher_id: number | null;
+  staff_type: string;
+  day_of_week?: string;
   day: string;
   start_time: string;
   end_time: string;
   academic_year: AcademicYear;
-  course: Course;
-  class_room: ClassRoom;
+  course?: Course | null;
+  class_room?: ClassRoom | null;
+  teacher?: Teacher | null;
 }
 
 interface TimeTablesIndexPageProps {
@@ -93,6 +97,8 @@ interface TimeTablesIndexPageProps {
   programOptions: Array<{ label: string; value: number }>;
   courseOptions: Array<{ label: string; value: number }>;
   classRoomOptions: Array<{ label: string; value: number }>;
+  teacherOptions: Array<{ label: string; value: number; staff_type?: string }>;
+  staffTypeOptions: Array<{ label: string; value: string }>;
   dayOptions: Array<{ label: string; value: string }>;
   filters: {
     academic_year_id?: number;
@@ -100,6 +106,7 @@ interface TimeTablesIndexPageProps {
     course_id?: number;
     class_room_id?: number;
     teacher_id?: number;
+    staff_type?: string;
     day?: string;
   };
 }
@@ -110,6 +117,8 @@ const TimeTablesIndexPage = ({
   programOptions,
   courseOptions,
   classRoomOptions,
+  teacherOptions,
+  staffTypeOptions,
   dayOptions,
   filters: initialFilters
 }: TimeTablesIndexPageProps) => {
@@ -121,6 +130,7 @@ const TimeTablesIndexPage = ({
     course_id: initialFilters.course_id || '',
     class_room_id: initialFilters.class_room_id || '',
     teacher_id: initialFilters.teacher_id || '',
+    staff_type: initialFilters.staff_type || '',
     day: initialFilters.day || ''
   });
   const [showFilters, setShowFilters] = useState(false);
@@ -181,6 +191,7 @@ const TimeTablesIndexPage = ({
       course_id: '',
       class_room_id: '',
       teacher_id: '',
+      staff_type: '',
       day: ''
     });
     setShowFilters(false);
@@ -301,10 +312,11 @@ const TimeTablesIndexPage = ({
 
   // Group by day for better organization
   const groupedByDay = timeTables.data.reduce((acc, timetable) => {
-    if (!acc[timetable.day]) {
-      acc[timetable.day] = [];
+    const day = timetable.day_of_week || timetable.day;
+    if (!acc[day]) {
+      acc[day] = [];
     }
-    acc[timetable.day].push(timetable);
+    acc[day].push(timetable);
     return acc;
   }, {} as Record<string, TimeTable[]>);
 
@@ -515,6 +527,30 @@ const TimeTablesIndexPage = ({
                       </select> */}
                   </div>
 
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Staff Type
+                    </label>
+                    <ComboBox
+                      options={staffTypeOptions}
+                      label="All Staff Types"
+                      externalValue={handleValueChange('staff_type')}
+                      defaultValue={null}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Staff Member
+                    </label>
+                    <ComboBox
+                      options={teacherOptions}
+                      label="All Staff"
+                      externalValue={handleValueChange('teacher_id')}
+                      defaultValue={null}
+                    />
+                  </div>
+
                   {/* Day Filter */}
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -606,10 +642,11 @@ const TimeTablesIndexPage = ({
                       <thead className="bg-slate-50 border-b border-slate-200">
                         <tr>
                           <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Time</th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Staff Type</th>
                           <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Course</th>
                           <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Program</th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Classroom</th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Teacher</th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Class Room</th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Staff</th>
                           <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Academic Year</th>
                           <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Duration</th>
                           <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Actions</th>
@@ -629,20 +666,29 @@ const TimeTablesIndexPage = ({
                               </div>
                             </td>
                             <td className="px-6 py-4">
+                              <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                                timetable.staff_type === 'administrator'
+                                  ? 'bg-purple-100 text-purple-700'
+                                  : 'bg-blue-100 text-blue-700'
+                              }`}>
+                                {timetable.staff_type === 'administrator' ? 'Administrator' : 'Lecturer'}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
                               <div className="flex items-center space-x-2">
                                 <BookOpen className="w-4 h-4 text-slate-400" />
                                 <div>
                                   <div className="text-sm font-medium text-slate-900">
-                                    {timetable.course.name}
+                                    {timetable.course?.name || 'Office Schedule'}
                                   </div>
                                   <div className="text-xs text-slate-500">
-                                    {timetable.course.course_code}
+                                    {timetable.course?.course_code || 'No course'}
                                   </div>
                                 </div>
                               </div>
                             </td>
                             <td className="px-6 py-4">
-                              {timetable.course.program ? (
+                              {timetable.course?.program ? (
                                 <div className="flex items-center space-x-2">
                                   <GraduationCap className="w-4 h-4 text-slate-400" />
                                   <div>
@@ -665,24 +711,26 @@ const TimeTablesIndexPage = ({
                                 <Building className="w-4 h-4 text-slate-400" />
                                 <div>
                                   <div className="text-sm font-medium text-slate-900">
-                                    {timetable.class_room.name}
+                                    {timetable.class_room?.name || 'N/A'}
                                   </div>
-                                  <div className="text-xs text-slate-500">
-                                    Capacity: {timetable.class_room.capacity}
-                                  </div>
+                                  {timetable.class_room && (
+                                    <div className="text-xs text-slate-500">
+                                      Capacity: {timetable.class_room.capacity}
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             </td>
                             <td className="px-6 py-4">
-                              {timetable.course.teacher ? (
+                              {timetable.teacher ? (
                                 <div className="flex items-center space-x-2">
                                   <User className="w-4 h-4 text-slate-400" />
                                   <div>
                                     <div className="text-sm font-medium text-slate-900">
-                                      {timetable.course.teacher.title} {timetable.course.teacher.first_name} {timetable.course.teacher.last_name}
+                                      {timetable.teacher.title} {timetable.teacher.first_name} {timetable.teacher.last_name}
                                     </div>
                                     <div className="text-xs text-slate-500">
-                                      {timetable.course.teacher.employee_id}
+                                      {timetable.teacher.employee_id}
                                     </div>
                                   </div>
                                 </div>
@@ -732,8 +780,8 @@ const TimeTablesIndexPage = ({
                                     e.preventDefault();
                                     handleDelete(
                                       timetable.id,
-                                      timetable.course.name,
-                                      timetable.day,
+                                      timetable.course?.name || 'Office Schedule',
+                                      timetable.day_of_week || timetable.day,
                                       `${formatTime(timetable.start_time)} - ${formatTime(timetable.end_time)}`
                                     );
                                   }}

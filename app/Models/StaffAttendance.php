@@ -1,0 +1,53 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+
+class StaffAttendance extends Model
+{
+    protected $fillable = [
+        'staff_id',
+        'timetable_id',
+        'classroom_id',
+        'academic_year_id',
+        'date',
+        'check_in_time',
+        'check_out_time',
+        'latitude',
+        'longitude',
+        'check_out_latitude',
+        'check_out_longitude',
+        'check_in_distance',
+        'check_out_distance',
+        'check_in_within_range',
+        'check_out_within_range',
+        'attendance_status',
+    ];
+
+    protected $casts = [
+        'date' => 'date',
+        'check_in_within_range' => 'boolean',
+        'check_out_within_range' => 'boolean',
+    ];
+
+    public function staff()
+    {
+        return $this->belongsTo(Teacher::class, 'staff_id');
+    }
+
+    public function timetable()
+    {
+        return $this->belongsTo(TimeTable::class);
+    }
+
+    public function classroom()
+    {
+        return $this->belongsTo(ClassRoom::class, 'classroom_id');
+    }
+
+    public function academicYear()
+    {
+        return $this->belongsTo(AcademicYear::class);
+    }
+}

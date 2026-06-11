@@ -51,15 +51,16 @@ class SessionReminderController extends Controller
         });
 
         $timetableOptions = TimeTable::with(['course', 'classRoom'])
-            ->whereHas('course', fn ($q) => $q->where('teacher_id', $teacherId))
-            ->orderBy('day')
+            ->where('teacher_id', $teacherId)
+            ->where('staff_type', \App\Models\Teacher::STAFF_TYPE_LECTURER)
+            ->orderBy('day_of_week')
             ->orderBy('start_time')
             ->get()
             ->map(function ($t) {
                 return [
                     'id' => $t->id,
                     'label' => $t->day . ' ' . substr($t->start_time, 0, 5) . ' - ' . ($t->course ? $t->course->name : '') . ($t->classRoom ? ' (' . $t->classRoom->name . ')' : ''),
-                    'day' => $t->day,
+                    'day' => $t->day_of_week ?? $t->day,
                     'start_time' => $t->start_time,
                     'end_time' => $t->end_time,
                     'course_name' => $t->course ? $t->course->name : null,
@@ -88,7 +89,8 @@ class SessionReminderController extends Controller
 
         if (!empty($validated['timetable_id'])) {
             $belongsToTeacher = TimeTable::where('id', $validated['timetable_id'])
-                ->whereHas('course', fn ($q) => $q->where('teacher_id', $teacherId))
+                ->where('teacher_id', $teacherId)
+                ->where('staff_type', \App\Models\Teacher::STAFF_TYPE_LECTURER)
                 ->exists();
             if (!$belongsToTeacher) {
                 return back()->withErrors(['timetable_id' => 'Invalid session.']);
@@ -124,7 +126,8 @@ class SessionReminderController extends Controller
         $teacherId = auth('teacher')->id();
         if (!empty($validated['timetable_id'])) {
             $belongsToTeacher = TimeTable::where('id', $validated['timetable_id'])
-                ->whereHas('course', fn ($q) => $q->where('teacher_id', $teacherId))
+                ->where('teacher_id', $teacherId)
+                ->where('staff_type', \App\Models\Teacher::STAFF_TYPE_LECTURER)
                 ->exists();
             if (!$belongsToTeacher) {
                 return back()->withErrors(['timetable_id' => 'Invalid session.']);

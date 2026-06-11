@@ -37,6 +37,8 @@ Route::get('/', function () {
 
 
 Route::get('api/faculties/{faculty}/departments', [DepartmentController::class, 'getByFaculty']);
+Route::post('api/time-tables/check-conflict', [TimeTableController::class, 'checkConflict'])
+    ->middleware(['auth:web', 'permission:admin.academics.time-tables.view']);
 
 // teachers middleware group
 Route::middleware('auth:teacher')->group(function () {
@@ -82,6 +84,14 @@ Route::middleware('auth:teacher')->group(function () {
     Route::get('/teacher/staff-attendance', [StaffAttendanceController::class, 'index'])
         ->middleware('teacher.staff_type:administrator')
         ->name('teacher.staff-attendance');
+    Route::prefix('teacher/staff-attendance')
+        ->middleware('teacher.staff_type:administrator')
+        ->group(function () {
+            Route::get('/todays-schedules', [StaffAttendanceController::class, 'todaysSchedules']);
+            Route::post('/check-in', [StaffAttendanceController::class, 'checkIn']);
+            Route::post('/check-out', [StaffAttendanceController::class, 'checkOut']);
+            Route::get('/history', [StaffAttendanceController::class, 'history']);
+        });
 
     Route::get('/teacher/records', [AttendanceRecordController::class, 'index'])
         ->middleware('teacher.staff_type:lecturer')
@@ -393,6 +403,12 @@ Route::middleware(['auth:web', 'verified'])->group(function () {
                     Route::post('/time-tables/generate', [TimeTableController::class, 'generate'])
                         ->name('time-tables.generate')
                         ->middleware('permission:admin.academics.time-tables.create');
+                    Route::post('/time-tables/bulk-assign', [TimeTableController::class, 'bulkAssign'])
+                        ->name('time-tables.bulk-assign')
+                        ->middleware('permission:admin.academics.time-tables.create');
+                    Route::get('/time-tables/reports', [TimeTableController::class, 'report'])
+                        ->name('time-tables.reports')
+                        ->middleware('permission:admin.academics.time-tables.view');
                     Route::get('time-tables/export/{format}', [TimeTableController::class, 'export'])
                         ->name('time-tables.export')
                         ->where('format', 'excel|csv')

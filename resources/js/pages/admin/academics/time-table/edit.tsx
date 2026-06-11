@@ -33,19 +33,24 @@ interface Teacher {
   last_name: string;
   employee_id: string;
   full_name?: string;
+  staff_type?: string;
 }
 
 interface TimeTable {
   id: number;
   academic_year_id: number;
-  course_id: number;
-  class_room_id: number;
+  teacher_id: number | null;
+  staff_type: string;
+  course_id: number | null;
+  class_room_id: number | null;
+  day_of_week?: string;
   day: string;
   start_time: string;
   end_time: string;
   academic_year: AcademicYear;
-  course: Course;
-  class_room: ClassRoom;
+  course?: Course | null;
+  class_room?: ClassRoom | null;
+  teacher?: Teacher | null;
 }
 
 interface EditTimeTablePageProps {
@@ -53,6 +58,8 @@ interface EditTimeTablePageProps {
   academicYear: AcademicYear;
   courses: Option[];
   classRooms: Option[];
+  teachers: Array<Option & { staff_type?: string }>;
+  staffTypeOptions: Option[];
   days: string[];
   currentCourse: Option | null;
   currentClassRoom: Option | null;
@@ -80,6 +87,8 @@ const EditTimeTablePage = ({
   academicYear,
   courses,
   classRooms,
+  teachers,
+  staffTypeOptions,
   days,
   currentCourse,
   currentClassRoom
@@ -91,9 +100,11 @@ const EditTimeTablePage = ({
 
   const { data, setData, put, processing, errors } = useForm({
     academic_year_id: timeTable.academic_year_id,
-    course_id: timeTable.course_id.toString(),
-    class_room_id: timeTable.class_room_id.toString(),
-    day: timeTable.day,
+    staff_type: timeTable.staff_type || 'lecturer',
+    teacher_id: (timeTable.teacher_id || timeTable.course?.teacher?.id || '').toString(),
+    course_id: timeTable.course_id?.toString() || '',
+    class_room_id: timeTable.class_room_id?.toString() || '',
+    day: timeTable.day_of_week || timeTable.day,
     start_time: timeTable.start_time.split(':').join(':').substring(0,5),
     end_time: timeTable.end_time.split(':').join(':').substring(0,5),
   });
@@ -115,8 +126,15 @@ const EditTimeTablePage = ({
   // Check for time conflicts whenever relevant fields change
   useEffect(() => {
     const checkConflict = async () => {
+      if (data.staff_type === 'administrator') {
+        setHasConflict(false);
+        setConflictMessage('');
+        setCheckingConflict(false);
+        return;
+      }
+
       // Check both classroom and teacher conflicts
-      if (data.academic_year_id && data.class_room_id && data.day && data.start_time && data.end_time && data.course_id) {
+      if (data.academic_year_id && data.teacher_id && data.day && data.start_time && data.end_time) {
         setCheckingConflict(true);
         try {
           const response = await fetch('/api/time-tables/check-conflict', {
@@ -124,9 +142,12 @@ const EditTimeTablePage = ({
             headers: {
               'Content-Type': 'application/json',
               'Accept': 'application/json',
+              'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
             },
             body: JSON.stringify({
               academic_year_id: data.academic_year_id,
+              staff_type: data.staff_type,
+              teacher_id: data.teacher_id,
               course_id: data.course_id,
               class_room_id: data.class_room_id,
               day: data.day,
@@ -172,6 +193,8 @@ const EditTimeTablePage = ({
   }, [
     timeTable.id,
     data.academic_year_id, 
+    data.staff_type,
+    data.teacher_id,
     data.course_id,
     data.class_room_id, 
     data.day, 
@@ -191,7 +214,7 @@ const EditTimeTablePage = ({
     }
     
     // Validate course selection
-    if (!data.course_id) {
+    if (data.staff_type === 'lecturer' && !data.course_id) {
       toast.error('Please select a course.', {
         position: "top-right",
         theme: "dark",
@@ -227,10 +250,19 @@ const EditTimeTablePage = ({
     });
   };
 
-  // Get teacher from selected course
+  // Get selected staff member
   const getSelectedTeacher = () => {
-    if (!selectedCourse || !selectedCourse.teacher) return null;
-    return selectedCourse.teacher;
+    const selected = teachers.find((teacher) => Number(teacher.value) === Number(data.teacher_id));
+    if (!selected) return null;
+
+    return {
+      id: Number(selected.value),
+      first_name: selected.label,
+      last_name: '',
+      employee_id: '',
+      full_name: selected.label,
+      staff_type: selected.staff_type,
+    };
   };
 
   const selectedTeacher = getSelectedTeacher();
@@ -280,16 +312,16 @@ const EditTimeTablePage = ({
                   <BookOpen className="w-5 h-5 text-purple-600" />
                   <div>
                     <p className="text-xs text-slate-500">Course</p>
-                    <p className="font-semibold text-slate-900">{timeTable.course.name}</p>
-                    <p className="text-xs text-slate-500">{timeTable.course.course_code}</p>
+                    <p className="font-semibold text-slate-900">{timeTable.course?.name || 'Office Schedule'}</p>
+                    <p className="text-xs text-slate-500">{timeTable.course?.course_code || 'No course'}</p>
                   </div>
                 </div>
                 <div className="flex items-center space-x-3 p-3 bg-slate-50 rounded-xl">
                   <Building className="w-5 h-5 text-amber-600" />
                   <div>
                     <p className="text-xs text-slate-500">Classroom</p>
-                    <p className="font-semibold text-slate-900">{timeTable.class_room.name}</p>
-                    <p className="text-xs text-slate-500">Capacity: {timeTable.class_room.capacity}</p>
+                    <p className="font-semibold text-slate-900">{timeTable.class_room?.name || 'N/A'}</p>
+                    {timeTable.class_room && <p className="text-xs text-slate-500">Capacity: {timeTable.class_room.capacity}</p>}
                   </div>
                 </div>
                 <div className="flex items-center space-x-3 p-3 bg-slate-50 rounded-xl">
@@ -297,13 +329,13 @@ const EditTimeTablePage = ({
                   <div>
                     <p className="text-xs text-slate-500">Teacher</p>
                     <p className="font-semibold text-slate-900">
-                      {timeTable.course.teacher 
-                        ? `${timeTable.course.teacher.first_name} ${timeTable.course.teacher.last_name}`
+                      {timeTable.teacher 
+                        ? `${timeTable.teacher.first_name} ${timeTable.teacher.last_name}`
                         : 'Not assigned'
                       }
                     </p>
-                    {timeTable.course.teacher && (
-                      <p className="text-xs text-slate-500">{timeTable.course.teacher.employee_id}</p>
+                    {timeTable.teacher && (
+                      <p className="text-xs text-slate-500">{timeTable.teacher.employee_id}</p>
                     )}
                   </div>
                 </div>
@@ -339,7 +371,47 @@ const EditTimeTablePage = ({
                 </span>
               </div>
 
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Staff Type *</label>
+                  <ComboBox
+                    options={staffTypeOptions}
+                    label="Select Staff Type"
+                    externalValue={(value) => {
+                      setData('staff_type', value as string);
+                      setData('teacher_id', '');
+                      if (value === 'administrator') {
+                        setData('course_id', '');
+                      }
+                    }}
+                    defaultValue={staffTypeOptions.find(option => option.value === data.staff_type) || staffTypeOptions[0]}
+                  />
+                  {errors.staff_type && (
+                    <p className="mt-2 text-sm text-red-500 flex items-center">
+                      <AlertCircle className="w-4 h-4 mr-1" />
+                      {errors.staff_type}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Assigned Staff *</label>
+                  <ComboBox
+                    options={teachers.filter((teacher) => !teacher.staff_type || teacher.staff_type === data.staff_type)}
+                    label="Assign Staff"
+                    externalValue={handleValueChange('teacher_id')}
+                    defaultValue={teachers.find(option => Number(option.value) === Number(data.teacher_id)) || null}
+                  />
+                  {errors.teacher_id && (
+                    <p className="mt-2 text-sm text-red-500 flex items-center">
+                      <AlertCircle className="w-4 h-4 mr-1" />
+                      {errors.teacher_id}
+                    </p>
+                  )}
+                </div>
+              </div>
+
               {/* Course */}
+              {data.staff_type === 'lecturer' && (
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Course *
@@ -397,16 +469,17 @@ const EditTimeTablePage = ({
                   )}
                 </div>
               </div>
+              )}
 
-              {/* Classroom */}
+              {/* Class Room */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Classroom *
+                  Class Room *
                 </label>
                 <div>
                   <ComboBox
                     options={classRooms}
-                    label="Select Classroom"
+                    label="Select Class Room"
                     externalValue={handleValueChange('class_room_id')}
                     defaultValue={currentClassRoom}
                   />

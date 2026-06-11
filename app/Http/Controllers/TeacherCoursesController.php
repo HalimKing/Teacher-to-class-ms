@@ -15,9 +15,10 @@ class TeacherCoursesController extends Controller
     {
         // Select all courses that the teacher is teaching in the current academic period
         $courses = Course::with('program', 'level', 'academicYear', 'academicPeriod')
-        ->where('teacher_id', auth()->id())
             ->whereHas('timeTables', function ($query) {
-                $query->where('academic_year_id', AcademicYear::current()->id);
+                $query->where('academic_year_id', AcademicYear::current()->id)
+                    ->where('teacher_id', auth('teacher')->id())
+                    ->where('staff_type', \App\Models\Teacher::STAFF_TYPE_LECTURER);
             })
             ->get();
 

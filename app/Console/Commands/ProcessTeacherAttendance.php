@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\TeacherAttendance;
+use App\Models\Teacher;
 use App\Models\TimeTable;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
@@ -34,7 +35,8 @@ class ProcessTeacherAttendance extends Command
 
         // Get today's lectures
         $todayLectures = TimeTable::with('course')
-            ->where('day', now()->format('l'))
+            ->where('staff_type', Teacher::STAFF_TYPE_LECTURER)
+            ->where('day_of_week', now()->format('l'))
             ->whereTime('end_time', '<', $now->format('H:i:s'))
             ->get();
 
@@ -53,7 +55,7 @@ class ProcessTeacherAttendance extends Command
                 if (!$attendance) {
 
                     TeacherAttendance::create([
-                        'teacher_id' => $lecture->course->teacher_id,
+                        'teacher_id' => $lecture->teacher_id,
                         'timetable_id' => $lecture->id,
                         'classroom_id' => $lecture->class_room_id,
                         'academic_year_id' => $lecture->academic_year_id,

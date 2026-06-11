@@ -26,8 +26,9 @@ class DashboardController extends Controller
 
         if ($isLecturer) {
             $todayLectures = TimeTable::with('course.teacher', 'classroom', 'course.program', 'course.level')
-                ->where('day', now()->format('l'))
-                ->whereHas('course', fn($q) => $q->where('teacher_id', auth()->id()))
+                ->where('day_of_week', now()->format('l'))
+                ->where('teacher_id', auth('teacher')->id())
+                ->where('staff_type', \App\Models\Teacher::STAFF_TYPE_LECTURER)
                 ->orderBy('start_time')
                 ->get();
 
@@ -215,7 +216,8 @@ class DashboardController extends Controller
     private function calculateAttendanceRateForPeriod($teacherId, $startDate, $endDate)
     {
         // Get all unique timetable IDs for this teacher
-        $timetableIds = TimeTable::whereHas('course', fn($q) => $q->where('teacher_id', $teacherId))
+        $timetableIds = TimeTable::where('teacher_id', $teacherId)
+            ->where('staff_type', \App\Models\Teacher::STAFF_TYPE_LECTURER)
             ->pluck('id')
             ->toArray();
 
@@ -263,15 +265,15 @@ class DashboardController extends Controller
         $today = Carbon::now();
 
         // Total Classes Assigned
-        $totalClasses = Course::where('teacher_id', $teacherId)
-        ->whereHas('timeTables', function ($query) {
-                $query->where('academic_year_id', AcademicYear::current()->id);
-            })
+        $totalClasses = TimeTable::where('teacher_id', $teacherId)
+            ->where('staff_type', \App\Models\Teacher::STAFF_TYPE_LECTURER)
+            ->where('academic_year_id', AcademicYear::current()->id)
             ->count();
 
         // Today's lectures
-        $todayLectures = TimeTable::where('day', $today->format('l'))
-            ->whereHas('course', fn($q) => $q->where('teacher_id', $teacherId))
+        $todayLectures = TimeTable::where('day_of_week', $today->format('l'))
+            ->where('teacher_id', $teacherId)
+            ->where('staff_type', \App\Models\Teacher::STAFF_TYPE_LECTURER)
             ->get();
 
         // Attendance taken today
@@ -324,8 +326,9 @@ class DashboardController extends Controller
 
         // Get next class from today's lectures
         $todayLectures = TimeTable::with('course')
-            ->where('day', now()->format('l'))
-            ->whereHas('course', fn($q) => $q->where('teacher_id', auth()->id()))
+            ->where('day_of_week', now()->format('l'))
+            ->where('teacher_id', auth('teacher')->id())
+            ->where('staff_type', \App\Models\Teacher::STAFF_TYPE_LECTURER)
             ->orderBy('start_time')
             ->get();
 

@@ -53,7 +53,24 @@ class Teacher extends Authenticatable
 
     public function timeTables()
     {
-        return $this->hasManyThrough(TimeTable::class , Course::class);
+        return $this->hasMany(TimeTable::class);
+    }
+
+    public function teachingTimeTables()
+    {
+        return $this->hasMany(TimeTable::class)
+            ->where('staff_type', self::STAFF_TYPE_LECTURER);
+    }
+
+    public function workTimeTables()
+    {
+        return $this->hasMany(TimeTable::class)
+            ->where('staff_type', self::STAFF_TYPE_ADMINISTRATOR);
+    }
+
+    public function staffAttendances()
+    {
+        return $this->hasMany(StaffAttendance::class, 'staff_id');
     }
 
     public function courses()

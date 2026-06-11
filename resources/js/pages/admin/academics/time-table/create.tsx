@@ -1,7 +1,8 @@
 // resources/js/pages/Admin/SchoolManagement/TimeTables/Create.tsx
 import ComboBox from '@/components/combobox';
 import AppLayout from '@/layouts/app-layout';
-import { Head, Link, useForm } from '@inertiajs/react';
+import { PagePropsWithFlash } from '@/types';
+import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import TextField from '@mui/material/TextField';
 import { AlertCircle, ArrowLeft, Save } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
@@ -37,13 +38,27 @@ interface CreateTimeTablePageProps {
     academicYear: AcademicYear;
     courses: Option[];
     classRooms: Option[];
-    teachers: Option[]; // Add teachers prop
+    teachers: Array<Option & { staff_type?: string }>;
+    staffTypeOptions: Option[];
     days: string[];
 }
 
 interface Option {
     label: string;
     value: string;
+}
+
+interface CreateTimeTableForm {
+    academic_year_id: number;
+    staff_type: string;
+    teacher_id: string;
+    course_id: string;
+    class_room_id: string;
+    day: string;
+    days: string[];
+    start_time: string;
+    end_time: string;
+    create_another: boolean;
 }
 
 const daysOptions: Option[] = [
@@ -56,16 +71,20 @@ const daysOptions: Option[] = [
     { label: 'Sunday', value: 'Sunday' },
 ];
 
-const CreateTimeTablePage = ({ academicYear, courses, classRooms, days }: CreateTimeTablePageProps) => {
+const CreateTimeTablePage = ({ academicYear, courses, classRooms, teachers, staffTypeOptions, days }: CreateTimeTablePageProps) => {
     const [checkingConflict, setCheckingConflict] = useState(false);
     const [hasConflict, setHasConflict] = useState(false);
     const [conflictMessage, setConflictMessage] = useState('');
+    const { flash } = usePage().props as PagePropsWithFlash;
 
-    const { data, setData, post, processing, errors } = useForm({
+    const { data, setData, post, processing, errors, transform } = useForm<CreateTimeTableForm>({
         academic_year_id: academicYear.id,
+        staff_type: 'lecturer',
+        teacher_id: '',
         course_id: '',
         class_room_id: '',
         day: '',
+        days: [],
         start_time: '',
         end_time: '',
         create_another: false,
@@ -75,42 +94,79 @@ const CreateTimeTablePage = ({ academicYear, courses, classRooms, days }: Create
         setData(name, value as string);
     };
 
+    const showFormErrorToast = (formErrors: Record<string, string>) => {
+        const firstError = Object.values(formErrors)[0];
+        toast.error(firstError || 'Failed to save time slot. Please check the form.', {
+            position: 'top-right',
+            theme: 'dark',
+        });
+    };
+
+    const selectedDays = data.staff_type === 'administrator' ? data.days : data.day ? [data.day] : [];
+
+    const handleAdministratorDayToggle = (day: string) => {
+        setData(
+            'days',
+            data.days.includes(day)
+                ? data.days.filter((selectedDay) => selectedDay !== day)
+                : [...data.days, day],
+        );
+    };
+
     // Check for time conflicts whenever relevant fields change
     useEffect(() => {
         const checkConflict = async () => {
+            if (data.staff_type === 'administrator') {
+                setHasConflict(false);
+                setConflictMessage('');
+                setCheckingConflict(false);
+                return;
+            }
+
             // Check both classroom and teacher conflicts
-            if (data.academic_year_id && data.class_room_id && data.day && data.start_time && data.end_time) {
+            if (data.academic_year_id && data.teacher_id && selectedDays.length > 0 && data.start_time && data.end_time) {
                 setCheckingConflict(true);
                 try {
-                    const response = await fetch('/api/time-tables/check-conflict', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            Accept: 'application/json',
-                        },
-                        body: JSON.stringify({
-                            academic_year_id: data.academic_year_id,
-                            class_room_id: data.class_room_id,
-                            day: data.day,
-                            start_time: data.start_time,
-                            end_time: data.end_time,
+                    const results = await Promise.all(
+                        selectedDays.map(async (day) => {
+                            const response = await fetch('/api/time-tables/check-conflict', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    Accept: 'application/json',
+                                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
+                                },
+                                body: JSON.stringify({
+                                    academic_year_id: data.academic_year_id,
+                                    staff_type: data.staff_type,
+                                    teacher_id: data.teacher_id,
+                                    course_id: data.course_id,
+                                    class_room_id: data.class_room_id,
+                                    day,
+                                    start_time: data.start_time,
+                                    end_time: data.end_time,
+                                }),
+                            });
+
+                            return { day, result: await response.json() };
                         }),
-                    });
+                    );
 
-                    const result = await response.json();
-                    setHasConflict(result.has_conflict);
+                    const conflict = results.find(({ result }) => result.has_conflict);
+                    setHasConflict(!!conflict);
 
-                    if (result.has_conflict) {
+                    if (conflict) {
+                        const { day, result } = conflict;
                         if (result.conflict_type === 'classroom') {
                             setConflictMessage(
-                                `This time slot conflicts with an existing schedule for ${result.classroom_name || 'the selected classroom'} on ${data.day}.`,
+                                `This time slot conflicts with an existing schedule for ${result.classroom_name || 'the selected classroom'} on ${day}.`,
                             );
                         } else if (result.conflict_type === 'both') {
                             setConflictMessage(
-                                `This time slot conflicts with both the teacher's schedule and the classroom availability on ${data.day}.`,
+                                `This time slot conflicts with both the teacher's schedule and the classroom availability on ${day}.`,
                             );
                         } else {
-                            setConflictMessage('This time slot conflicts with an existing schedule.');
+                            setConflictMessage(`This time slot conflicts with an existing schedule on ${day}.`);
                         }
                     } else {
                         setConflictMessage('');
@@ -126,7 +182,23 @@ const CreateTimeTablePage = ({ academicYear, courses, classRooms, days }: Create
         // Debounce the conflict check
         const timeoutId = setTimeout(checkConflict, 500);
         return () => clearTimeout(timeoutId);
-    }, [data.academic_year_id, data.class_room_id, data.day, data.start_time, data.end_time]);
+    }, [data.academic_year_id, data.staff_type, data.teacher_id, data.course_id, data.class_room_id, data.day, data.days, data.start_time, data.end_time]);
+
+    useEffect(() => {
+        if (flash?.success) {
+            toast.success(flash.success, {
+                position: 'top-right',
+                theme: 'dark',
+            });
+        }
+
+        if (flash?.error) {
+            toast.error(flash.error, {
+                position: 'top-right',
+                theme: 'dark',
+            });
+        }
+    }, [flash?.success, flash?.error]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -139,9 +211,14 @@ const CreateTimeTablePage = ({ academicYear, courses, classRooms, days }: Create
             return;
         }
 
-        // Make sure create_another is false for regular save
-        setData('create_another', false);
-        post(route('admin.academics.time-tables.store'));
+        transform((formData) => ({
+            ...formData,
+            create_another: false,
+        }));
+
+        post(route('admin.academics.time-tables.store'), {
+            onError: showFormErrorToast,
+        });
     };
 
     const handleSaveAndAddAnother = (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -155,8 +232,10 @@ const CreateTimeTablePage = ({ academicYear, courses, classRooms, days }: Create
             return;
         }
 
-        // Submit with create_another = true and handle success/error callbacks
-        setData('create_another', true);
+        transform((formData) => ({
+            ...formData,
+            create_another: true,
+        }));
 
         post(route('admin.academics.time-tables.store'), {
             onSuccess: () => {
@@ -164,9 +243,12 @@ const CreateTimeTablePage = ({ academicYear, courses, classRooms, days }: Create
                 // Reset form fields while keeping academic year
                 setData({
                     academic_year_id: academicYear.id,
+                    staff_type: data.staff_type,
+                    teacher_id: '',
                     course_id: '',
                     class_room_id: '',
                     day: '',
+                    days: [],
                     start_time: '',
                     end_time: '',
                     create_another: false, // Reset for next use
@@ -179,12 +261,7 @@ const CreateTimeTablePage = ({ academicYear, courses, classRooms, days }: Create
                     theme: 'dark',
                 });
             },
-            onError: (errors) => {
-                toast.error('Failed to save time slot. Please check the form.', {
-                    position: 'top-right',
-                    theme: 'dark',
-                });
-            },
+            onError: showFormErrorToast,
         });
     };
 
@@ -235,9 +312,52 @@ const CreateTimeTablePage = ({ academicYear, courses, classRooms, days }: Create
                             </div>
 
                             {/* Course */}
-                            <div>
-                                <label className="mb-2 block text-sm font-medium text-slate-700">Course *</label>
+                            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                                 <div>
+                                    <label className="mb-2 block text-sm font-medium text-slate-700">Staff Type *</label>
+                                    <ComboBox
+                                        options={staffTypeOptions}
+                                        label="Select Staff Type"
+                                        externalValue={(value) => {
+                                            setData('staff_type', value as string);
+                                            setData('teacher_id', '');
+                                            if (value === 'administrator') {
+                                                setData('course_id', '');
+                                                setData('day', '');
+                                            } else {
+                                                setData('days', []);
+                                            }
+                                        }}
+                                        defaultValue={staffTypeOptions.find((option) => option.value === data.staff_type) || staffTypeOptions[0]}
+                                    />
+                                    {errors.staff_type && (
+                                        <p className="mt-2 flex items-center text-sm text-red-500">
+                                            <AlertCircle className="mr-1 h-4 w-4" />
+                                            {errors.staff_type}
+                                        </p>
+                                    )}
+                                </div>
+
+                                <div>
+                                    <label className="mb-2 block text-sm font-medium text-slate-700">Assigned Staff *</label>
+                                    <ComboBox
+                                        options={teachers.filter((teacher) => !teacher.staff_type || teacher.staff_type === data.staff_type)}
+                                        label="Assign Staff"
+                                        externalValue={handleValueChange('teacher_id')}
+                                        defaultValue={null}
+                                    />
+                                    {errors.teacher_id && (
+                                        <p className="mt-2 flex items-center text-sm text-red-500">
+                                            <AlertCircle className="mr-1 h-4 w-4" />
+                                            {errors.teacher_id}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+
+                            {data.staff_type === 'lecturer' && (
+                                <div>
+                                    <label className="mb-2 block text-sm font-medium text-slate-700">Course *</label>
                                     <ComboBox
                                         options={courses}
                                         label="Select Course"
@@ -251,17 +371,15 @@ const CreateTimeTablePage = ({ academicYear, courses, classRooms, days }: Create
                                         </p>
                                     )}
                                 </div>
-                            </div>
+                            )}
 
-                            {/* Teacher (Optional) */}
-
-                            {/* Classroom */}
+                            {/* Class Room */}
                             <div>
-                                <label className="mb-2 block text-sm font-medium text-slate-700">Classroom *</label>
+                                <label className="mb-2 block text-sm font-medium text-slate-700">Class Room *</label>
                                 <div>
                                     <ComboBox
                                         options={classRooms}
-                                        label="Select Classroom"
+                                        label="Select Class Room"
                                         externalValue={handleValueChange('class_room_id')}
                                         defaultValue={null}
                                     />
@@ -275,18 +393,45 @@ const CreateTimeTablePage = ({ academicYear, courses, classRooms, days }: Create
                             </div>
 
                             {/* Day */}
-                            <div>
-                                <label className="mb-2 block text-sm font-medium text-slate-700">Day *</label>
+                            {data.staff_type === 'administrator' ? (
                                 <div>
-                                    <ComboBox options={daysOptions} label="Select Day" externalValue={handleValueChange('day')} defaultValue={null} />
-                                    {errors.day && (
+                                    <label className="mb-2 block text-sm font-medium text-slate-700">Days *</label>
+                                    <div className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 p-4 sm:grid-cols-2 md:grid-cols-3">
+                                        {daysOptions.map((day) => (
+                                            <label key={day.value} className="flex items-center space-x-3 text-sm text-slate-700">
+                                                <input
+                                                    type="checkbox"
+                                                    value={day.value}
+                                                    checked={data.days.includes(day.value)}
+                                                    onChange={() => handleAdministratorDayToggle(day.value)}
+                                                    className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                                />
+                                                <span>{day.label}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                    {(errors.days || errors['days.0']) && (
                                         <p className="mt-2 flex items-center text-sm text-red-500">
                                             <AlertCircle className="mr-1 h-4 w-4" />
-                                            {errors.day}
+                                            {errors.days || errors['days.0']}
                                         </p>
                                     )}
+                                    <p className="mt-2 text-xs text-slate-500">One schedule will be created for each selected day.</p>
                                 </div>
-                            </div>
+                            ) : (
+                                <div>
+                                    <label className="mb-2 block text-sm font-medium text-slate-700">Day *</label>
+                                    <div>
+                                        <ComboBox options={daysOptions} label="Select Day" externalValue={handleValueChange('day')} defaultValue={null} />
+                                        {errors.day && (
+                                            <p className="mt-2 flex items-center text-sm text-red-500">
+                                                <AlertCircle className="mr-1 h-4 w-4" />
+                                                {errors.day}
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Time Slot */}
                             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">

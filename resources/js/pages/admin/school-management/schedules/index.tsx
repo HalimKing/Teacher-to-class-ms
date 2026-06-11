@@ -129,7 +129,7 @@ export default function AdminSchedulesIndex() {
                                     <th className="px-4 py-3 text-left text-xs font-semibold">Course / Program</th>
                                     <th className="px-4 py-3 text-left text-xs font-semibold">Original</th>
                                     <th className="px-4 py-3 text-left text-xs font-semibold">Requested</th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold">Venue</th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold">Class Room</th>
                                     <th className="px-4 py-3 text-center text-xs font-semibold">Status</th>
                                     <th className="px-4 py-3 text-right text-xs font-semibold">Actions</th>
                                 </tr>
