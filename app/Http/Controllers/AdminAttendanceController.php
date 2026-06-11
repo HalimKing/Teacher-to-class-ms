@@ -117,6 +117,7 @@ class AdminAttendanceController extends Controller
         $exportData = $records->map(function ($rec) {
             return [
                 'Teacher' => $rec->teacher?->first_name . ' ' . $rec->teacher?->last_name,
+                'Staff Type' => $rec->teacher?->staff_type ?? Teacher::STAFF_TYPE_LECTURER,
                 'Course' => $rec->course?->name,
                 'Classroom' => $rec->classroom?->name,
                 'Date' => $rec->date,

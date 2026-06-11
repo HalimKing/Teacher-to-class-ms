@@ -47,6 +47,7 @@ interface Teacher {
   faculty: Faculty;
   department: Department;
   title: string;
+  staff_type?: string;
 }
 
 interface TeachersIndexPageProps {
@@ -64,6 +65,7 @@ interface TeachersIndexPageProps {
     search?: string;
     faculty?: string;
     department?: string;
+    staffType?: string;
   };
 }
 
@@ -71,6 +73,7 @@ const TeachersIndexPage = ({ teachers, faculties, departments, filters: initialF
   const [searchTerm, setSearchTerm] = useState(initialFilters.search || '');
   const [selectedFaculty, setSelectedFaculty] = useState(initialFilters.faculty || 'all');
   const [selectedDepartment, setSelectedDepartment] = useState(initialFilters.department || 'all');
+  const [selectedStaffType, setSelectedStaffType] = useState(initialFilters.staffType || 'all');
 
   const { flash } = usePage().props as PagePropsWithFlash;
 
@@ -89,6 +92,7 @@ const TeachersIndexPage = ({ teachers, faculties, departments, filters: initialF
       if (searchTerm) newFilters.search = searchTerm;
       if (selectedFaculty !== 'all') newFilters.faculty = selectedFaculty;
       if (selectedDepartment !== 'all') newFilters.department = selectedDepartment;
+      if (selectedStaffType !== 'all') newFilters.staffType = selectedStaffType;
       
       // Only update if filters changed
       if (JSON.stringify(newFilters) !== JSON.stringify(initialFilters)) {
@@ -100,7 +104,7 @@ const TeachersIndexPage = ({ teachers, faculties, departments, filters: initialF
     }, 500);
     
     return () => clearTimeout(timeoutId);
-  }, [searchTerm, selectedFaculty, selectedDepartment]);
+  }, [searchTerm, selectedFaculty, selectedDepartment, selectedStaffType]);
 
 
   useEffect(() => {
@@ -141,6 +145,8 @@ const TeachersIndexPage = ({ teachers, faculties, departments, filters: initialF
       setSelectedDepartment('all'); // Reset department when faculty changes
     } else if (filterType === 'department') {
       setSelectedDepartment(value);
+    } else if (filterType === 'staffType') {
+      setSelectedStaffType(value);
     }
   };
 
@@ -157,6 +163,7 @@ const TeachersIndexPage = ({ teachers, faculties, departments, filters: initialF
     setSearchTerm('');
     setSelectedFaculty('all');
     setSelectedDepartment('all');
+    setSelectedStaffType('all');
     router.get(route('admin.teachers.index'));
   };
 
@@ -287,6 +294,20 @@ const TeachersIndexPage = ({ teachers, faculties, departments, filters: initialF
       case 'offline': return 'bg-gray-400';
       case 'in_meeting': return 'bg-orange-500';
       default: return 'bg-gray-400';
+    }
+  };
+
+  const formatStaffType = (staffType?: string): string => {
+    return formatStatus(staffType || 'lecturer');
+  };
+
+  const getStaffTypeBadgeColor = (staffType?: string): string => {
+    switch (staffType || 'lecturer') {
+      case 'administrator':
+        return 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800';
+      case 'lecturer':
+      default:
+        return 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800';
     }
   };
 
@@ -441,9 +462,19 @@ const TeachersIndexPage = ({ teachers, faculties, departments, filters: initialF
                       </option>
                     ))}
                   </select>
+
+                  <select
+                    value={selectedStaffType}
+                    onChange={(e) => handleFilterChange('staffType', e.target.value)}
+                    className="px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-white text-sm w-full sm:w-48"
+                  >
+                    <option value="all">All Staff Types</option>
+                    <option value="lecturer">Lecturers</option>
+                    <option value="administrator">Administrators</option>
+                  </select>
                 </div>
                 
-                {(searchTerm || selectedFaculty !== 'all' || selectedDepartment !== 'all') && (
+                {(searchTerm || selectedFaculty !== 'all' || selectedDepartment !== 'all' || selectedStaffType !== 'all') && (
                   <button
                     onClick={clearFilters}
                     className="px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
@@ -471,6 +502,7 @@ const TeachersIndexPage = ({ teachers, faculties, departments, filters: initialF
                     <tr>
                       <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Teacher</th>
                       <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">ID</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Staff Type</th>
                       <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Faculty</th>
                       <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Department</th>
                       <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Actions</th>
@@ -498,6 +530,11 @@ const TeachersIndexPage = ({ teachers, faculties, departments, filters: initialF
                           <span className="text-sm font-medium text-slate-900 dark:text-white">{teacher.employee_id}</span>
                         </td>
                         <td className="px-6 py-4">
+                          <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${getStaffTypeBadgeColor(teacher.staff_type)}`}>
+                            {formatStaffType(teacher.staff_type)}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
                           <div className="text-sm text-slate-700 dark:text-slate-300">{teacher.faculty.name}</div>
                         </td>
                         <td className="px-6 py-4">
@@ -518,7 +555,7 @@ const TeachersIndexPage = ({ teachers, faculties, departments, filters: initialF
                     ))}
                     {teachers.data.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="px-6 py-12 text-center text-slate-500 dark:text-slate-400 text-lg">
+                        <td colSpan={6} className="px-6 py-12 text-center text-slate-500 dark:text-slate-400 text-lg">
                           No teachers found matching your criteria.
                         </td>
                       </tr>

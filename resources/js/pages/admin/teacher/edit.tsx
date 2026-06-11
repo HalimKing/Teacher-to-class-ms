@@ -22,6 +22,7 @@ interface FormData {
   title: string;
   faculty: number;
   employeeId: string;
+  staffType: string;
 }
 
 interface PageProps {
@@ -50,6 +51,7 @@ interface Teacher {
   faculty_id: number;
   department_id: number;
   title: string;
+  staff_type: string;
 }
 
 interface EditTeacherPageProps {
@@ -62,6 +64,11 @@ const titleData = [
   { label: 'Ms.', value: 'Ms.' },
   { label: 'Dr.', value: 'Dr.' },
   { label: 'Prof.', value: 'Prof.' },
+];
+
+const staffTypeData = [
+  { label: 'Lecturer', value: 'lecturer' },
+  { label: 'Administrator', value: 'administrator' },
 ];
 
 const EditTeacherPage = ({ facultyOptions, teacher }: EditTeacherPageProps) => {
@@ -80,6 +87,7 @@ const EditTeacherPage = ({ facultyOptions, teacher }: EditTeacherPageProps) => {
     title: teacher.title || '',
     employeeId: teacher.employee_id?.toString() || '',
     faculty: teacher.faculty_id || 0,
+    staffType: teacher.staff_type || 'lecturer',
   });
 
   const initialFacultyOption = facultyOptions.find(option => option.value === teacher.faculty_id) || null;
@@ -110,6 +118,10 @@ const EditTeacherPage = ({ facultyOptions, teacher }: EditTeacherPageProps) => {
 
   const handleTitleChange = (value: string | number | undefined) => {
     setData('title', value as string);
+  };
+
+  const handleStaffTypeChange = (value: string | number | undefined) => {
+    setData('staffType', value as string);
   };
 
   const handleValueChangeFaculty = (value: string | number | undefined) => {
@@ -306,6 +318,17 @@ const EditTeacherPage = ({ facultyOptions, teacher }: EditTeacherPageProps) => {
                         />
                         {errors.title && (
                           <p className="mt-1 text-sm text-red-500">{errors.title}</p>
+                        )}
+                      </div>
+                      <div>
+                        <ComboBox
+                          options={staffTypeData}
+                          label="Select Staff Type"
+                          externalValue={handleStaffTypeChange}
+                          defaultValue={staffTypeData.find(option => option.value === (teacher.staff_type || 'lecturer')) || staffTypeData[0]}
+                        />
+                        {errors.staffType && (
+                          <p className="mt-1 text-sm text-red-500">{errors.staffType}</p>
                         )}
                       </div>
                     </div>

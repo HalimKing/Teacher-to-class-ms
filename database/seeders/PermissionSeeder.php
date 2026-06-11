@@ -68,6 +68,9 @@ class PermissionSeeder extends Seeder
             'admin.settings.view',
             'admin.settings.edit',
             'admin.attendance.view',
+            // Schedules permissions
+            'admin.schedules.view',
+            'admin.schedules.manage',
         ];
         foreach ($permissions as $permission) {
             Permission::create(['name' => $permission]);

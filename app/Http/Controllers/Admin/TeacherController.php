@@ -7,6 +7,7 @@ use App\Models\Faculty;
 use App\Models\Department;
 use App\Models\Teacher;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -42,6 +43,11 @@ class TeacherController extends Controller
         if ($request->has('department') && !empty($request->department) && $request->department !== 'all') {
             $query->where('department_id', $request->department);
         }
+
+        // Staff type filter
+        if ($request->has('staffType') && in_array($request->staffType, Teacher::STAFF_TYPES, true)) {
+            $query->where('staff_type', $request->staffType);
+        }
         
         // Pagination
         $teachers = $query->paginate(10)->withQueryString();
@@ -51,7 +57,7 @@ class TeacherController extends Controller
         $departments = Department::select('id', 'name')->orderBy('name')->get();
         
         // Get current filters
-        $filters = $request->only(['search', 'faculty', 'department']);
+        $filters = $request->only(['search', 'faculty', 'department', 'staffType']);
         
         return Inertia::render('admin/teacher/index', 
             compact('teachers', 'faculties', 'departments', 'filters'));
@@ -91,6 +97,7 @@ class TeacherController extends Controller
             'department' => 'required|exists:departments,id',
             'employeeId' => 'required|string|unique:teachers,employee_id',
             'title' => 'required|string|max:255|in:Prof.,Dr.,Mr.,Ms.',
+            'staffType' => ['required', Rule::in(Teacher::STAFF_TYPES)],
             // Add other validation rules
         ]);
         
@@ -104,6 +111,7 @@ class TeacherController extends Controller
             $teacher->department_id = $validated['department'];
             $teacher->employee_id = $validated['employeeId'];
             $teacher->title = $validated['title'];
+            $teacher->staff_type = $validated['staffType'];
             // Assign other fields
             $teacher->save();
             return redirect()->route('admin.teachers.index')
@@ -160,6 +168,7 @@ class TeacherController extends Controller
         'department' => 'required|exists:departments,id',
         'employeeId' => 'required|string|unique:teachers,employee_id,' . $id,
         'title' => 'required|string|max:255|in:Prof.,Dr.,Mr.,Ms.',
+        'staffType' => ['required', Rule::in(Teacher::STAFF_TYPES)],
     ]);
     
     try {
@@ -171,6 +180,7 @@ class TeacherController extends Controller
         $teacher->department_id = $validated['department'];
         $teacher->employee_id = $validated['employeeId'];
         $teacher->title = $validated['title'];
+        $teacher->staff_type = $validated['staffType'];
         $teacher->save();
         
         return redirect()->route('admin.teachers.index')
@@ -268,7 +278,7 @@ class TeacherController extends Controller
 
         $callback = function () {
             $out = fopen('php://output', 'w');
-            fputcsv($out, ['ID', 'First Name', 'Last Name', 'Email', 'Phone', 'Employee ID', 'Faculty', 'Department', 'Title', 'Created At', 'Updated At']);
+            fputcsv($out, ['ID', 'First Name', 'Last Name', 'Email', 'Phone', 'Employee ID', 'Faculty', 'Department', 'Title', 'Staff Type', 'Created At', 'Updated At']);
             Teacher::with(['faculty', 'department'])->chunk(200, function ($teachers) use ($out) {
                 foreach ($teachers as $t) {
                     fputcsv($out, [
@@ -281,6 +291,7 @@ class TeacherController extends Controller
                         $t->faculty->name ?? '',
                         $t->department->name ?? '',
                         $t->title ?? '',
+                        $t->staff_type ?? Teacher::STAFF_TYPE_LECTURER,
                         optional($t->created_at)->toDateTimeString(),
                         optional($t->updated_at)->toDateTimeString(),
                     ]);
@@ -309,13 +320,14 @@ class TeacherController extends Controller
             fputcsv($out, ['# 1. first_name, last_name, email, phone, employee_id, faculty, department, title are REQUIRED']);
             fputcsv($out, ['# 2. faculty and department must match existing names exactly. Department must belong to faculty']);
             fputcsv($out, ['# 3. title must be one of: Prof., Dr., Mr., Ms.']);
-            fputcsv($out, ['# 4. email and employee_id must be unique']);
-            fputcsv($out, ['# 5. Do not modify the header row. Remove instruction rows before uploading']);
-            fputcsv($out, ['# 6. Duplicate employee_id will update existing teacher']);
+            fputcsv($out, ['# 4. staff_type is optional and must be one of: lecturer, administrator. Defaults to lecturer']);
+            fputcsv($out, ['# 5. email and employee_id must be unique']);
+            fputcsv($out, ['# 6. Do not modify the header row. Remove instruction rows before uploading']);
+            fputcsv($out, ['# 7. Duplicate employee_id will update existing teacher']);
             fputcsv($out, ['']);
-            fputcsv($out, ['first_name', 'last_name', 'email', 'phone', 'employee_id', 'faculty', 'department', 'title']);
-            fputcsv($out, ['John', 'Doe', 'john.doe@example.com', '+1234567890', 'EMP001', 'Faculty of Engineering', 'Computer Science', 'Dr.']);
-            fputcsv($out, ['Jane', 'Smith', 'jane.smith@example.com', '+0987654321', 'EMP002', 'Faculty of Science', 'Mathematics', 'Prof.']);
+            fputcsv($out, ['first_name', 'last_name', 'email', 'phone', 'employee_id', 'faculty', 'department', 'title', 'staff_type']);
+            fputcsv($out, ['John', 'Doe', 'john.doe@example.com', '+1234567890', 'EMP001', 'Faculty of Engineering', 'Computer Science', 'Dr.', 'lecturer']);
+            fputcsv($out, ['Jane', 'Smith', 'jane.smith@example.com', '+0987654321', 'EMP002', 'Faculty of Science', 'Mathematics', 'Prof.', 'administrator']);
             fclose($out);
         };
 
@@ -428,6 +440,10 @@ class TeacherController extends Controller
                     } elseif (!in_array($title, ['Prof.', 'Dr.', 'Mr.', 'Ms.'])) {
                         $errors[] = 'Title must be Prof., Dr., Mr., or Ms.';
                     }
+                    $staffTypeError = $this->getStaffTypeValidationError($row['staff_type'] ?? null);
+                    if ($staffTypeError) {
+                        $errors[] = $staffTypeError;
+                    }
 
                     $empKey = strtolower(trim($row['employee_id'] ?? ''));
                     if ($empKey && isset($seen[$empKey])) {
@@ -514,6 +530,10 @@ class TeacherController extends Controller
                             $errors[] = 'Title is required';
                         } elseif (!in_array($title, ['Prof.', 'Dr.', 'Mr.', 'Ms.'])) {
                             $errors[] = 'Title must be Prof., Dr., Mr., or Ms.';
+                        }
+                        $staffTypeError = $this->getStaffTypeValidationError($row['staff_type'] ?? null);
+                        if ($staffTypeError) {
+                            $errors[] = $staffTypeError;
                         }
 
                         $line = $i + 1;
@@ -636,6 +656,7 @@ class TeacherController extends Controller
             $facultyName = trim($r['faculty'] ?? '');
             $departmentName = trim($r['department'] ?? '');
             $title = trim($r['title'] ?? '');
+            $staffType = $this->normalizeStaffType($r['staff_type'] ?? null);
 
             if (empty($firstName) || empty($lastName) || empty($email) || empty($phone) || empty($employeeId)) {
                 $skipped++;
@@ -674,6 +695,12 @@ class TeacherController extends Controller
                 $failed[] = ['index' => $idx, 'reason' => 'Title must be Prof., Dr., Mr., or Ms.'];
                 continue;
             }
+            $staffTypeError = $this->getStaffTypeValidationError($r['staff_type'] ?? null);
+            if ($staffTypeError) {
+                $skipped++;
+                $failed[] = ['index' => $idx, 'reason' => $staffTypeError];
+                continue;
+            }
 
             try {
                 Teacher::updateOrCreate(
@@ -686,6 +713,7 @@ class TeacherController extends Controller
                         'faculty_id' => $faculty->id,
                         'department_id' => $department->id,
                         'title' => $title,
+                        'staff_type' => $staffType,
                     ]
                 );
                 $imported++;
@@ -695,5 +723,23 @@ class TeacherController extends Controller
         }
 
         return response()->json(['imported' => $imported, 'skipped' => $skipped, 'failed' => $failed]);
+    }
+
+    private function normalizeStaffType(mixed $staffType): string
+    {
+        $normalized = strtolower(trim((string) $staffType));
+
+        return $normalized === '' ? Teacher::STAFF_TYPE_LECTURER : $normalized;
+    }
+
+    private function getStaffTypeValidationError(mixed $staffType): ?string
+    {
+        $normalized = $this->normalizeStaffType($staffType);
+
+        if (!in_array($normalized, Teacher::STAFF_TYPES, true)) {
+            return 'Staff type must be lecturer or administrator.';
+        }
+
+        return null;
     }
 }

@@ -50,7 +50,7 @@ import { useState, useEffect } from 'react';
 
 interface AttendanceRecord {
     id: number;
-    teacher?: { first_name: string; last_name: string };
+    teacher?: { first_name: string; last_name: string; staff_type?: string };
     course?: { name: string };
     classroom?: { name: string };
     date: string;
@@ -117,6 +117,25 @@ export default function TeacherAttendanceRecordsAdmin({
     
     // Get active filters count
     const activeFiltersCount = Object.values(filters).filter(value => value !== '').length;
+
+    const formatStaffType = (staffType?: string) => {
+        return (staffType || 'lecturer')
+            .replace('_', ' ')
+            .split(' ')
+            .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+    };
+
+    const getStaffTypeChipStyles = (staffType?: string) => {
+        const isAdministrator = staffType === 'administrator';
+
+        return {
+            bgcolor: alpha(isAdministrator ? theme.palette.secondary.main : theme.palette.primary.main, 0.12),
+            color: isAdministrator ? theme.palette.secondary.dark : theme.palette.primary.dark,
+            fontWeight: 600,
+            textTransform: 'capitalize',
+        };
+    };
 
     // Calculate analytics from records
     const calculateAnalytics = (data: AttendanceRecord[]) => {
@@ -378,6 +397,11 @@ export default function TeacherAttendanceRecordsAdmin({
                                 {record.teacher?.first_name} {record.teacher?.last_name}
                             </Typography>
                         </Box>
+                        <Chip
+                            label={formatStaffType(record.teacher?.staff_type)}
+                            size="small"
+                            sx={getStaffTypeChipStyles(record.teacher?.staff_type)}
+                        />
                         <Box
                             sx={{
                                 px: 1,
@@ -864,6 +888,14 @@ export default function TeacherAttendanceRecordsAdmin({
                                                     fontSize: { sm: '0.75rem', md: '0.875rem' },
                                                     py: { sm: 1, md: 1.5 }
                                                 }}>
+                                                    Staff Type
+                                                </TableCell>
+                                                <TableCell sx={{ 
+                                                    fontWeight: 600, 
+                                                    bgcolor: alpha(theme.palette.primary.main, 0.04),
+                                                    fontSize: { sm: '0.75rem', md: '0.875rem' },
+                                                    py: { sm: 1, md: 1.5 }
+                                                }}>
                                                     Course
                                                 </TableCell>
                                                 <TableCell sx={{ 
@@ -929,6 +961,15 @@ export default function TeacherAttendanceRecordsAdmin({
                                                             <School size={isTablet ? 14 : 16} color={theme.palette.primary.main} />
                                                             {rec.teacher?.first_name} {rec.teacher?.last_name}
                                                         </Box>
+                                                    </TableCell>
+                                                    <TableCell sx={{ 
+                                                        py: { sm: 1, md: 1.5 }
+                                                    }}>
+                                                        <Chip
+                                                            label={formatStaffType(rec.teacher?.staff_type)}
+                                                            size="small"
+                                                            sx={getStaffTypeChipStyles(rec.teacher?.staff_type)}
+                                                        />
                                                     </TableCell>
                                                     <TableCell sx={{ 
                                                         fontSize: { sm: '0.75rem', md: '0.875rem' },

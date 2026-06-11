@@ -4,6 +4,9 @@ namespace App\Http\Controllers\Teacher;
 
 use App\Http\Controllers\Controller;
 use App\Models\TimeTable;
+use App\Models\RescheduledSession;
+use App\Models\ClassRoom;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -22,6 +25,11 @@ class TimeTableController extends Controller
 
         $timeTables = $query->get();
 
+        $reschedules = RescheduledSession::with(['timetable.course'])
+            ->where('teacher_id', $teacherId)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
         return Inertia::render('teacher/timetable/index', [
             'timeTables' => $timeTables->map(function ($t) {
                 return [
@@ -35,6 +43,48 @@ class TimeTableController extends Controller
                     'academic_year' => $t->academicYear ? ['id' => $t->academicYear->id, 'name' => $t->academicYear->name] : null,
                 ];
             }),
+            'reschedules' => $reschedules->map(function ($r) {
+                // fallback: try to load timetable->course name; if missing, fetch timetable directly
+                $courseName = null;
+                if ($r->timetable && $r->timetable->course && $r->timetable->course->name) {
+                    $courseName = $r->timetable->course->name;
+                } else {
+                    try {
+                        $tt = TimeTable::with('course')->find($r->timetable_id);
+                        if ($tt && $tt->course) $courseName = $tt->course->name;
+                    } catch (\Exception $e) {
+                        $courseName = null;
+                    }
+                }
+
+                // original_day: derive weekday name from original_date if possible
+                $originalDay = null;
+                if (!empty($r->original_date)) {
+                    try {
+                        $originalDay = Carbon::parse($r->original_date)->format('l');
+                    } catch (\Exception $e) {
+                        $originalDay = null;
+                    }
+                }
+
+                return [
+                    'id' => $r->id,
+                    'timetable_id' => $r->timetable_id,
+                    'course_name' => $courseName,
+                    'original_day' => $originalDay,
+                    'original_date' => $r->original_date,
+                    'original_start_time' => $r->original_start_time,
+                    'original_end_time' => $r->original_end_time,
+                    'new_date' => $r->new_date,
+                    'new_start_time' => $r->new_start_time,
+                    'new_end_time' => $r->new_end_time,
+                    'reason' => $r->reason,
+                    'note' => $r->note,
+                    'status' => $r->status,
+                    'created_at' => $r->created_at,
+                ];
+            }),
+            'classrooms' => ClassRoom::where('is_active', true)->orderBy('name')->get(['id','name']),
         ]);
     }
 

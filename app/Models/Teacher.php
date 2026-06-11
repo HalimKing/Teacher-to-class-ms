@@ -15,7 +15,19 @@ class Teacher extends Authenticatable
      */
     use Notifiable;
 
+    public const STAFF_TYPE_LECTURER = 'lecturer';
+    public const STAFF_TYPE_ADMINISTRATOR = 'administrator';
+
+    public const STAFF_TYPES = [
+        self::STAFF_TYPE_LECTURER,
+        self::STAFF_TYPE_ADMINISTRATOR,
+    ];
+
     protected $guard = 'teacher';
+
+    protected $attributes = [
+        'staff_type' => self::STAFF_TYPE_LECTURER,
+    ];
 
     protected $fillable = [
         'first_name',
@@ -26,6 +38,7 @@ class Teacher extends Authenticatable
         'department_id',
         'employee_id',
         'title',
+        'staff_type',
     ];
 
     public function faculty()

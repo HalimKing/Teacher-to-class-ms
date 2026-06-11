@@ -187,7 +187,7 @@ const mainNavItems: NavItem[] = [
         permission: 'admin.academics.view',
         subItems: [
             {
-                title: 'Time Tables',
+                title: 'Time Tablessss',
                 href: '/admin/academics/time-tables',
                 permission: 'admin.academics.time-tables.view',
             },
@@ -200,6 +200,12 @@ const mainNavItems: NavItem[] = [
                 title: 'Generate Time Table',
                 href: '/admin/academics/time-tables/generate',
                 permission: 'admin.academics.time-tables.generate',
+            }
+            ,
+            {
+                title: 'Schedules',
+                href: '/admin/school-management/schedules',
+                permission: 'admin.schedules.view',
             }
         ]
     },

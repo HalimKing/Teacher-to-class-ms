@@ -79,6 +79,10 @@ Route::middleware('auth:teacher')->group(function () {
     Route::get('/teacher/my-courses', [TeacherCoursesController::class, 'index'])
         ->name('teacher.my-courses');
 
+    // Rescheduled sessions (teacher)
+    Route::get('/teacher/reschedules', [\App\Http\Controllers\Teacher\RescheduledSessionController::class, 'index'])->name('teacher.reschedules.index');
+    Route::post('/teacher/reschedules', [\App\Http\Controllers\Teacher\RescheduledSessionController::class, 'store'])->name('teacher.reschedules.store');
+
     // Session reminders for teachers
     Route::get('/teacher/reminders', [SessionReminderController::class, 'index'])->name('teacher.reminders.index');
     Route::post('/teacher/reminders', [SessionReminderController::class, 'store'])->name('teacher.reminders.store');
@@ -216,6 +220,20 @@ Route::middleware(['auth:web', 'verified'])->group(function () {
                     Route::resource('departments', DepartmentController::class)
                         ->only(['destroy'])
                         ->middleware('permission:admin.school-management.departments.delete');
+
+                    // Schedules management (reschedule approvals)
+                    Route::get('schedules', [\App\Http\Controllers\Admin\SchoolManagement\SchedulesController::class, 'index'])
+                        ->name('schedules.index')
+                        ->middleware('permission:admin.schedules.view');
+                    Route::get('schedules/{schedule}', [\App\Http\Controllers\Admin\SchoolManagement\SchedulesController::class, 'show'])
+                        ->name('schedules.show')
+                        ->middleware('permission:admin.schedules.view');
+                    Route::post('schedules/{schedule}/approve', [\App\Http\Controllers\Admin\SchoolManagement\SchedulesController::class, 'approve'])
+                        ->name('schedules.approve')
+                        ->middleware('permission:admin.schedules.manage');
+                    Route::post('schedules/{schedule}/reject', [\App\Http\Controllers\Admin\SchoolManagement\SchedulesController::class, 'reject'])
+                        ->name('schedules.reject')
+                        ->middleware('permission:admin.schedules.manage');
 
 
                     // Class Rooms routes

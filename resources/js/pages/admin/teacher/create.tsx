@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useForm, usePage } from '@inertiajs/react';
 import { 
   GraduationCap,
@@ -9,6 +9,7 @@ import AppLayout from '@/layouts/app-layout';
 import TextField from '@mui/material/TextField';
 import ComboBox from '@/components/combobox';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { ToastContainer, toast, Bounce } from 'react-toastify';
 
 import { theme } from '@/components/theme/mui-theme';
 
@@ -21,12 +22,17 @@ interface FormData {
   title: string;
   faculty: number;
   employeeId: string;
+  staffType: string;
 
 }
 
 interface PageProps {
   departments: string[];
   faculties: string[];
+  flash?: {
+    success?: string;
+    error?: string;
+  };
   [key: string]: any;
 }
 interface FacultyOption {
@@ -40,10 +46,16 @@ const titleData = [
   { label: 'Dr.', value: 'Dr.' },
   { label: 'Prof.', value: 'Prof.' },
 ];
+
+const staffTypeData = [
+  { label: 'Lecturer', value: 'lecturer' },
+  { label: 'Administrator', value: 'administrator' },
+];
+
 const CreateTeacherPage = ({facultyOptions}: {facultyOptions: FacultyOption[]}) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   
-  const { departments, faculties } = usePage<PageProps>().props;
+  const { flash } = usePage<PageProps>().props;
   const [departmentsOptions, setDepartments] = useState<{label: string; value: string}[]>([]);
 
   const { data, setData, post, processing, errors, reset } = useForm<FormData>({
@@ -54,10 +66,31 @@ const CreateTeacherPage = ({facultyOptions}: {facultyOptions: FacultyOption[]}) 
     department: null,
     title: '',
     employeeId: '',
+    staffType: 'lecturer',
    
     faculty: 0,
   
   });
+
+  useEffect(() => {
+    if (flash?.success) {
+      toast.success(flash.success, {
+        position: 'top-right',
+        autoClose: 5000,
+        theme: 'dark',
+        transition: Bounce,
+      });
+    }
+
+    if (flash?.error) {
+      toast.error(flash.error, {
+        position: 'top-right',
+        autoClose: 5000,
+        theme: 'dark',
+        transition: Bounce,
+      });
+    }
+  }, [flash?.success, flash?.error]);
 
 
 
@@ -70,6 +103,13 @@ const CreateTeacherPage = ({facultyOptions}: {facultyOptions: FacultyOption[]}) 
       },
       onError: (errors) => {
         console.error('Form submission errors:', errors);
+        const firstError = Object.values(errors)[0];
+        toast.error(firstError || 'Please review the highlighted fields and try again.', {
+          position: 'top-right',
+          autoClose: 5000,
+          theme: 'dark',
+          transition: Bounce,
+        });
       }
     });
   };
@@ -79,6 +119,9 @@ const CreateTeacherPage = ({facultyOptions}: {facultyOptions: FacultyOption[]}) 
     };
      const handleTitleChange = (value: string | number | undefined) => {
         setData('title', value as string);
+    };
+     const handleStaffTypeChange = (value: string | number | undefined) => {
+        setData('staffType', value as string);
     };
 
     const handleValueChangeFaculty = (value: string | number | undefined) => {
@@ -232,7 +275,9 @@ const CreateTeacherPage = ({facultyOptions}: {facultyOptions: FacultyOption[]}) 
                         externalValue={handleValueChangeFaculty}
                         defaultValue={null}
                       />
-                      
+                      {errors.faculty && (
+                        <p className="mt-1 text-sm text-red-500">{errors.faculty}</p>
+                      )}
                     </div>
                     <div>
                       <ComboBox
@@ -255,7 +300,20 @@ const CreateTeacherPage = ({facultyOptions}: {facultyOptions: FacultyOption[]}) 
                         externalValue={handleTitleChange}
                         defaultValue={null}
                       />
-                      
+                      {errors.title && (
+                        <p className="mt-1 text-sm text-red-500">{errors.title}</p>
+                      )}
+                    </div>
+                    <div>
+                      <ComboBox
+                        options={staffTypeData}
+                        label="Select Staff Type"
+                        externalValue={handleStaffTypeChange}
+                        defaultValue={staffTypeData[0]}
+                      />
+                      {errors.staffType && (
+                        <p className="mt-1 text-sm text-red-500">{errors.staffType}</p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -286,6 +344,7 @@ const CreateTeacherPage = ({facultyOptions}: {facultyOptions: FacultyOption[]}) 
           </div>
         </div>
       </ThemeProvider>
+      <ToastContainer />
     </AppLayout>
   );
 };
