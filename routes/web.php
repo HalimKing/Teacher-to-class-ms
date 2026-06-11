@@ -23,6 +23,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\Teacher\TimeTableController as TeacherTimeTableController;
 use App\Http\Controllers\Teacher\SessionReminderController;
 use App\Http\Controllers\Teacher\NotificationController;
+use App\Http\Controllers\Teacher\StaffAttendanceController;
 
 use App\Http\Controllers\AdminAttendanceController;
 use App\Models\AcademicPeriod;
@@ -42,9 +43,12 @@ Route::middleware('auth:teacher')->group(function () {
 
 
 
-    Route::get('/api/teacher/attendance-data', [DashboardController::class, 'getAttendanceData']);
+    Route::get('/api/teacher/attendance-data', [DashboardController::class, 'getAttendanceData'])
+        ->middleware('teacher.staff_type:lecturer');
 
-    Route::prefix('teacher/attendance')->group(
+    Route::prefix('teacher/attendance')
+        ->middleware('teacher.staff_type:lecturer')
+        ->group(
         function () {
             Route::get('/todays-classes', [TeacherAttendanceController::class, 'getTodaysClasses']);
             Route::post('/check-in', [TeacherAttendanceController::class, 'checkIn']);
@@ -57,9 +61,11 @@ Route::middleware('auth:teacher')->group(function () {
     );
 
     // Teacher timetable
-    Route::get('/teacher/timetable', [TeacherTimeTableController::class, 'index'])->name('teacher.timetable');
-    Route::get('/teacher/timetable/print', [TeacherTimeTableController::class, 'export'])->name('teacher.timetable.print');
-    Route::get('/teacher/timetable/export', [TeacherTimeTableController::class, 'export'])->name('teacher.timetable.export');
+    Route::middleware('teacher.staff_type:lecturer')->group(function () {
+        Route::get('/teacher/timetable', [TeacherTimeTableController::class, 'index'])->name('teacher.timetable');
+        Route::get('/teacher/timetable/print', [TeacherTimeTableController::class, 'export'])->name('teacher.timetable.print');
+        Route::get('/teacher/timetable/export', [TeacherTimeTableController::class, 'export'])->name('teacher.timetable.export');
+    });
 
     // Route::post('/teacher/attendance/check-in', [TeacherAttendanceController::class, 'checkIn'])->name('teacher.attendance.check-in');
     // Route::post('/teacher/attendance/check-out', [TeacherAttendanceController::class, 'checkOut'])->name('teacher.attendance.check-out');
@@ -67,28 +73,43 @@ Route::middleware('auth:teacher')->group(function () {
 
     Route::get('/teacher/dashboard', [DashboardController::class, 'index'])->name('teacher.dashboard');
 
-    Route::get('/teacher/attendance', [TeacherAttendanceController::class, 'index'])->name('teacher.attendance');
+    Route::get('/teacher/attendance', [TeacherAttendanceController::class, 'index'])
+        ->middleware('teacher.staff_type:lecturer')
+        ->name('teacher.attendance');
     //  Route::get('/by-timetable/{timetableId}', [TeacherAttendanceController::class, 'getAttendanceByTimetable']);
     //   Route::get('/todays-classes', [TeacherAttendanceController::class, 'getTodaysClasses']);
 
-    Route::get('/teacher/records', [AttendanceRecordController::class, 'index'])->name('teacher.records');
+    Route::get('/teacher/staff-attendance', [StaffAttendanceController::class, 'index'])
+        ->middleware('teacher.staff_type:administrator')
+        ->name('teacher.staff-attendance');
 
-    Route::get('/teacher/reports', [TeacherAttendanceReportController::class, 'index'])->name('teacher.reports');
-    Route::get('/teacher/reports/data', [TeacherAttendanceReportController::class, 'getReportData'])->name('teacher.reports.data');
+    Route::get('/teacher/records', [AttendanceRecordController::class, 'index'])
+        ->middleware('teacher.staff_type:lecturer')
+        ->name('teacher.records');
+
+    Route::middleware('teacher.staff_type:lecturer')->group(function () {
+        Route::get('/teacher/reports', [TeacherAttendanceReportController::class, 'index'])->name('teacher.reports');
+        Route::get('/teacher/reports/data', [TeacherAttendanceReportController::class, 'getReportData'])->name('teacher.reports.data');
+    });
 
     Route::get('/teacher/my-courses', [TeacherCoursesController::class, 'index'])
+        ->middleware('teacher.staff_type:lecturer')
         ->name('teacher.my-courses');
 
     // Rescheduled sessions (teacher)
-    Route::get('/teacher/reschedules', [\App\Http\Controllers\Teacher\RescheduledSessionController::class, 'index'])->name('teacher.reschedules.index');
-    Route::post('/teacher/reschedules', [\App\Http\Controllers\Teacher\RescheduledSessionController::class, 'store'])->name('teacher.reschedules.store');
+    Route::middleware('teacher.staff_type:lecturer')->group(function () {
+        Route::get('/teacher/reschedules', [\App\Http\Controllers\Teacher\RescheduledSessionController::class, 'index'])->name('teacher.reschedules.index');
+        Route::post('/teacher/reschedules', [\App\Http\Controllers\Teacher\RescheduledSessionController::class, 'store'])->name('teacher.reschedules.store');
+    });
 
     // Session reminders for teachers
-    Route::get('/teacher/reminders', [SessionReminderController::class, 'index'])->name('teacher.reminders.index');
-    Route::post('/teacher/reminders', [SessionReminderController::class, 'store'])->name('teacher.reminders.store');
-    Route::put('/teacher/reminders/{reminder}', [SessionReminderController::class, 'update'])->name('teacher.reminders.update');
-    Route::post('/teacher/reminders/{reminder}/resend', [SessionReminderController::class, 'resend'])->name('teacher.reminders.resend');
-    Route::delete('/teacher/reminders/{reminder}', [SessionReminderController::class, 'destroy'])->name('teacher.reminders.destroy');
+    Route::middleware('teacher.staff_type:lecturer')->group(function () {
+        Route::get('/teacher/reminders', [SessionReminderController::class, 'index'])->name('teacher.reminders.index');
+        Route::post('/teacher/reminders', [SessionReminderController::class, 'store'])->name('teacher.reminders.store');
+        Route::put('/teacher/reminders/{reminder}', [SessionReminderController::class, 'update'])->name('teacher.reminders.update');
+        Route::post('/teacher/reminders/{reminder}/resend', [SessionReminderController::class, 'resend'])->name('teacher.reminders.resend');
+        Route::delete('/teacher/reminders/{reminder}', [SessionReminderController::class, 'destroy'])->name('teacher.reminders.destroy');
+    });
 
     Route::post('/teacher/notifications/{id}/read', [NotificationController::class, 'markAsRead'])->name('teacher.notifications.mark-read');
     Route::post('/teacher/notifications/read-all', [NotificationController::class, 'markAllAsRead'])->name('teacher.notifications.mark-all-read');

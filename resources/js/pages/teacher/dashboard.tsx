@@ -117,6 +117,7 @@ export default function TeacherDashboard({
     metricsData,
     profileData,
     upcomingReminders = [],
+    staffType,
 }: {
     upcomingClasses: any[];
     todayLectures: TodayLectures[];
@@ -124,6 +125,7 @@ export default function TeacherDashboard({
     metricsData: MetricsData;
     profileData: TeacherProfile;
     upcomingReminders?: UpcomingReminder[];
+    staffType?: string;
 }) {
     const [timeFilter, setTimeFilter] = useState('week');
     const [activeTab, setActiveTab] = useState('overview');
@@ -132,12 +134,18 @@ export default function TeacherDashboard({
     const page = usePage<SharedData>();
 
     const { auth } = page.props;
+    const isLecturer = (staffType || String(auth.user.staff_type || 'lecturer')) === 'lecturer';
 
     console.log("today's lectures: ", todayLectures);
 
     // Fetch attendance data when time filter changes
     useEffect(() => {
         const fetchAttendanceData = async () => {
+            if (!isLecturer) {
+                setChartData({ labels: [], attendance: [] });
+                return;
+            }
+
             setIsLoading(true);
             try {
                 const response = await fetch(`/api/teacher/attendance-data?timeRange=${timeFilter}`);
@@ -157,7 +165,7 @@ export default function TeacherDashboard({
         };
 
         fetchAttendanceData();
-    }, [timeFilter]);
+    }, [timeFilter, isLecturer]);
 
     // Generate chart data based on state
     const attendanceChartData = useMemo(() => {
@@ -253,19 +261,24 @@ export default function TeacherDashboard({
                                 <p className="mt-1 text-purple-100">
                                     {profileData.subject} • {profileData.department}
                                 </p>
-                                <div className="mt-3 flex flex-wrap items-center gap-3 lg:gap-4">
-                                    <div className="flex items-center gap-2">
-                                        <ClockIcon className="h-4 w-4" />
-                                        <span className="text-sm">Next: {profileData.nextClass}</span>
+                                {isLecturer ? (
+                                    <div className="mt-3 flex flex-wrap items-center gap-3 lg:gap-4">
+                                        <div className="flex items-center gap-2">
+                                            <ClockIcon className="h-4 w-4" />
+                                            <span className="text-sm">Next: {profileData.nextClass}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <Users className="h-4 w-4" />
+                                            <span className="text-sm">{profileData.totalStudents} Students</span>
+                                        </div>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                        <Users className="h-4 w-4" />
-                                        <span className="text-sm">{profileData.totalStudents} Students</span>
-                                    </div>
-                                </div>
+                                ) : (
+                                    <div className="mt-3 inline-flex rounded-full bg-white/20 px-3 py-1 text-sm font-medium">Administrative Staff</div>
+                                )}
                             </div>
                         </div>
-                        <div className="flex w-full items-center gap-2 lg:w-auto lg:gap-3">
+                        {isLecturer && (
+                            <div className="flex w-full items-center gap-2 lg:w-auto lg:gap-3">
                             <Link
                                 href="/teacher/reminders"
                                 className="flex-1 rounded-lg bg-white/20 px-3 py-2 text-sm font-medium transition-colors hover:bg-white/30 lg:flex-none lg:px-4 inline-flex items-center justify-center gap-2"
@@ -273,10 +286,26 @@ export default function TeacherDashboard({
                                 <Bell className="h-4 w-4" />
                                 Reminders
                             </Link>
-                        </div>
+                            </div>
+                        )}
                     </div>
                 </div>
 
+                {!isLecturer ? (
+                    <div className="rounded-xl border border-sidebar-border/70 bg-white p-6 shadow-sm dark:border-sidebar-border dark:bg-sidebar-accent">
+                        <h2 className="text-xl font-semibold text-sidebar-foreground dark:text-sidebar-foreground">Staff Attendance</h2>
+                        <p className="mt-2 max-w-2xl text-sm text-sidebar-foreground/70 dark:text-sidebar-foreground/70">
+                            Your account is configured as administrative staff. Lecturer class/course attendance tools are hidden for this staff type.
+                        </p>
+                        <Link
+                            href="/teacher/staff-attendance"
+                            className="mt-5 inline-flex rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-700"
+                        >
+                            Open Staff Attendance
+                        </Link>
+                    </div>
+                ) : (
+                    <>
                 {/* Metrics Grid */}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                     {dynamicMetricsGrid.map((stat, index) => {
@@ -495,6 +524,8 @@ export default function TeacherDashboard({
                         </div>
                     </div>
                 </div>
+                    </>
+                )}
             </div>
         </AppLayout>
     );

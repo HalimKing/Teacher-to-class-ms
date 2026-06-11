@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\AuthenticateAny;
+use App\Http\Middleware\EnsureTeacherStaffType;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Foundation\Application;
@@ -22,6 +23,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
             'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
             'auth.any' => AuthenticateAny::class,
+            'teacher.staff_type' => EnsureTeacherStaffType::class,
         ]);
 
         $middleware->web(append: [

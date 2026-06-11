@@ -36,36 +36,49 @@ const teacherNavItems: NavItem[] = [
         href: '/teacher/attendance',
         icon: UserCheck,
         permission: 'admin.teachers.view',
+        staffTypes: ['lecturer'],
+    },
+    {
+        title: 'Staff Attendance',
+        href: '/teacher/staff-attendance',
+        icon: UserCheck,
+        permission: 'teacher.staff-attendance.view',
+        staffTypes: ['administrator'],
     },
     {
         title: 'My Courses',
         href: '/teacher/my-courses',
         icon: BookOpen,
         permission: 'teacher.my-courses.view',
+        staffTypes: ['lecturer'],
     },
     {
         title: 'Records',
         href: '/teacher/records',
         icon: Folder,
         permission: 'teacher.records.view',
+        staffTypes: ['lecturer'],
     },
     {
         title: 'My Timetable',
         href: '/teacher/timetable',
         icon: ClipboardList,
         permission: 'teacher.timetable.view',
+        staffTypes: ['lecturer'],
     },
     {
         title: 'Reminders',
         href: '/teacher/reminders',
         icon: Bell,
         permission: 'admin.teachers.view',
+        staffTypes: ['lecturer'],
     },
     {
         title: 'Reports',
         href: '/teacher/reports',
         icon: BarChart,
         permission: 'teacher.reports.view',
+        staffTypes: ['lecturer'],
     },
 
 ];
@@ -274,6 +287,8 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
     const [navItems, setNavItems] = useState<NavItem[]>(auth.user && auth.guard === 'teacher' ? teacherNavItems : mainNavItems);
 
     const isTeacher = auth.user && auth.guard === 'teacher';
+    const teacherStaffType = isTeacher ? String(auth.user.staff_type || 'lecturer') : null;
+    const isLecturer = teacherStaffType === 'lecturer';
 
     console.log('User Info:', isTeacher ? 'Teacher' : 'Admin', auth.user);
     
@@ -284,7 +299,7 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
     // Filter navigation items based on permissions
     const filteredNavItems = useMemo(() => {
         if (isTeacher) {
-            return teacherNavItems;
+            return teacherNavItems.filter((item) => !item.staffTypes || item.staffTypes.includes(teacherStaffType || 'lecturer'));
         }
         return mainNavItems.filter(item => {
             // Check if user has permission for the main item
@@ -317,7 +332,7 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
             }
             return true;
         });
-    }, [auth.user]);
+    }, [auth.user, teacherStaffType]);
 
 
     console.log('Filtered Nav Items:', filteredNavItems);
@@ -517,7 +532,7 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
     </div>
 
     {/* Teacher: Notifications (session reminders) */}
-    {isTeacher && (
+    {isTeacher && isLecturer && (
         <div className="relative hidden md:block">
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>

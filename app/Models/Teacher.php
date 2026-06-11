@@ -65,4 +65,14 @@ class Teacher extends Authenticatable
     {
         return $this->hasMany(SessionReminder::class);
     }
+
+    public function isLecturer(): bool
+    {
+        return $this->staff_type === self::STAFF_TYPE_LECTURER;
+    }
+
+    public function isAdministrator(): bool
+    {
+        return $this->staff_type === self::STAFF_TYPE_ADMINISTRATOR;
+    }
 }

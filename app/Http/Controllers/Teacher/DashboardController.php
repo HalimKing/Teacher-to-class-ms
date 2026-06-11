@@ -19,70 +19,84 @@ class DashboardController extends Controller
 
     public function index()
     {
-        $todayLectures = TimeTable::with('course.teacher', 'classroom', 'course.program', 'course.level')
-            ->where('day', now()->format('l'))
-            ->whereHas('course', fn($q) => $q->where('teacher_id', auth()->id()))
-            ->orderBy('start_time')
-            ->get();
+        $teacher = auth('teacher')->user();
+        $isLecturer = $teacher?->isLecturer() ?? true;
 
         $upcomingClasses = [];
-        foreach ($todayLectures as $lecture) {
-            $startTime = new DateTime($lecture->start_time);
-            $endTime = new DateTime($lecture->end_time);
-            $interval = $startTime->diff($endTime);
 
-            $status = 'upcoming';
-            if ($startTime <= now() && $endTime >= now()) {
-                $status = 'ongoing';
-            } else if ($startTime < now()) {
-                $status = 'finished';
-            } else if ($startTime > now()) {
+        if ($isLecturer) {
+            $todayLectures = TimeTable::with('course.teacher', 'classroom', 'course.program', 'course.level')
+                ->where('day', now()->format('l'))
+                ->whereHas('course', fn($q) => $q->where('teacher_id', auth()->id()))
+                ->orderBy('start_time')
+                ->get();
+
+            foreach ($todayLectures as $lecture) {
+                $startTime = new DateTime($lecture->start_time);
+                $endTime = new DateTime($lecture->end_time);
+                $interval = $startTime->diff($endTime);
+
                 $status = 'upcoming';
-            } else {
-                $status = 'pending';
-            }
+                if ($startTime <= now() && $endTime >= now()) {
+                    $status = 'ongoing';
+                } else if ($startTime < now()) {
+                    $status = 'finished';
+                } else if ($startTime > now()) {
+                    $status = 'upcoming';
+                } else {
+                    $status = 'pending';
+                }
 
-            $upcomingClasses[] = [
-                'id' => $lecture->course->id,
-                'course' => $lecture->course->name,
-                'code' => $lecture->course->course_code,
-                'program' => $lecture->course->program->name,
-                'level' => $lecture->course->level->name,
-                'room' => $lecture->classroom->name,
-                'type' => 'lecture',
-                'students' => $lecture->course->student_size,
-                'start_time' => $lecture->start_time,
-                'end_time' => $lecture->end_time,
-                'duration' => $interval->format('%h hours %i minutes'),
-                'status' => $status,
-            ];
+                $upcomingClasses[] = [
+                    'id' => $lecture->course->id,
+                    'course' => $lecture->course->name,
+                    'code' => $lecture->course->course_code,
+                    'program' => $lecture->course->program->name,
+                    'level' => $lecture->course->level->name,
+                    'room' => $lecture->classroom->name,
+                    'type' => 'lecture',
+                    'students' => $lecture->course->student_size,
+                    'start_time' => $lecture->start_time,
+                    'end_time' => $lecture->end_time,
+                    'duration' => $interval->format('%h hours %i minutes'),
+                    'status' => $status,
+                ];
+            }
         }
 
         // Get attendance rate data
-        $attendanceData = $this->getAttendanceRateData('week');
+        $attendanceData = $isLecturer ? $this->getAttendanceRateData('week') : ['labels' => [], 'attendance' => []];
 
         // Get metrics data
-        $metricsData = $this->getMetricsData();
+        $metricsData = $isLecturer ? $this->getMetricsData() : [
+            'totalClasses' => 0,
+            'attendanceTodayCount' => 0,
+            'attendanceTodayTarget' => 0,
+            'pendingAttendance' => 0,
+            'totalRecords' => 0,
+        ];
 
         // Get teacher profile data
         $profileData = $this->getTeacherProfileData();
 
         // Upcoming session reminders (next 7 days)
-        $upcomingReminders = SessionReminder::with('timetable.course', 'timetable.classRoom')
-            ->where('teacher_id', auth()->id())
-            ->where('reminder_at', '>=', now())
-            ->whereNull('triggered_at')
-            ->orderBy('reminder_at')
-            ->limit(5)
-            ->get()
-            ->map(function ($r) {
-                return [
-                    'id' => $r->id,
-                    'title' => $r->title,
-                    'reminder_at' => $r->reminder_at->toIso8601String(),
-                    'session' => $r->timetable ? $r->timetable->course?->name . ' – ' . $r->timetable->day : null,
-                ];
-            });
+        $upcomingReminders = $isLecturer
+            ? SessionReminder::with('timetable.course', 'timetable.classRoom')
+                ->where('teacher_id', auth()->id())
+                ->where('reminder_at', '>=', now())
+                ->whereNull('triggered_at')
+                ->orderBy('reminder_at')
+                ->limit(5)
+                ->get()
+                ->map(function ($r) {
+                    return [
+                        'id' => $r->id,
+                        'title' => $r->title,
+                        'reminder_at' => $r->reminder_at->toIso8601String(),
+                        'session' => $r->timetable ? $r->timetable->course?->name . ' – ' . $r->timetable->day : null,
+                    ];
+                })
+            : collect();
 
         return inertia('teacher/dashboard', [
             'todayLectures' => $upcomingClasses,
@@ -91,6 +105,7 @@ class DashboardController extends Controller
             'metricsData' => $metricsData,
             'profileData' => $profileData,
             'upcomingReminders' => $upcomingReminders,
+            'staffType' => $teacher?->staff_type,
         ]);
     }
 

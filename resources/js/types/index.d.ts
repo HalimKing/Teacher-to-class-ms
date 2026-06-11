@@ -23,6 +23,7 @@ export interface NavItem {
     isActive?: boolean;
     subItems?: NavItem[];
     permission?: string;
+    staffTypes?: string[];
 }
 
 export interface SharedData {
