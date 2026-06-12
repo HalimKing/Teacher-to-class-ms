@@ -5,6 +5,7 @@ import {
   ChevronDown,
   User,
 } from 'lucide-react';
+import FaceEnrollmentSection from '@/components/face/FaceEnrollmentSection';
 import AppLayout from '@/layouts/app-layout';
 import TextField from '@mui/material/TextField';
 import ComboBox from '@/components/combobox';
@@ -12,6 +13,7 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 
 import { theme } from '@/components/theme/mui-theme';
 import Button from '@mui/material/Button';
+import { ToastContainer } from 'react-toastify';
 
 interface FormData {
   firstName: string;
@@ -52,6 +54,8 @@ interface Teacher {
   department_id: number;
   title: string;
   staff_type: string;
+  face_enrollment_status?: string;
+  face_registered_at?: string | null;
 }
 
 interface EditTeacherPageProps {
@@ -74,7 +78,7 @@ const staffTypeData = [
 const EditTeacherPage = ({ facultyOptions, teacher }: EditTeacherPageProps) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   
-  const { departments, faculties } = usePage<PageProps>().props;
+  const { departments, faculties, system_settings } = usePage<PageProps>().props;
   const [departmentsOptions, setDepartmentsOptions] = useState<DepartmentOption[]>([]);
   const [initialDepartment, setInitialDepartment] = useState<DepartmentOption | null>(null);
 
@@ -334,6 +338,15 @@ const EditTeacherPage = ({ facultyOptions, teacher }: EditTeacherPageProps) => {
                     </div>
                   </div>
 
+                  <div className="mb-6">
+                    <FaceEnrollmentSection
+                      teacherId={teacher.id}
+                      status={teacher.face_enrollment_status || 'not_enrolled'}
+                      faceRegisteredAt={teacher.face_registered_at || null}
+                      enrollmentRequired={Boolean(system_settings?.attendance?.face_enrollment_required?.value)}
+                    />
+                  </div>
+
                   {/* Form Actions */}
                   <div className="flex items-center justify-end space-x-4">
                     
@@ -355,6 +368,7 @@ const EditTeacherPage = ({ facultyOptions, teacher }: EditTeacherPageProps) => {
           </div>
         </div>
       </ThemeProvider>
+      <ToastContainer />
     </AppLayout>
   );
 };

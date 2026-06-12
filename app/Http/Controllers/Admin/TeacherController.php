@@ -147,6 +147,7 @@ class TeacherController extends Controller
         }
 
         $teacher = Teacher::findOrFail($id);
+        $teacher->setAttribute('face_enrollment_status', $teacher->faceEnrollmentStatus());
         
         return Inertia::render('admin/teacher/edit', 
             compact('facultyOptions', 'teacher'));

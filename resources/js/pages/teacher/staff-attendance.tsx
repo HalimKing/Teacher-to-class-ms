@@ -1,4 +1,6 @@
 import AppLayout from '@/layouts/app-layout';
+import FaceCaptureModal from '@/components/face/FaceCaptureModal';
+import { type FaceCaptureResult } from '@/lib/face-recognition';
 import { type BreadcrumbItem } from '@/types';
 import { Head, usePage } from '@inertiajs/react';
 import { Circle, GoogleMap, LoadScript, Marker } from '@react-google-maps/api';
@@ -58,6 +60,7 @@ interface ApiResponse {
     message: string;
     data?: StaffSchedule[];
     attendance_id?: number;
+    verification_token?: string | null;
 }
 
 const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
@@ -123,8 +126,11 @@ export default function StaffAttendancePage({
     const [isLoadingSchedules, setIsLoadingSchedules] = useState(false);
     const [isMapLoaded, setIsMapLoaded] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+    const [faceModalOpen, setFaceModalOpen] = useState(false);
+    const [pendingAttendanceAction, setPendingAttendanceAction] = useState<'check-in' | 'check-out' | null>(null);
 
     const gpsEnforcementEnabled = Boolean(systemSettings?.attendance?.gps_enforcement_enabled?.value ?? true);
+    const facialRecognitionEnabled = Boolean(systemSettings?.attendance?.facial_recognition_enabled?.value ?? false);
     const defaultLat = Number(systemSettings?.map?.default_campus_lat?.value ?? import.meta.env.VITE_DEFAULT_CAMPUS_LAT ?? 40.7128);
     const defaultLng = Number(systemSettings?.map?.default_campus_lng?.value ?? import.meta.env.VITE_DEFAULT_CAMPUS_LNG ?? -74.006);
     const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
@@ -149,9 +155,11 @@ export default function StaffAttendancePage({
         ? { lat: userLocation.lat, lng: userLocation.lng }
         : selectedScheduleLocation || { lat: defaultLat, lng: defaultLng };
 
-    const fetchTodaySchedules = async () => {
+    const fetchTodaySchedules = async (clearCurrentMessage = true) => {
         setIsLoadingSchedules(true);
-        setMessage(null);
+        if (clearCurrentMessage) {
+            setMessage(null);
+        }
         try {
             const response = await requestJson<ApiResponse>('/teacher/staff-attendance/todays-schedules');
             const schedules = response.data || [];
@@ -165,43 +173,52 @@ export default function StaffAttendancePage({
         }
     };
 
-    const getCurrentLocation = () => {
+    const requestCurrentLocation = (): Promise<{ lat: number; lng: number; accuracy: number }> => {
         if (!navigator.geolocation) {
-            setMessage({ type: 'error', text: 'Geolocation is not supported by your browser.' });
-            return;
+            const message = 'Geolocation is not supported by your browser.';
+            setMessage({ type: 'error', text: message });
+            return Promise.reject(new Error(message));
         }
 
         setIsLoadingLocation(true);
         setMessage(null);
-        navigator.geolocation.getCurrentPosition(
-            (position) => {
-                setUserLocation({
-                    lat: position.coords.latitude,
-                    lng: position.coords.longitude,
-                    accuracy: position.coords.accuracy,
-                });
-                setIsLoadingLocation(false);
-            },
-            (error) => {
-                const errorMessage =
-                    error.code === error.PERMISSION_DENIED
-                        ? 'Location permission denied. Please enable location access.'
-                        : error.code === error.POSITION_UNAVAILABLE
-                          ? 'Location information unavailable.'
-                          : error.code === error.TIMEOUT
-                            ? 'Location request timed out.'
-                            : 'Unable to retrieve your location.';
+        return new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const location = {
+                        lat: position.coords.latitude,
+                        lng: position.coords.longitude,
+                        accuracy: position.coords.accuracy,
+                    };
+                    setUserLocation(location);
+                    setIsLoadingLocation(false);
+                    resolve(location);
+                },
+                (error) => {
+                    const errorMessage =
+                        error.code === error.PERMISSION_DENIED
+                            ? 'Location permission denied. Please enable location access.'
+                            : error.code === error.POSITION_UNAVAILABLE
+                              ? 'Location information unavailable.'
+                              : error.code === error.TIMEOUT
+                                ? 'Location request timed out.'
+                                : 'Unable to retrieve your location.';
 
-                setMessage({ type: 'error', text: errorMessage });
-                setIsLoadingLocation(false);
-            },
-            { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
-        );
+                    setMessage({ type: 'error', text: errorMessage });
+                    setIsLoadingLocation(false);
+                    reject(new Error(errorMessage));
+                },
+                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+            );
+        });
+    };
+
+    const getCurrentLocation = () => {
+        requestCurrentLocation().catch(() => undefined);
     };
 
     useEffect(() => {
         fetchTodaySchedules();
-        getCurrentLocation();
     }, []);
 
     useEffect(() => {
@@ -239,44 +256,155 @@ export default function StaffAttendancePage({
         setIsWithinRange(nextDistance <= Number(selectedSchedule.radius));
     }, [userLocation, selectedSchedule, canVerifyLocation]);
 
+    const submitCheckIn = async (checkInData: Record<string, any>) => {
+        const response = await requestJson<ApiResponse>('/teacher/staff-attendance/check-in', {
+            method: 'POST',
+            body: JSON.stringify(checkInData),
+        });
+
+        setMessage({ type: 'success', text: response.message || 'Staff check-in successful.' });
+        await fetchTodaySchedules(false);
+    };
+
+    const submitCheckOut = async (checkOutData: Record<string, any>) => {
+        const response = await requestJson<ApiResponse>('/teacher/staff-attendance/check-out', {
+            method: 'POST',
+            body: JSON.stringify(checkOutData),
+        });
+
+        setMessage({ type: 'success', text: response.message || 'Staff check-out successful.' });
+        await fetchTodaySchedules(false);
+    };
+
+    const getVerifiedLocationPayload = async (schedule: StaffSchedule) => {
+        const location = await requestCurrentLocation();
+        const scheduleCanVerifyLocation =
+            schedule.coordinates?.lat !== null &&
+            schedule.coordinates?.lat !== undefined &&
+            schedule.coordinates?.lng !== null &&
+            schedule.coordinates?.lng !== undefined &&
+            Number(schedule.radius) > 0;
+
+        if (!scheduleCanVerifyLocation) {
+            if (gpsEnforcementEnabled) {
+                throw new Error('Cannot continue: no valid class room location is configured for this work period.');
+            }
+
+            return {
+                coordinates: {
+                    latitude: location.lat,
+                    longitude: location.lng,
+                    accuracy: location.accuracy,
+                },
+                distance: 0,
+                within_range: true,
+            };
+        }
+
+        const nextDistance = calculateDistance(
+            location.lat,
+            location.lng,
+            Number(schedule.coordinates.lat),
+            Number(schedule.coordinates.lng),
+        );
+        const nextWithinRange = nextDistance <= Number(schedule.radius);
+
+        setDistance(nextDistance);
+        setIsWithinRange(nextWithinRange);
+
+        if (gpsEnforcementEnabled && !nextWithinRange) {
+            throw new Error('Cannot continue: your current location is outside the allowed class room range.');
+        }
+
+        return {
+            coordinates: {
+                latitude: location.lat,
+                longitude: location.lng,
+                accuracy: location.accuracy,
+            },
+            distance: nextDistance,
+            within_range: nextWithinRange,
+        };
+    };
+
     const handleCheckIn = async () => {
         if (!selectedSchedule) {
             setMessage({ type: 'error', text: 'Please select a work period first.' });
             return;
         }
 
-        if (!userLocation) {
-            setMessage({ type: 'error', text: 'Please allow location access before checking in.' });
-            return;
+        setIsLoadingApi(true);
+        setMessage(null);
+        try {
+            if (facialRecognitionEnabled) {
+                setPendingAttendanceAction('check-in');
+                setFaceModalOpen(true);
+            } else {
+                const locationPayload = await getVerifiedLocationPayload(selectedSchedule);
+                const checkInData = {
+                    timetable_id: selectedSchedule.id,
+                    check_in_time: new Date().toISOString(),
+                    ...locationPayload,
+                };
+                await submitCheckIn(checkInData);
+            }
+        } catch (error) {
+            setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Unable to check in.' });
+        } finally {
+            setIsLoadingApi(false);
         }
+    };
 
-        if (gpsEnforcementEnabled && (!canVerifyLocation || !isWithinRange)) {
-            setMessage({ type: 'error', text: 'Cannot check in: your current location is outside the allowed class room range.' });
+    const handleFaceVerified = async (result: FaceCaptureResult) => {
+        if (!pendingAttendanceAction || !selectedSchedule) {
+            setMessage({ type: 'error', text: 'No pending staff attendance request found.' });
             return;
         }
 
         setIsLoadingApi(true);
         setMessage(null);
         try {
-            const response = await requestJson<ApiResponse>('/teacher/staff-attendance/check-in', {
+            const verification = await requestJson<ApiResponse>('/teacher/staff-attendance/verify-face', {
                 method: 'POST',
                 body: JSON.stringify({
                     timetable_id: selectedSchedule.id,
-                    check_in_time: new Date().toISOString(),
-                    coordinates: {
-                        latitude: userLocation.lat,
-                        longitude: userLocation.lng,
-                        accuracy: userLocation.accuracy,
-                    },
-                    distance: distance ?? 0,
-                    within_range: isWithinRange,
+                    face_descriptor: result.descriptor,
+                    quality: result.quality,
                 }),
             });
 
-            setMessage({ type: 'success', text: response.message || 'Staff check-in successful.' });
-            await fetchTodaySchedules();
+            if (!verification.success || !verification.verification_token) {
+                throw new Error(verification.message || 'Face verification failed.');
+            }
+
+            const locationPayload = await getVerifiedLocationPayload(selectedSchedule);
+
+            if (pendingAttendanceAction === 'check-in') {
+                await submitCheckIn({
+                    timetable_id: selectedSchedule.id,
+                    check_in_time: new Date().toISOString(),
+                    ...locationPayload,
+                    face_verification_token: verification.verification_token,
+                });
+            } else {
+                if (!activeSchedule?.attendance_status?.id) {
+                    throw new Error('No active staff check-in found.');
+                }
+
+                await submitCheckOut({
+                    attendance_id: activeSchedule.attendance_status.id,
+                    check_out_time: new Date().toISOString(),
+                    ...locationPayload,
+                    face_verification_token: verification.verification_token,
+                });
+            }
+
+            setPendingAttendanceAction(null);
+            setFaceModalOpen(false);
         } catch (error) {
-            setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Unable to check in.' });
+            const errorMessage = error instanceof Error ? error.message : 'Face verification failed. Please try again.';
+            setMessage({ type: 'error', text: errorMessage });
+            throw new Error(errorMessage);
         } finally {
             setIsLoadingApi(false);
         }
@@ -294,36 +422,20 @@ export default function StaffAttendancePage({
             return;
         }
 
-        if (!userLocation) {
-            setMessage({ type: 'error', text: 'Please allow location access before checking out.' });
-            return;
-        }
-
-        if (gpsEnforcementEnabled && (!canVerifyLocation || !isWithinRange)) {
-            setMessage({ type: 'error', text: 'Cannot check out: your current location is outside the allowed class room range.' });
-            return;
-        }
-
         setIsLoadingApi(true);
         setMessage(null);
         try {
-            const response = await requestJson<ApiResponse>('/teacher/staff-attendance/check-out', {
-                method: 'POST',
-                body: JSON.stringify({
+            if (facialRecognitionEnabled) {
+                setPendingAttendanceAction('check-out');
+                setFaceModalOpen(true);
+            } else {
+                const locationPayload = await getVerifiedLocationPayload(activeSchedule);
+                await submitCheckOut({
                     attendance_id: activeSchedule.attendance_status.id,
                     check_out_time: new Date().toISOString(),
-                    coordinates: {
-                        latitude: userLocation.lat,
-                        longitude: userLocation.lng,
-                        accuracy: userLocation.accuracy,
-                    },
-                    distance: distance ?? 0,
-                    within_range: isWithinRange,
-                }),
-            });
-
-            setMessage({ type: 'success', text: response.message || 'Staff check-out successful.' });
-            await fetchTodaySchedules();
+                    ...locationPayload,
+                });
+            }
         } catch (error) {
             setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Unable to check out.' });
         } finally {
@@ -408,11 +520,11 @@ export default function StaffAttendancePage({
                         <button
                             type="button"
                             onClick={getCurrentLocation}
-                            disabled={isLoadingLocation}
+                            disabled={isLoadingLocation || facialRecognitionEnabled}
                             className="inline-flex items-center justify-center rounded-lg border border-sidebar-border px-4 py-2 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent disabled:opacity-60"
                         >
                             {isLoadingLocation ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                            Refresh Location
+                            {facialRecognitionEnabled ? 'Location Captured After Face Verification' : 'Refresh Location'}
                         </button>
                     </div>
 
@@ -502,6 +614,14 @@ export default function StaffAttendancePage({
                     <SchedulePanel title="All Assigned Work Schedules" schedules={assignedSchedules} emptyText="No work schedules have been assigned." />
                 </div>
             </div>
+            <FaceCaptureModal
+                open={faceModalOpen}
+                onOpenChange={setFaceModalOpen}
+                title="Facial Verification Required"
+                description="Geolocation passed. Please verify your identity with a live face capture before staff attendance is submitted."
+                captureLabel="Verify Face"
+                onCapture={handleFaceVerified}
+            />
             <ToastContainer />
         </AppLayout>
     );

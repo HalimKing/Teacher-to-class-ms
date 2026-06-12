@@ -24,6 +24,10 @@ class SystemSettingsUpdateRequest extends FormRequest
             'early_leave_minutes'         => 'nullable|integer|min:0|max:120',
             'auto_mark_absent_after_end' => 'nullable|boolean',
             'allow_manual_override'       => 'nullable|boolean',
+            'facial_recognition_enabled'  => 'nullable|boolean',
+            'face_match_threshold'         => 'nullable|numeric|min:0.1|max:2',
+            'face_verification_timeout'    => 'nullable|integer|min:30|max:600',
+            'face_enrollment_required'     => 'nullable|boolean',
         ],
         'map' => [
             'google_maps_api_key'          => 'nullable|string|max:512',

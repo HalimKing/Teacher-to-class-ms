@@ -23,12 +23,18 @@ class StaffAttendance extends Model
         'check_in_within_range',
         'check_out_within_range',
         'attendance_status',
+        'face_verified',
+        'face_match_score',
+        'face_verified_at',
     ];
 
     protected $casts = [
         'date' => 'date',
         'check_in_within_range' => 'boolean',
         'check_out_within_range' => 'boolean',
+        'face_verified' => 'boolean',
+        'face_match_score' => 'float',
+        'face_verified_at' => 'datetime',
     ];
 
     public function staff()

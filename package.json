@@ -55,6 +55,7 @@
         "clsx": "^2.1.1",
         "cmdk": "^1.1.1",
         "concurrently": "^9.0.1",
+        "face-api.js": "^0.22.2",
         "globals": "^15.14.0",
         "laravel-vite-plugin": "^2.0",
         "lucide-react": "^0.475.0",

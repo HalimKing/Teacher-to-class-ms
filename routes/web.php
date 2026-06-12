@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\SchoolManagement\DepartmentController;
 use App\Http\Controllers\Admin\SchoolManagement\FacultyController;
 use App\Http\Controllers\Admin\SchoolManagement\ProgramController;
 use App\Http\Controllers\Admin\SchoolManagement\TimeTableController;
+use App\Http\Controllers\Admin\TeacherFaceEnrollmentController;
 use App\Http\Controllers\Admin\TeacherController;
 use App\Http\Controllers\Admin\SystemSettingsController;
 use App\Http\Controllers\Admin\TeacherAttendanceAnalysisController;
@@ -21,6 +22,7 @@ use App\Http\Controllers\TeacherCoursesController;
 use App\Http\Controllers\UserController;
 
 use App\Http\Controllers\Teacher\TimeTableController as TeacherTimeTableController;
+use App\Http\Controllers\Teacher\FaceVerificationController;
 use App\Http\Controllers\Teacher\SessionReminderController;
 use App\Http\Controllers\Teacher\NotificationController;
 use App\Http\Controllers\Teacher\StaffAttendanceController;
@@ -53,6 +55,7 @@ Route::middleware('auth:teacher')->group(function () {
         ->group(
         function () {
             Route::get('/todays-classes', [TeacherAttendanceController::class, 'getTodaysClasses']);
+            Route::post('/verify-face', [FaceVerificationController::class, 'verify']);
             Route::post('/check-in', [TeacherAttendanceController::class, 'checkIn']);
             Route::post('/check-out', [TeacherAttendanceController::class, 'checkOut']);
             Route::get('/history', [TeacherAttendanceController::class, 'getAttendanceHistory']);
@@ -88,6 +91,7 @@ Route::middleware('auth:teacher')->group(function () {
         ->middleware('teacher.staff_type:administrator')
         ->group(function () {
             Route::get('/todays-schedules', [StaffAttendanceController::class, 'todaysSchedules']);
+            Route::post('/verify-face', [FaceVerificationController::class, 'verifyStaff']);
             Route::post('/check-in', [StaffAttendanceController::class, 'checkIn']);
             Route::post('/check-out', [StaffAttendanceController::class, 'checkOut']);
             Route::get('/history', [StaffAttendanceController::class, 'history']);
@@ -171,6 +175,12 @@ Route::middleware(['auth:web', 'verified'])->group(function () {
 
             Route::post('teachers/{teacher}/reset-password', [TeacherController::class, 'resetPassword'])
                 ->name('teachers.reset-password');
+            Route::post('teachers/{teacher}/face-enrollment', [TeacherFaceEnrollmentController::class, 'store'])
+                ->name('teachers.face-enrollment.store')
+                ->middleware('permission:admin.teachers.edit');
+            Route::delete('teachers/{teacher}/face-enrollment', [TeacherFaceEnrollmentController::class, 'destroy'])
+                ->name('teachers.face-enrollment.destroy')
+                ->middleware('permission:admin.teachers.edit');
             Route::get('teachers/template', [TeacherController::class, 'template'])
                 ->name('teachers.template');
             Route::get('teachers/export/{format}', [TeacherController::class, 'export'])

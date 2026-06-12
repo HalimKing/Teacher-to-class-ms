@@ -142,7 +142,9 @@ export default function AdminSystemSettingsPage() {
                                                     key === 'gps_radius_meters' ||
                                                         key === 'late_check_in_minutes' ||
                                                         key === 'early_leave_minutes' ||
-                                                        key === 'max_check_in_distance_meters'
+                                                        key === 'max_check_in_distance_meters' ||
+                                                        key === 'face_match_threshold' ||
+                                                        key === 'face_verification_timeout'
                                                         ? e.target.value === ''
                                                             ? ''
                                                             : Number(e.target.value)

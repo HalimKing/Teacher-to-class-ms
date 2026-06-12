@@ -39,7 +39,21 @@ class Teacher extends Authenticatable
         'employee_id',
         'title',
         'staff_type',
+        'face_descriptor',
+        'face_registered_at',
     ];
+
+    protected $hidden = [
+        'face_descriptor',
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'face_descriptor' => 'encrypted:array',
+            'face_registered_at' => 'datetime',
+        ];
+    }
 
     public function faculty()
     {
@@ -91,5 +105,15 @@ class Teacher extends Authenticatable
     public function isAdministrator(): bool
     {
         return $this->staff_type === self::STAFF_TYPE_ADMINISTRATOR;
+    }
+
+    public function hasFaceEnrollment(): bool
+    {
+        return !empty($this->face_descriptor) && $this->face_registered_at !== null;
+    }
+
+    public function faceEnrollmentStatus(): string
+    {
+        return $this->hasFaceEnrollment() ? 'enrolled' : 'not_enrolled';
     }
 }

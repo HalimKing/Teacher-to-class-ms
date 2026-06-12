@@ -7,6 +7,7 @@ use App\Models\Course;
 use App\Models\SystemSetting;
 use App\Models\TeacherAttendance;
 use App\Models\TimeTable;
+use App\Services\FacialRecognitionService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -128,7 +129,7 @@ class TeacherAttendanceController extends Controller
 
 
 
-    public function checkIn(Request $request)
+    public function checkIn(Request $request, FacialRecognitionService $facialRecognition)
     {
         // Validate request
         $request->validate([
@@ -142,6 +143,7 @@ class TeacherAttendanceController extends Controller
             'check_in_time' => 'required|date',
             'distance' => 'required|numeric',
             'within_range' => 'required|boolean',
+            'face_verification_token' => 'nullable|string',
         ]);
 
         // Select from timetable where id = timetable_id
@@ -183,7 +185,32 @@ class TeacherAttendanceController extends Controller
             ], 400);
         }
 
-        // System setting: enforce GPS — reject if out of range
+        $faceVerificationPayload = null;
+        $teacher = auth('teacher')->user();
+        if ($facialRecognition->isEnabled()) {
+            if (!$teacher->hasFaceEnrollment()) {
+                $facialRecognition->logAttempt($teacher, (int) $request->timetable_id, 'failed', null, 'not_enrolled');
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Face enrollment is required before attendance can be marked.',
+                ], 422);
+            }
+
+            $token = (string) $request->input('face_verification_token', '');
+            $faceVerificationPayload = $facialRecognition->consumeVerificationToken($token, $teacher, (int) $request->timetable_id);
+
+            if (!$faceVerificationPayload) {
+                $facialRecognition->logAttempt($teacher, (int) $request->timetable_id, 'failed', null, 'invalid_or_expired_token');
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Face verification is required before attendance can be marked.',
+                ], 422);
+            }
+        }
+
+        // System setting: enforce GPS after identity has been verified.
         $gpsEnforcement = SystemSetting::getValue('gps_enforcement_enabled', true);
         if ($gpsEnforcement && !$request->within_range) {
             AttendanceActivityLog::logAttempt('attempt_failed', auth('teacher')->id(), (int) $request->timetable_id, [
@@ -218,6 +245,9 @@ class TeacherAttendanceController extends Controller
             $attendance->check_in_distance = $request->distance;
             $attendance->check_in_within_range = $request->within_range;
             $attendance->status = $status;
+            $attendance->face_verified = $faceVerificationPayload !== null;
+            $attendance->face_match_score = $faceVerificationPayload['score'] ?? null;
+            $attendance->face_verified_at = $faceVerificationPayload ? now() : null;
 
             $attendance->save();
 
@@ -227,6 +257,8 @@ class TeacherAttendanceController extends Controller
                 'distance' => $request->distance,
                 'within_range' => $request->within_range,
                 'status' => $status,
+                'face_verified' => $attendance->face_verified,
+                'face_match_score' => $attendance->face_match_score,
             ]);
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => 'Error during check-in: ' . $e->getMessage()], 500);
@@ -240,7 +272,7 @@ class TeacherAttendanceController extends Controller
         ]);
     }
 
-    public function checkOut(Request $request)
+    public function checkOut(Request $request, FacialRecognitionService $facialRecognition)
     {
         $rules = [
             'attendance_id' => 'required|exists:teacher_attendances,id',
@@ -248,6 +280,7 @@ class TeacherAttendanceController extends Controller
             'coordinates.latitude' => 'required|numeric',
             'coordinates.longitude' => 'required|numeric',
             'coordinates.accuracy' => 'required|numeric',
+            'face_verification_token' => 'nullable|string',
         ];
         if (SystemSetting::getValue('gps_enforcement_enabled', true)) {
             $rules['distance'] = 'required|numeric';
@@ -283,6 +316,30 @@ class TeacherAttendanceController extends Controller
                 'success' => false,
                 'message' => 'Class is still on going'
             ], 400);
+        }
+
+        $teacher = auth('teacher')->user();
+        if ($facialRecognition->isEnabled()) {
+            if (!$teacher->hasFaceEnrollment()) {
+                $facialRecognition->logAttempt($teacher, (int) $attendance->timetable_id, 'failed', null, 'not_enrolled');
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Face enrollment is required before attendance check-out can be completed.',
+                ], 422);
+            }
+
+            $token = (string) $request->input('face_verification_token', '');
+            $faceVerificationPayload = $facialRecognition->consumeVerificationToken($token, $teacher, (int) $attendance->timetable_id);
+
+            if (!$faceVerificationPayload) {
+                $facialRecognition->logAttempt($teacher, (int) $attendance->timetable_id, 'failed', null, 'invalid_or_expired_token');
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Face verification is required before attendance check-out can be completed.',
+                ], 422);
+            }
         }
 
         $gpsEnforcement = SystemSetting::getValue('gps_enforcement_enabled', true);

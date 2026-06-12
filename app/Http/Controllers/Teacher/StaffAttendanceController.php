@@ -7,6 +7,7 @@ use App\Models\StaffAttendance;
 use App\Models\SystemSetting;
 use App\Models\Teacher;
 use App\Models\TimeTable;
+use App\Services\FacialRecognitionService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -57,7 +58,7 @@ class StaffAttendanceController extends Controller
         $data = $schedules->map(function (TimeTable $schedule) use ($staff, $date) {
             $attendance = StaffAttendance::where('staff_id', $staff->id)
                 ->where('timetable_id', $schedule->id)
-                ->where('date', $date)
+                ->whereDate('date', $date)
                 ->first();
 
             return $this->formatSchedule($schedule, $attendance);
@@ -70,7 +71,7 @@ class StaffAttendanceController extends Controller
         ]);
     }
 
-    public function checkIn(Request $request): JsonResponse
+    public function checkIn(Request $request, FacialRecognitionService $facialRecognition): JsonResponse
     {
         $validated = $request->validate([
             'timetable_id' => 'required|exists:time_tables,id',
@@ -80,6 +81,7 @@ class StaffAttendanceController extends Controller
             'coordinates.accuracy' => 'required|numeric',
             'distance' => 'required|numeric',
             'within_range' => 'required|boolean',
+            'face_verification_token' => 'nullable|string',
         ]);
 
         $staff = auth('teacher')->user();
@@ -99,8 +101,36 @@ class StaffAttendanceController extends Controller
             ], 400);
         }
 
+        $now = Carbon::now();
+        $startTime = Carbon::parse($timetable->start_time);
+        $lateMinutes = (int) SystemSetting::getValue('late_check_in_minutes', 15);
+        $status = $now->gt($startTime->copy()->addMinutes($lateMinutes)) ? 'late' : 'checked_in';
+        $today = $now->format('Y-m-d');
+        $faceVerificationPayload = null;
+
+        $existingAttendance = StaffAttendance::where('staff_id', $staff->id)
+            ->where('timetable_id', $timetable->id)
+            ->whereDate('date', $today)
+            ->first();
+
+        if ($existingAttendance) {
+            if ($existingAttendance->check_out_time) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Attendance has already been completed for this work period.',
+                ], 400);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'You are already checked in for this work period.',
+                'attendance_id' => $existingAttendance->id,
+                'attendance' => $existingAttendance,
+            ]);
+        }
+
         $activeAttendance = StaffAttendance::where('staff_id', $staff->id)
-            ->where('date', now()->format('Y-m-d'))
+            ->whereDate('date', $today)
             ->whereNull('check_out_time')
             ->first();
 
@@ -111,6 +141,29 @@ class StaffAttendanceController extends Controller
             ], 400);
         }
 
+        if ($facialRecognition->isEnabled()) {
+            if (!$staff->hasFaceEnrollment()) {
+                $facialRecognition->logAttempt($staff, (int) $validated['timetable_id'], 'failed', null, 'not_enrolled');
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Face enrollment is required before staff attendance can be marked.',
+                ], 422);
+            }
+
+            $token = (string) $request->input('face_verification_token', '');
+            $faceVerificationPayload = $facialRecognition->consumeVerificationToken($token, $staff, (int) $validated['timetable_id']);
+
+            if (!$faceVerificationPayload) {
+                $facialRecognition->logAttempt($staff, (int) $validated['timetable_id'], 'failed', null, 'invalid_or_expired_token');
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Face verification is required before staff attendance can be marked.',
+                ], 422);
+            }
+        }
+
         $gpsEnforcement = SystemSetting::getValue('gps_enforcement_enabled', true);
         if ($gpsEnforcement && !$request->boolean('within_range')) {
             return response()->json([
@@ -119,23 +172,21 @@ class StaffAttendanceController extends Controller
             ], 400);
         }
 
-        $now = Carbon::now();
-        $startTime = Carbon::parse($timetable->start_time);
-        $lateMinutes = (int) SystemSetting::getValue('late_check_in_minutes', 15);
-        $status = $now->gt($startTime->copy()->addMinutes($lateMinutes)) ? 'late' : 'checked_in';
-
         $attendance = StaffAttendance::create([
             'staff_id' => $staff->id,
             'timetable_id' => $timetable->id,
             'classroom_id' => $timetable->class_room_id,
             'academic_year_id' => $timetable->academic_year_id,
-            'date' => $now->format('Y-m-d'),
+            'date' => $today,
             'check_in_time' => $now->format('H:i:s'),
             'latitude' => $validated['coordinates']['latitude'],
             'longitude' => $validated['coordinates']['longitude'],
             'check_in_distance' => $validated['distance'],
             'check_in_within_range' => $validated['within_range'],
             'attendance_status' => $status,
+            'face_verified' => $faceVerificationPayload !== null,
+            'face_match_score' => $faceVerificationPayload['score'] ?? null,
+            'face_verified_at' => $faceVerificationPayload ? now() : null,
         ]);
 
         return response()->json([
@@ -146,7 +197,7 @@ class StaffAttendanceController extends Controller
         ]);
     }
 
-    public function checkOut(Request $request): JsonResponse
+    public function checkOut(Request $request, FacialRecognitionService $facialRecognition): JsonResponse
     {
         $validated = $request->validate([
             'attendance_id' => 'required|exists:staff_attendances,id',
@@ -156,6 +207,7 @@ class StaffAttendanceController extends Controller
             'coordinates.accuracy' => 'required|numeric',
             'distance' => 'required|numeric',
             'within_range' => 'required|boolean',
+            'face_verification_token' => 'nullable|string',
         ]);
 
         $staff = auth('teacher')->user();
@@ -175,6 +227,29 @@ class StaffAttendanceController extends Controller
                 'success' => false,
                 'message' => 'Already checked out.',
             ], 400);
+        }
+
+        if ($facialRecognition->isEnabled()) {
+            if (!$staff->hasFaceEnrollment()) {
+                $facialRecognition->logAttempt($staff, (int) $attendance->timetable_id, 'failed', null, 'not_enrolled');
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Face enrollment is required before staff check-out can be completed.',
+                ], 422);
+            }
+
+            $token = (string) $request->input('face_verification_token', '');
+            $faceVerificationPayload = $facialRecognition->consumeVerificationToken($token, $staff, (int) $attendance->timetable_id);
+
+            if (!$faceVerificationPayload) {
+                $facialRecognition->logAttempt($staff, (int) $attendance->timetable_id, 'failed', null, 'invalid_or_expired_token');
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Face verification is required before staff check-out can be completed.',
+                ], 422);
+            }
         }
 
         $gpsEnforcement = SystemSetting::getValue('gps_enforcement_enabled', true);
@@ -213,7 +288,7 @@ class StaffAttendanceController extends Controller
             : now()->format('Y-m-d');
 
         $records = StaffAttendance::where('staff_id', auth('teacher')->id())
-            ->where('date', $date)
+            ->whereDate('date', $date)
             ->with(['classroom', 'timetable'])
             ->orderByDesc('check_in_time')
             ->get()

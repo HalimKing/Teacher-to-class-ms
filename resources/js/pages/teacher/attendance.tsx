@@ -1,4 +1,6 @@
 import AppLayout from '@/layouts/app-layout';
+import FaceCaptureModal from '@/components/face/FaceCaptureModal';
+import { type FaceCaptureResult } from '@/lib/face-recognition';
 import { BreadcrumbItem } from '@/types';
 import { usePage } from '@inertiajs/react';
 import { Circle, GoogleMap, LoadScript, Marker } from '@react-google-maps/api';
@@ -52,6 +54,7 @@ interface ApiResponse {
     message: string;
     data?: any;
     attendance_id?: number;
+    verification_token?: string | null;
 }
 
 // Utilities (keep as before)
@@ -232,6 +235,8 @@ export default function AttendancePage() {
     const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
     const [checkInTime, setCheckInTime] = useState<string | null>(null);
     const [activeAttendanceId, setActiveAttendanceId] = useState<number | null>(null);
+    const [faceModalOpen, setFaceModalOpen] = useState(false);
+    const [pendingAttendanceAction, setPendingAttendanceAction] = useState<'check-in' | 'check-out' | null>(null);
     const [timeValidation, setTimeValidation] = useState<{
         isBeforeStart: boolean;
         isAfterEnd: boolean;
@@ -251,6 +256,7 @@ export default function AttendancePage() {
     });
 
     const apiKey = (systemSettings?.map?.google_maps_api_key?.value as string) || import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+    const facialRecognitionEnabled = Boolean(systemSettings?.attendance?.facial_recognition_enabled?.value ?? false);
 
     const fetchTodaysClasses = async () => {
         setIsLoadingClasses(true);
@@ -352,7 +358,6 @@ export default function AttendancePage() {
     }, [userLocation, selectedClass, validatePresence, updateTimeValidation]);
 
     useEffect(() => {
-        getCurrentLocation();
         fetchTodaysClasses();
         fetchAttendanceRecords();
     }, []);
@@ -383,44 +388,53 @@ export default function AttendancePage() {
         }
     }, [todaysClasses, attendanceRecords]);
 
-    const getCurrentLocation = () => {
+    const requestCurrentLocation = (): Promise<{ lat: number; lng: number; accuracy: number }> => {
         if (!navigator.geolocation) {
-            setLocationError('Geolocation is not supported by your browser');
-            return;
+            const message = 'Geolocation is not supported by your browser';
+            setLocationError(message);
+            return Promise.reject(new Error(message));
         }
 
         setIsLoadingLocation(true);
         setLocationError(null);
 
-        navigator.geolocation.getCurrentPosition(
-            (pos) => {
-                const loc = {
-                    lat: pos.coords.latitude,
-                    lng: pos.coords.longitude,
-                    accuracy: pos.coords.accuracy,
-                };
-                setUserLocation(loc);
-                setMapCenter({ lat: loc.lat, lng: loc.lng });
-                setIsLoadingLocation(false);
-            },
-            (error) => {
-                setIsLoadingLocation(false);
-                let errorMessage = 'Unable to retrieve your location';
-                switch (error.code) {
-                    case error.PERMISSION_DENIED:
-                        errorMessage = 'Location permission denied. Please enable location access.';
-                        break;
-                    case error.POSITION_UNAVAILABLE:
-                        errorMessage = 'Location information unavailable.';
-                        break;
-                    case error.TIMEOUT:
-                        errorMessage = 'Location request timed out.';
-                        break;
-                }
-                setLocationError(errorMessage);
-            },
-            { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
-        );
+        return new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    const loc = {
+                        lat: pos.coords.latitude,
+                        lng: pos.coords.longitude,
+                        accuracy: pos.coords.accuracy,
+                    };
+                    setUserLocation(loc);
+                    setMapCenter({ lat: loc.lat, lng: loc.lng });
+                    setIsLoadingLocation(false);
+                    resolve(loc);
+                },
+                (error) => {
+                    setIsLoadingLocation(false);
+                    let errorMessage = 'Unable to retrieve your location';
+                    switch (error.code) {
+                        case error.PERMISSION_DENIED:
+                            errorMessage = 'Location permission denied. Please enable location access.';
+                            break;
+                        case error.POSITION_UNAVAILABLE:
+                            errorMessage = 'Location information unavailable.';
+                            break;
+                        case error.TIMEOUT:
+                            errorMessage = 'Location request timed out.';
+                            break;
+                    }
+                    setLocationError(errorMessage);
+                    reject(new Error(errorMessage));
+                },
+                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+            );
+        });
+    };
+
+    const getCurrentLocation = () => {
+        requestCurrentLocation().catch(() => undefined);
     };
 
     const handleClassSelect = (clsId: string) => {
@@ -443,6 +457,65 @@ export default function AttendancePage() {
                 setMapCenter(cls.coordinates);
             }
         }
+    };
+
+    const submitCheckIn = async (checkInData: Record<string, any>) => {
+        const response = await api.post<ApiResponse>('/teacher/attendance/check-in', checkInData);
+
+        if (response.status === 200) {
+            const now = new Date();
+            const time = now.toLocaleTimeString();
+            setCheckInTime(time);
+            setCurrentStatus('checked_in');
+            setCheckedInClass(selectedClass);
+            setActiveAttendanceId(response.data.attendance_id || Date.now());
+            setApiSuccess('Successfully checked in!');
+
+            if (selectedClass && userLocation) {
+                setAttendanceRecords((prev) => [
+                    {
+                        id: response.data.attendance_id || Date.now(),
+                        timetable_id: selectedClass.timetable_id,
+                        course_id: selectedClass.id,
+                        date: now.toLocaleDateString(),
+                        check_in: time,
+                        check_out: null,
+                        status: 'pending',
+                        location_match: true,
+                        coordinates: userLocation,
+                    },
+                    ...prev,
+                ]);
+            }
+
+            fetchAttendanceRecords();
+            fetchTodaysClasses();
+        } else {
+            setApiError(response.data.message || 'Failed to check in');
+        }
+    };
+
+    const getVerifiedLocationPayload = async (targetClass: ClassLocation) => {
+        const loc = await requestCurrentLocation();
+        const nextDistance = calculateDistance(loc.lat, loc.lng, targetClass.coordinates.lat, targetClass.coordinates.lng);
+        const nextWithinRange = nextDistance <= targetClass.radius;
+
+        setDistance(nextDistance);
+        setIsWithinRange(nextWithinRange);
+
+        if (gpsEnforcementEnabled && !nextWithinRange) {
+            throw new Error('Cannot continue: Location is out of range');
+        }
+
+        return {
+            coordinates: {
+                latitude: loc.lat,
+                longitude: loc.lng,
+                accuracy: loc.accuracy,
+            },
+            distance: nextDistance,
+            within_range: nextWithinRange,
+        };
     };
 
     const handleCheckIn = async () => {
@@ -471,66 +544,28 @@ export default function AttendancePage() {
             return;
         }
 
-        if (!isWithinRange || !userLocation) {
-            setApiError('Cannot check in: Location is out of range');
-            return;
-        }
-
         setIsLoadingApi(true);
         setApiError(null);
         setApiSuccess(null);
 
         try {
-            const now = new Date();
-            const checkInData = {
-                timetable_id: selectedClass.timetable_id,
-                course_id: selectedClass.id,
-                course_name: selectedClass.name,
-                class_room: selectedClass.building,
-                check_in_time: now.toISOString(),
-                coordinates: {
-                    latitude: userLocation.lat,
-                    longitude: userLocation.lng,
-                    accuracy: userLocation.accuracy,
-                },
-                distance: distance,
-                within_range: isWithinRange,
-                status: 'present',
-                location_match: true,
-            };
-
-            console.log('Late_chek in time: ', lateCheckInTime);
-            
-
-            const response = await api.post<ApiResponse>('/teacher/attendance/check-in', checkInData);
-
-            if (response.status === 200) {
-                const time = now.toLocaleTimeString();
-                setCheckInTime(time);
-                setCurrentStatus('checked_in');
-                setCheckedInClass(selectedClass);
-                setActiveAttendanceId(response.data.attendance_id || Date.now());
-                setApiSuccess('Successfully checked in!');
-
-                setAttendanceRecords((prev) => [
-                    {
-                        id: response.data.attendance_id || Date.now(),
-                        timetable_id: selectedClass.timetable_id,
-                        course_id: selectedClass.id,
-                        date: now.toLocaleDateString(),
-                        check_in: time,
-                        check_out: null,
-                        status: 'pending',
-                        location_match: true,
-                        coordinates: userLocation,
-                    },
-                    ...prev,
-                ]);
-
-                fetchAttendanceRecords();
-                fetchTodaysClasses();
+            if (facialRecognitionEnabled) {
+                setPendingAttendanceAction('check-in');
+                setFaceModalOpen(true);
             } else {
-                setApiError(response.data.message || 'Failed to check in');
+                const locationPayload = await getVerifiedLocationPayload(selectedClass);
+                const now = new Date();
+                const checkInData = {
+                    timetable_id: selectedClass.timetable_id,
+                    course_id: selectedClass.id,
+                    course_name: selectedClass.name,
+                    class_room: selectedClass.building,
+                    check_in_time: now.toISOString(),
+                    ...locationPayload,
+                    status: 'present',
+                    location_match: true,
+                };
+                await submitCheckIn(checkInData);
             }
         } catch (error: any) {
             console.error('Check-in error:', error);
@@ -540,77 +575,34 @@ export default function AttendancePage() {
         }
     };
 
-    const handleCheckOut = async () => {
-        // Check if selected class matches the checked-in class
-        const isCorrectClassSelected = selectedClass && checkedInClass && selectedClass.id === checkedInClass.id;
+    const submitCheckOut = async (checkOutData: Record<string, any>) => {
+        const response = await api.post<ApiResponse>('/teacher/attendance/check-out', checkOutData);
 
-        if (currentStatus !== 'checked_in' || !activeAttendanceId || !userLocation || !isCorrectClassSelected) {
-            setApiError('Cannot check out: Please select the same class you checked in for');
-            return;
-        }
+        if (response.data.success) {
+            const time = new Date().toLocaleTimeString();
+            setCurrentStatus('checked_out');
+            setCheckedInClass(null);
+            setActiveAttendanceId(null);
+            setCheckInTime(null);
+            setApiSuccess('Successfully checked out!');
 
-        if (selectedClass?.is_completed) {
-            setApiError('Attendance already completed for this session');
-            return;
-        }
+            setAttendanceRecords((prev) => {
+                const updated = [...prev];
+                if (updated.length > 0) {
+                    updated[0] = {
+                        ...updated[0],
+                        check_out: time,
+                        status: 'present',
+                        is_completed: true,
+                    };
+                }
+                return updated;
+            });
 
-        // Check if check-out is allowed (class has ended but within grace period)
-        if (!timeValidation.isCheckoutAllowed && !timeValidation.isAfterCheckoutDeadline) {
-            setApiError('Check-out is only allowed after class ends. Please wait until the class is over.');
-            return;
-        }
+            await fetchAttendanceRecords();
+            await fetchTodaysClasses();
 
-        // Check if check-out deadline has passed
-        if (timeValidation.isAfterCheckoutDeadline) {
-            setApiError('Check-out deadline has passed. Please contact administration.');
-            return;
-        }
-
-        setIsLoadingApi(true);
-        setApiError(null);
-        setApiSuccess(null);
-
-        try {
-            const now = new Date();
-            const checkOutData = {
-                attendance_id: activeAttendanceId,
-                check_out_time: now.toISOString(),
-                coordinates: {
-                    latitude: userLocation.lat,
-                    longitude: userLocation.lng,
-                    accuracy: userLocation.accuracy,
-                },
-                status: 'present',
-                distance: distance,
-                within_range: isWithinRange,
-            };
-
-            const response = await api.post<ApiResponse>('/teacher/attendance/check-out', checkOutData);
-
-            if (response.data.success) {
-                const time = now.toLocaleTimeString();
-                setCurrentStatus('checked_out');
-                setCheckedInClass(null);
-                setActiveAttendanceId(null);
-                setCheckInTime(null);
-                setApiSuccess('Successfully checked out!');
-
-                setAttendanceRecords((prev) => {
-                    const updated = [...prev];
-                    if (updated.length > 0) {
-                        updated[0] = {
-                            ...updated[0],
-                            check_out: time,
-                            status: 'present',
-                            is_completed: true,
-                        };
-                    }
-                    return updated;
-                });
-
-                await fetchAttendanceRecords();
-                await fetchTodaysClasses();
-
+            if (selectedClass) {
                 const updatedClasses = [...todaysClasses];
                 const classIndex = updatedClasses.findIndex((cls) => cls.id === selectedClass.id);
 
@@ -639,8 +631,116 @@ export default function AttendancePage() {
                         updateTimeValidation(updatedClasses[0]);
                     }
                 }
+            }
+        } else {
+            setApiError(response.data.message || 'Failed to check out');
+        }
+    };
+
+    const handleFaceVerified = async (result: FaceCaptureResult) => {
+        if (!pendingAttendanceAction || !selectedClass) {
+            setApiError('No pending attendance request found.');
+            return;
+        }
+
+        setIsLoadingApi(true);
+        setApiError(null);
+        setApiSuccess(null);
+
+        try {
+            const verification = await api.post<ApiResponse>('/teacher/attendance/verify-face', {
+                timetable_id: selectedClass.timetable_id,
+                face_descriptor: result.descriptor,
+                quality: result.quality,
+            });
+
+            if (!verification.data.success || !verification.data.verification_token) {
+                throw new Error(verification.data.message || 'Face verification failed.');
+            }
+
+            const locationPayload = await getVerifiedLocationPayload(selectedClass);
+
+            if (pendingAttendanceAction === 'check-in') {
+                const now = new Date();
+                await submitCheckIn({
+                    timetable_id: selectedClass.timetable_id,
+                    course_id: selectedClass.id,
+                    course_name: selectedClass.name,
+                    class_room: selectedClass.building,
+                    check_in_time: now.toISOString(),
+                    ...locationPayload,
+                    status: 'present',
+                    location_match: true,
+                    face_verification_token: verification.data.verification_token,
+                });
             } else {
-                setApiError(response.data.message || 'Failed to check out');
+                if (!activeAttendanceId) {
+                    throw new Error('No active attendance found for check-out.');
+                }
+
+                await submitCheckOut({
+                    attendance_id: activeAttendanceId,
+                    check_out_time: new Date().toISOString(),
+                    ...locationPayload,
+                    status: 'present',
+                    face_verification_token: verification.data.verification_token,
+                });
+            }
+
+            setPendingAttendanceAction(null);
+            setFaceModalOpen(false);
+        } catch (error: any) {
+            console.error('Face verification error:', error);
+            const message = error.response?.data?.message || error.message || 'Face verification failed. Please try again.';
+            setApiError(message);
+            throw new Error(message);
+        } finally {
+            setIsLoadingApi(false);
+        }
+    };
+
+    const handleCheckOut = async () => {
+        // Check if selected class matches the checked-in class
+        const isCorrectClassSelected = selectedClass && checkedInClass && selectedClass.id === checkedInClass.id;
+
+        if (currentStatus !== 'checked_in' || !activeAttendanceId || !isCorrectClassSelected) {
+            setApiError('Cannot check out: Please select the same class you checked in for');
+            return;
+        }
+
+        if (selectedClass?.is_completed) {
+            setApiError('Attendance already completed for this session');
+            return;
+        }
+
+        // Check if check-out is allowed (class has ended but within grace period)
+        if (!timeValidation.isCheckoutAllowed && !timeValidation.isAfterCheckoutDeadline) {
+            setApiError('Check-out is only allowed after class ends. Please wait until the class is over.');
+            return;
+        }
+
+        // Check if check-out deadline has passed
+        if (timeValidation.isAfterCheckoutDeadline) {
+            setApiError('Check-out deadline has passed. Please contact administration.');
+            return;
+        }
+
+        setIsLoadingApi(true);
+        setApiError(null);
+        setApiSuccess(null);
+
+        try {
+            if (facialRecognitionEnabled) {
+                setPendingAttendanceAction('check-out');
+                setFaceModalOpen(true);
+            } else {
+                const locationPayload = await getVerifiedLocationPayload(selectedClass);
+                await submitCheckOut({
+                    attendance_id: activeAttendanceId,
+                    check_out_time: new Date().toISOString(),
+                    ...locationPayload,
+                    status: 'present',
+                });
             }
         } catch (error: any) {
             console.error('Check-out error:', error);
@@ -739,7 +839,6 @@ export default function AttendancePage() {
     const gpsEnforcementEnabled = Boolean(systemSettings?.attendance?.gps_enforcement_enabled?.value ?? true);
 
     const isCheckInDisabled =
-        (gpsEnforcementEnabled ? !isWithinRange : false) ||
         currentStatus !== 'not_checked_in' ||
         isLoadingApi ||
         !selectedClass ||
@@ -1180,11 +1279,11 @@ export default function AttendancePage() {
 
                                     <button
                                         onClick={getCurrentLocation}
-                                        disabled={isLoadingLocation}
+                                        disabled={isLoadingLocation || facialRecognitionEnabled}
                                         className="flex w-full items-center justify-center gap-2 rounded-lg bg-slate-100 px-4 py-2.5 font-medium text-slate-700 transition-colors hover:bg-slate-200 disabled:opacity-50"
                                     >
                                         {isLoadingLocation ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
-                                        Refresh My Location
+                                        {facialRecognitionEnabled ? 'Location Captured After Face Verification' : 'Refresh My Location'}
                                     </button>
 
                                     {locationError && (
@@ -1346,6 +1445,14 @@ export default function AttendancePage() {
                     </div>
                 </div>
             </div>
+            <FaceCaptureModal
+                open={faceModalOpen}
+                onOpenChange={setFaceModalOpen}
+                title="Facial Verification Required"
+                description="Geolocation passed. Please verify your identity with a live face capture before attendance is submitted."
+                captureLabel="Verify Face"
+                onCapture={handleFaceVerified}
+            />
         </AppLayout>
     );
 }

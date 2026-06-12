@@ -5,6 +5,7 @@ import {
   ChevronDown,
   User,
 } from 'lucide-react';
+import FaceEnrollmentSection from '@/components/face/FaceEnrollmentSection';
 import AppLayout from '@/layouts/app-layout';
 import TextField from '@mui/material/TextField';
 import ComboBox from '@/components/combobox';
@@ -55,7 +56,7 @@ const staffTypeData = [
 const CreateTeacherPage = ({facultyOptions}: {facultyOptions: FacultyOption[]}) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   
-  const { flash } = usePage<PageProps>().props;
+  const { flash, system_settings } = usePage<PageProps>().props;
   const [departmentsOptions, setDepartments] = useState<{label: string; value: string}[]>([]);
 
   const { data, setData, post, processing, errors, reset } = useForm<FormData>({
@@ -316,6 +317,10 @@ const CreateTeacherPage = ({facultyOptions}: {facultyOptions: FacultyOption[]}) 
                       )}
                     </div>
                   </div>
+                </div>
+
+                <div className="mb-6">
+                  <FaceEnrollmentSection enrollmentRequired={Boolean(system_settings?.attendance?.face_enrollment_required?.value)} />
                 </div>
 
                 {/* Form Actions */}

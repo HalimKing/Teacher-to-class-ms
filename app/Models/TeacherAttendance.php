@@ -28,8 +28,20 @@ class TeacherAttendance extends Model
         'check_out_latitude',
         'check_out_longitude',
         'status',
+        'face_verified',
+        'face_match_score',
+        'face_verified_at',
 
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'face_verified' => 'boolean',
+            'face_match_score' => 'float',
+            'face_verified_at' => 'datetime',
+        ];
+    }
 
     public function teacher()
     {
