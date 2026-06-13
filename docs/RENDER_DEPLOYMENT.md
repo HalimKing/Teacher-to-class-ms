@@ -291,11 +291,50 @@ You are on Render **Native** PHP runtime. Switch the service to **Docker** and s
 
 ### 500 error after deploy
 
-1. Check **Logs** in Render dashboard
-2. Verify `APP_KEY` is set
-3. Verify `DB_URL` uses the **Internal** database URL (not External) for services in the same region
-4. Run migrations: `php artisan migrate --force`
-5. Shell: `php artisan config:clear`
+**Quick check:** open `https://your-app.onrender.com/up`
+
+| `/up` | `/` (home) | Likely cause |
+|-------|------------|--------------|
+| 200 OK | 500 | Missing `APP_KEY`, database not linked, or migrations not run (sessions table missing) |
+| 500 | 500 | Bootstrap/config issue — check `APP_KEY`, corrupt config cache |
+
+#### Fix checklist (Render dashboard → Environment)
+
+1. **`APP_KEY`** — must be set (32-char base64 string). Generate locally:
+   ```bash
+   php artisan key:generate --show
+   ```
+2. **`APP_URL`** — exact public URL, e.g. `https://teacher-to-class-ms-4.onrender.com` (no trailing slash)
+3. **`DB_CONNECTION`** = `pgsql`
+4. **`DB_URL`** — paste the PostgreSQL **Internal** connection string from your Render database (not External)
+5. If Render only shows `DATABASE_URL`, set **`DB_URL`** to the same Internal URL (the app reads both for PostgreSQL)
+6. **`SESSION_DRIVER`** = `database`, **`CACHE_STORE`** = `database`, **`QUEUE_CONNECTION`** = `database`
+7. **`LOG_CHANNEL`** = `stderr` (so errors appear in Render logs)
+
+#### Run migrations
+
+Shell tab on the web service (or redeploy after linking DB):
+
+```bash
+php artisan migrate --force --no-interaction
+php artisan db:seed --class=PermissionSeeder --force
+php artisan db:seed --class=SystemSettingsSeeder --force
+```
+
+#### See the actual error
+
+Temporarily set **`APP_DEBUG=true`**, reload `/`, then check **Logs**. Set back to `false` after fixing.
+
+Also run:
+
+```bash
+php artisan config:clear
+php artisan migrate:status
+```
+
+#### Apache `AH00558 ServerName` warning
+
+Harmless. The Dockerfile sets `ServerName localhost` to suppress it on newer deploys.
 
 ### Assets missing / blank page
 

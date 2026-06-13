@@ -37,6 +37,10 @@ services:
         fromDatabase:
           name: teacher-to-class-db
           property: connectionString
+      - key: DATABASE_URL
+        fromDatabase:
+          name: teacher-to-class-db
+          property: connectionString
       - key: APP_KEY
         generateValue: true
       - key: APP_URL
@@ -66,6 +70,10 @@ services:
         fromDatabase:
           name: teacher-to-class-db
           property: connectionString
+      - key: DATABASE_URL
+        fromDatabase:
+          name: teacher-to-class-db
+          property: connectionString
       - key: APP_KEY
         fromService:
           type: web
@@ -90,6 +98,10 @@ services:
       - key: DB_CONNECTION
         value: pgsql
       - key: DB_URL
+        fromDatabase:
+          name: teacher-to-class-db
+          property: connectionString
+      - key: DATABASE_URL
         fromDatabase:
           name: teacher-to-class-db
           property: connectionString

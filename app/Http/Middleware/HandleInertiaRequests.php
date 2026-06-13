@@ -79,10 +79,14 @@ class HandleInertiaRequests extends Middleware
                 ? $user->unreadNotifications()->count()
                 : 0,
 
-            'ziggy' => fn(): array => [
-                ...(new Ziggy)->toArray(),
-                'location' => $request->url(),
-            ],
+            'ziggy' => fn (): array => rescue(
+                fn () => [
+                    ...(new Ziggy)->toArray(),
+                    'location' => $request->url(),
+                ],
+                fn () => ['location' => $request->url()],
+                report: false,
+            ),
 
             'sidebarOpen' => ! $request->hasCookie('sidebar_state')
                 || $request->cookie('sidebar_state') === 'true',
@@ -93,7 +97,11 @@ class HandleInertiaRequests extends Middleware
             ],
 
             // Expose system settings (grouped) to the frontend so UI can react to changes
-            'system_settings' => fn() => SystemSetting::getGrouped(),
+            'system_settings' => fn () => rescue(
+                fn () => SystemSetting::getGrouped(),
+                fn () => [],
+                report: false,
+            ),
         ];
     }
 }

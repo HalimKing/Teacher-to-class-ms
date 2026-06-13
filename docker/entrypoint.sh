@@ -21,10 +21,26 @@ if [ ! -e public/storage ]; then
     php artisan storage:link --force >/dev/null 2>&1 || true
 fi
 
-if [ -n "${APP_KEY:-}" ] && [ "${APP_ENV:-local}" = "production" ]; then
-    php artisan config:cache || true
-    php artisan route:cache || true
-    php artisan view:cache || true
+if [ "${APP_ENV:-local}" = "production" ] && [ -z "${APP_KEY:-}" ]; then
+    echo "FATAL: APP_KEY is not set. Add it in Render Environment (generate with: php artisan key:generate --show)"
+    exit 1
+fi
+
+if [ "${SESSION_DRIVER:-database}" = "database" ] && [ -z "${DB_URL:-}" ] && [ -z "${DATABASE_URL:-}" ]; then
+    echo "FATAL: SESSION_DRIVER=database requires DB_URL or DATABASE_URL (link a PostgreSQL database on Render)."
+    exit 1
+fi
+
+if [ -n "${APP_KEY:-}" ]; then
+    # Database must exist before sessions/cache/system settings work.
+    if [ -n "${DB_URL:-}" ] || [ -n "${DATABASE_URL:-}" ]; then
+        php artisan migrate --force --no-interaction
+    fi
+
+    if [ "${APP_ENV:-local}" = "production" ]; then
+        php artisan config:cache || true
+        php artisan view:cache || true
+    fi
 fi
 
 exec "$@"
