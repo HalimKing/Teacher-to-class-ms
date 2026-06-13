@@ -1,12 +1,13 @@
 import { PlaceholderPattern } from '@/components/ui/placeholder-pattern';
 import AppLayout from '@/layouts/app-layout';
+import { can } from '@/lib/can';
 import { type BreadcrumbItem } from '@/types';
-import { Head, usePage } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import {
   GraduationCap, Users, Star, BookOpen, Activity, Search,
   MapPin, UserPlus, FileText, Bell, Play, Upload,
   GraduationCap as GradIcon, Calendar, Building, Filter,
-  TrendingUp, Clock, BarChart3, PieChart, Download
+  TrendingUp, Clock, BarChart3, PieChart, Download, BarChart, ArrowRight
 } from 'lucide-react';
 import { useState, useMemo, useEffect } from 'react';
 import axios from 'axios';
@@ -338,6 +339,45 @@ export default function Dashboard({ stats, recentActivities, facultyDistribution
             );
           })}
         </div>
+
+        {(can('admin.attendance.view') || can('admin.staff-attendance.view')) && (
+          <div className="grid gap-4 md:grid-cols-2">
+            {can('admin.attendance.view') && (
+              <Link
+                href="/admin/attendance"
+                className="group rounded-xl border border-sidebar-border/70 bg-white p-5 shadow-sm transition hover:border-blue-300 hover:shadow-md dark:border-sidebar-border dark:bg-sidebar-accent"
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="mb-3 inline-flex rounded-lg bg-blue-50 p-2 text-blue-600 dark:bg-blue-950/40">
+                      <BarChart3 className="h-5 w-5" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-sidebar-foreground">Teacher Attendance Report</h3>
+                    <p className="mt-1 text-sm text-sidebar-foreground/60">View lecturer attendance records, analytics, and exports.</p>
+                  </div>
+                  <ArrowRight className="h-5 w-5 text-sidebar-foreground/40 transition group-hover:text-blue-600" />
+                </div>
+              </Link>
+            )}
+            {can('admin.staff-attendance.view') && (
+              <Link
+                href="/admin/settings-reports/staff-attendance-reports"
+                className="group rounded-xl border border-sidebar-border/70 bg-white p-5 shadow-sm transition hover:border-purple-300 hover:shadow-md dark:border-sidebar-border dark:bg-sidebar-accent"
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="mb-3 inline-flex rounded-lg bg-purple-50 p-2 text-purple-600 dark:bg-purple-950/40">
+                      <BarChart className="h-5 w-5" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-sidebar-foreground">Administrator Attendance Report</h3>
+                    <p className="mt-1 text-sm text-sidebar-foreground/60">Track administrative staff attendance, verification, and trends.</p>
+                  </div>
+                  <ArrowRight className="h-5 w-5 text-sidebar-foreground/40 transition group-hover:text-purple-600" />
+                </div>
+              </Link>
+            )}
+          </div>
+        )}
 
         {/* Time Filter Section */}
         <div className="bg-white dark:bg-sidebar-accent rounded-xl border border-sidebar-border/70 dark:border-sidebar-border p-6">

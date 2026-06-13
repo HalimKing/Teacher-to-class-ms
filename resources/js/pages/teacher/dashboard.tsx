@@ -297,12 +297,20 @@ export default function TeacherDashboard({
                         <p className="mt-2 max-w-2xl text-sm text-sidebar-foreground/70 dark:text-sidebar-foreground/70">
                             Your account is configured as administrative staff. Lecturer class/course attendance tools are hidden for this staff type.
                         </p>
-                        <Link
-                            href="/teacher/staff-attendance"
-                            className="mt-5 inline-flex rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-700"
-                        >
-                            Open Staff Attendance
-                        </Link>
+                        <div className="mt-5 flex flex-wrap gap-3">
+                            <Link
+                                href="/teacher/staff-attendance"
+                                className="inline-flex rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-700"
+                            >
+                                Open Staff Attendance
+                            </Link>
+                            <Link
+                                href="/teacher/staff-reports"
+                                className="inline-flex rounded-lg border border-purple-200 bg-white px-4 py-2 text-sm font-medium text-purple-700 transition-colors hover:bg-purple-50 dark:border-purple-900 dark:bg-sidebar-accent dark:text-purple-300"
+                            >
+                                View Attendance Report
+                            </Link>
+                        </div>
                     </div>
                 ) : (
                     <>

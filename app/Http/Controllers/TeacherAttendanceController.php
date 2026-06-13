@@ -7,6 +7,7 @@ use App\Models\Course;
 use App\Models\SystemSetting;
 use App\Models\TeacherAttendance;
 use App\Models\TimeTable;
+use App\Services\AttendanceTimingService;
 use App\Services\FacialRecognitionService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -14,6 +15,10 @@ use Inertia\Inertia;
 
 class TeacherAttendanceController extends Controller
 {
+    public function __construct(
+        private AttendanceTimingService $timingService
+    ) {}
+
     public function index()
     {
         // $Lectures = TimeTable::todaysLectures();
@@ -116,6 +121,12 @@ class TeacherAttendanceController extends Controller
                 'attendance_taken' => $attendanceTaken,
                 'attendance_status' => $attendanceStatus,
                 'is_completed' => $attendance && $attendance->check_out_time !== null,
+                'timing' => $this->timingService->buildScheduleTiming(
+                    (string) $lecture->start_time,
+                    (string) $lecture->end_time,
+                    null,
+                    AttendanceTimingService::ROLE_TEACHER
+                ),
             ];
         }
 
@@ -170,18 +181,22 @@ class TeacherAttendanceController extends Controller
             ], 400);
         }
 
-        // Check if class start_time => current_time
-        $classStartTime = Carbon::parse($timetable->start_time);
-        if ($classStartTime->gt(Carbon::now())) {
+        $now = Carbon::now();
+        $scheduledStart = $this->timingService->parseScheduleTime((string) $timetable->start_time, $now);
+
+        if (!$this->timingService->canCheckInNow($now, $scheduledStart, AttendanceTimingService::ROLE_TEACHER)) {
+            $allowedCheckIn = $this->timingService->getAllowedCheckInTime($scheduledStart, AttendanceTimingService::ROLE_TEACHER);
             AttendanceActivityLog::logAttempt('attempt_failed', auth('teacher')->id(), (int) $request->timetable_id, [
-                'reason' => 'class_not_started',
+                'reason' => 'check_in_not_open',
                 'coordinates' => $request->coordinates,
                 'distance' => $request->distance,
                 'within_range' => $request->within_range,
             ]);
+
             return response()->json([
                 'success' => false,
-                'message' => 'Class has not started yet'
+                'message' => 'Attendance is not open yet. You can check in from ' . $allowedCheckIn->format('h:i A') . '.',
+                'allowed_check_in_time' => $allowedCheckIn->format('H:i:s'),
             ], 400);
         }
 
@@ -225,11 +240,8 @@ class TeacherAttendanceController extends Controller
             ], 400);
         }
 
-        $now = Carbon::now();
-        // Use lateCheckInMinute from request if provided, else fallback to system setting
-        $lateMinutes = $request->has('lateCheckInMinute') ? (int) $request->lateCheckInMinute : (int) SystemSetting::getValue('late_check_in_minutes', 15);
-        $lateThreshold = $classStartTime->copy()->addMinutes($lateMinutes);
-        $status = $now->gt($lateThreshold) ? 'late' : 'pending';
+        $checkInOutcome = $this->timingService->resolveCheckInOutcome($now, $scheduledStart, AttendanceTimingService::ROLE_TEACHER);
+        $status = $checkInOutcome['attendance_status'];
 
         try {
             $attendance = new TeacherAttendance();
@@ -245,6 +257,9 @@ class TeacherAttendanceController extends Controller
             $attendance->check_in_distance = $request->distance;
             $attendance->check_in_within_range = $request->within_range;
             $attendance->status = $status;
+            $attendance->arrival_category = $checkInOutcome['arrival_category'];
+            $attendance->minutes_early = $checkInOutcome['minutes_early'];
+            $attendance->minutes_late = $checkInOutcome['minutes_late'];
             $attendance->face_verified = $faceVerificationPayload !== null;
             $attendance->face_match_score = $faceVerificationPayload['score'] ?? null;
             $attendance->face_verified_at = $faceVerificationPayload ? now() : null;
@@ -266,9 +281,18 @@ class TeacherAttendanceController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Check-in successful',
+            'message' => match ($checkInOutcome['arrival_category']) {
+                'early' => 'Check-in successful. You checked in ' . $checkInOutcome['minutes_early'] . ' minute(s) early.',
+                'late' => 'Check-in recorded as late (' . $checkInOutcome['minutes_late'] . ' minute(s) after scheduled start).',
+                default => 'Check-in successful. You are on time.',
+            },
             'attendance_id' => $attendance->id,
-            'attendance' => $attendance
+            'attendance' => $attendance,
+            'arrival' => [
+                'category' => $checkInOutcome['arrival_category'],
+                'minutes_early' => $checkInOutcome['minutes_early'],
+                'minutes_late' => $checkInOutcome['minutes_late'],
+            ],
         ]);
     }
 
@@ -308,13 +332,13 @@ class TeacherAttendanceController extends Controller
         }
 
         $timetable = TimeTable::find($attendance->timetable_id);
-        $classEndTime = Carbon::parse($timetable->end_time);
+        $now = Carbon::now();
+        $scheduledEnd = $this->timingService->parseScheduleTime((string) $timetable->end_time, $now);
 
-        // Return if class is still on going
-        if ($classEndTime->gt(Carbon::now())) {
+        if (!$this->timingService->canCheckOutAfterEnd($now, $scheduledEnd)) {
             return response()->json([
                 'success' => false,
-                'message' => 'Class is still on going'
+                'message' => 'Class is still ongoing. Check-out opens at ' . $scheduledEnd->format('h:i A') . '.',
             ], 400);
         }
 
@@ -357,23 +381,24 @@ class TeacherAttendanceController extends Controller
             ], 400);
         }
 
-        $earlyLeaveMinutes = (int) SystemSetting::getValue('early_leave_minutes', 15);
-        $earlyLeaveThreshold = $classEndTime->copy()->subMinutes($earlyLeaveMinutes);
-        $now = Carbon::now();
-        $status = $request->input('status', $attendance->status);
-        if ($now->lt($earlyLeaveThreshold)) {
-            $status = 'early_leave';
-        } elseif ($attendance->status === 'pending' || $attendance->status === 'late') {
-            $status = $attendance->status === 'late' ? 'late' : 'completed';
-        }
+        $checkOutOutcome = $this->timingService->resolveCheckOutOutcome(
+            Carbon::now(),
+            $scheduledEnd,
+            $attendance->status,
+            AttendanceTimingService::ROLE_TEACHER
+        );
+        $status = $checkOutOutcome['attendance_status'];
 
         try {
-            $attendance->check_out_time = $now->format('h:i A');
+            $checkoutTime = Carbon::now();
+            $attendance->check_out_time = $checkoutTime->format('h:i A');
             $attendance->check_out_latitude = $request->coordinates['latitude'];
             $attendance->check_out_longitude = $request->coordinates['longitude'];
             $attendance->check_out_distance = $request->input('distance');
             $attendance->check_out_within_range = $request->boolean('within_range', true);
             $attendance->status = $status;
+            $attendance->departure_category = $checkOutOutcome['departure_category'];
+            $attendance->minutes_overtime = $checkOutOutcome['minutes_overtime'];
             $attendance->save();
 
             AttendanceActivityLog::logAttempt('check_out', auth('teacher')->id(), (int) $attendance->timetable_id, [
@@ -392,8 +417,15 @@ class TeacherAttendanceController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Check-out successful',
-            'attendance' => $attendance
+            'message' => match ($checkOutOutcome['departure_category']) {
+                'overtime' => 'Check-out recorded as overtime (' . $checkOutOutcome['minutes_overtime'] . ' minute(s) after grace period).',
+                default => 'Check-out successful.',
+            },
+            'attendance' => $attendance,
+            'departure' => [
+                'category' => $checkOutOutcome['departure_category'],
+                'minutes_overtime' => $checkOutOutcome['minutes_overtime'],
+            ],
         ]);
     }
 

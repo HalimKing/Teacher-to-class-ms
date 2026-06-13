@@ -46,6 +46,13 @@ const teacherNavItems: NavItem[] = [
         staffTypes: ['administrator'],
     },
     {
+        title: 'Attendance Report',
+        href: '/teacher/staff-reports',
+        icon: BarChart,
+        permission: 'teacher.staff-attendance.view',
+        staffTypes: ['administrator'],
+    },
+    {
         title: 'My Courses',
         href: '/teacher/my-courses',
         icon: BookOpen,
@@ -116,7 +123,7 @@ const mainNavItems: NavItem[] = [
         ]
     },
     {
-        title: 'School Management',
+        title: 'School Mg',
         href: '/admin/school-management',
         icon: LayoutGrid,
         permission: 'admin.school-management.faculties.view',
@@ -200,7 +207,7 @@ const mainNavItems: NavItem[] = [
         permission: 'admin.academics.view',
         subItems: [
             {
-                title: 'Time Tablessss',
+                title: 'Time Table',
                 href: '/admin/academics/time-tables',
                 permission: 'admin.academics.time-tables.view',
             },
@@ -246,29 +253,41 @@ const mainNavItems: NavItem[] = [
         ]
     },
     {
-        title: 'Settings & Reports',
-        href: '/admin/settings-reports',
-        icon: Users,
-        permission: 'user-management.view',
+        title: 'Attendance Reports',
+        href: '/admin/attendance',
+        icon: BarChart,
+        permission: 'admin.attendance.view',
         subItems: [
-             {
+            {
+                title: 'Teacher Attendance',
+                href: '/admin/attendance',
+                permission: 'admin.attendance.view',
+            },
+            {
+                title: 'Administrator Attendance',
+                href: '/admin/settings-reports/staff-attendance-reports',
+                permission: 'admin.staff-attendance.view',
+            },
+            {
+                title: 'Attendance Analysis',
+                href: '/admin/settings-reports/attendance-analysis',
+                permission: 'admin.attendance.view',
+            },
+        ],
+    },
+    {
+        title: 'Settings & Reports',
+        href: '/admin/settings-reports/settings',
+        icon: Settings,
+        permission: 'admin.settings.view',
+        subItems: [
+            {
                 title: 'System Settings',
                 href: '/admin/settings-reports/settings',
                 icon: Settings,
                 permission: 'admin.settings.view',
             },
-            {
-                title: 'Attendance Analysis',
-                href: '/admin/settings-reports/attendance-analysis',
-                permission: 'admin.user-management.users.create',
-            },
-            {
-                title: 'Teacher Attendance Report',
-                href: '/admin/attendance',
-                permission: 'admin.attendance.view',
-            },
-            
-        ]
+        ],
     },
    
 ];

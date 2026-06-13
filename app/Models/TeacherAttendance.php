@@ -28,6 +28,11 @@ class TeacherAttendance extends Model
         'check_out_latitude',
         'check_out_longitude',
         'status',
+        'arrival_category',
+        'minutes_early',
+        'minutes_late',
+        'departure_category',
+        'minutes_overtime',
         'face_verified',
         'face_match_score',
         'face_verified_at',
@@ -37,9 +42,12 @@ class TeacherAttendance extends Model
     protected function casts(): array
     {
         return [
+            'date' => 'date',
             'face_verified' => 'boolean',
             'face_match_score' => 'float',
             'face_verified_at' => 'datetime',
+            'check_in_within_range' => 'boolean',
+            'check_out_within_range' => 'boolean',
         ];
     }
 

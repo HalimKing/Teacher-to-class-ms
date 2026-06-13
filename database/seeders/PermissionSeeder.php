@@ -68,6 +68,9 @@ class PermissionSeeder extends Seeder
             'admin.settings.view',
             'admin.settings.edit',
             'admin.attendance.view',
+            'admin.attendance.export',
+            'admin.staff-attendance.view',
+            'admin.staff-attendance.export',
             // Schedules permissions
             'admin.schedules.view',
             'admin.schedules.manage',

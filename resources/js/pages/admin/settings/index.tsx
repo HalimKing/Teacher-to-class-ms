@@ -141,6 +141,9 @@ export default function AdminSystemSettingsPage() {
                                                     key,
                                                     key === 'gps_radius_meters' ||
                                                         key === 'late_check_in_minutes' ||
+                                                        key === 'administrator_early_checkin_minutes' ||
+                                                        key === 'teacher_early_checkin_minutes' ||
+                                                        key === 'checkout_grace_period_minutes' ||
                                                         key === 'early_leave_minutes' ||
                                                         key === 'max_check_in_distance_meters' ||
                                                         key === 'face_match_threshold' ||

@@ -2,90 +2,48 @@
 
 namespace App\Console\Commands;
 
-use App\Models\TeacherAttendance;
-use App\Models\Teacher;
-use App\Models\TimeTable;
-use Carbon\Carbon;
+use App\Services\AttendanceProcessorService;
 use Illuminate\Console\Command;
 
 class ProcessTeacherAttendance extends Command
 {
-    /**
-     * The name and signature of the console command.
-     *
-     * @var string
-     */
     protected $signature = 'attendance:process';
 
-    /**
-     * The console command description.
-     *
-     * @var string
-     */
-    protected $description = 'Command description';
+    protected $description = 'Finalize teacher and administrator attendance after the check-out grace period expires';
 
-    /**
-     * Execute the console command.
-     */
-    public function handle()
+    public function __construct(
+        private AttendanceProcessorService $processor
+    ) {
+        parent::__construct();
+    }
+
+    public function handle(): int
     {
-        //
-        logger('Attendance processor ran at ' . now());
-        $now = Carbon::now();
+        $this->info('Processing attendance records for ' . now()->toDateTimeString());
 
-        // Get today's lectures
-        $todayLectures = TimeTable::with('course')
-            ->where('staff_type', Teacher::STAFF_TYPE_LECTURER)
-            ->where('day_of_week', now()->format('l'))
-            ->whereTime('end_time', '<', $now->format('H:i:s'))
-            ->get();
+        $stats = $this->processor->process();
 
-        foreach ($todayLectures as $lecture) {
+        $this->reportRoleStats('Teachers', $stats['teachers']);
+        $this->reportRoleStats('Administrators', $stats['administrators']);
 
-            $lectureEnd = Carbon::parse($lecture->end_time);
+        logger('Attendance processor completed', [
+            'ran_at' => now()->toDateTimeString(),
+            'stats' => $stats,
+        ]);
 
-            // Only process if lecture has ended
-            if ($now->greaterThan($lectureEnd)) {
+        return self::SUCCESS;
+    }
 
-                $attendance = TeacherAttendance::where('timetable_id', $lecture->id)
-                    ->whereDate('date', today())
-                    ->first();
-
-                // 🚨 CASE 1: No record at all → Absent
-                if (!$attendance) {
-
-                    TeacherAttendance::create([
-                        'teacher_id' => $lecture->teacher_id,
-                        'timetable_id' => $lecture->id,
-                        'classroom_id' => $lecture->class_room_id,
-                        'academic_year_id' => $lecture->academic_year_id,
-                        'course_id' => $lecture->course_id,
-                        'date' => today(),
-                        'status' => 'absent',
-                    ]);
-
-                    continue;
-                }
-
-                // 🚨 CASE 2: Checked in but no checkout → Incomplete
-                if ($attendance->check_in_time && !$attendance->check_out_time) {
-
-                    $attendance->update([
-                        'status' => 'incomplete'
-                    ]);
-                }
-
-                // ✅ CASE 3: Checked in & out → Completed
-                if ($attendance->check_in_time && $attendance->check_out_time) {
-
-                    $attendance->update([
-                        'status' => 'completed'
-                    ]);
-                }
-            }
-        }
-
-        return 0;
-
+    private function reportRoleStats(string $label, array $stats): void
+    {
+        $this->line(sprintf(
+            '%s: processed=%d absent=%d incomplete=%d finalized=%d skipped=%d',
+            $label,
+            $stats['processed'],
+            $stats['absent'],
+            $stats['incomplete'],
+            $stats['finalized'],
+            $stats['skipped'],
+        ));
     }
 }

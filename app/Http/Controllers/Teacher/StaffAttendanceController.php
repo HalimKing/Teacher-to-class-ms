@@ -8,6 +8,7 @@ use App\Models\SystemSetting;
 use App\Models\Teacher;
 use App\Models\TimeTable;
 use App\Services\FacialRecognitionService;
+use App\Services\AttendanceTimingService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -16,6 +17,10 @@ use Inertia\Response;
 
 class StaffAttendanceController extends Controller
 {
+    public function __construct(
+        private AttendanceTimingService $timingService
+    ) {}
+
     public function index(): Response
     {
         $teacher = auth('teacher')->user();
@@ -102,9 +107,19 @@ class StaffAttendanceController extends Controller
         }
 
         $now = Carbon::now();
-        $startTime = Carbon::parse($timetable->start_time);
-        $lateMinutes = (int) SystemSetting::getValue('late_check_in_minutes', 15);
-        $status = $now->gt($startTime->copy()->addMinutes($lateMinutes)) ? 'late' : 'checked_in';
+        $scheduledStart = $this->timingService->parseScheduleTime((string) $timetable->start_time, $now);
+
+        if (!$this->timingService->canCheckInNow($now, $scheduledStart, AttendanceTimingService::ROLE_ADMINISTRATOR)) {
+            $allowedCheckIn = $this->timingService->getAllowedCheckInTime($scheduledStart);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Attendance is not open yet. You can check in from ' . $allowedCheckIn->format('h:i A') . '.',
+                'allowed_check_in_time' => $allowedCheckIn->format('H:i:s'),
+            ], 400);
+        }
+
+        $checkInOutcome = $this->timingService->resolveCheckInOutcome($now, $scheduledStart, AttendanceTimingService::ROLE_ADMINISTRATOR);
         $today = $now->format('Y-m-d');
         $faceVerificationPayload = null;
 
@@ -183,7 +198,10 @@ class StaffAttendanceController extends Controller
             'longitude' => $validated['coordinates']['longitude'],
             'check_in_distance' => $validated['distance'],
             'check_in_within_range' => $validated['within_range'],
-            'attendance_status' => $status,
+            'attendance_status' => $checkInOutcome['attendance_status'],
+            'arrival_category' => $checkInOutcome['arrival_category'],
+            'minutes_early' => $checkInOutcome['minutes_early'],
+            'minutes_late' => $checkInOutcome['minutes_late'],
             'face_verified' => $faceVerificationPayload !== null,
             'face_match_score' => $faceVerificationPayload['score'] ?? null,
             'face_verified_at' => $faceVerificationPayload ? now() : null,
@@ -191,9 +209,14 @@ class StaffAttendanceController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Staff check-in successful.',
+            'message' => $this->buildCheckInSuccessMessage($checkInOutcome),
             'attendance_id' => $attendance->id,
             'attendance' => $attendance,
+            'arrival' => [
+                'category' => $checkInOutcome['arrival_category'],
+                'minutes_early' => $checkInOutcome['minutes_early'],
+                'minutes_late' => $checkInOutcome['minutes_late'],
+            ],
         ]);
     }
 
@@ -261,9 +284,13 @@ class StaffAttendanceController extends Controller
         }
 
         $now = Carbon::now();
-        $endTime = Carbon::parse($attendance->timetable?->end_time);
-        $earlyLeaveMinutes = (int) SystemSetting::getValue('early_leave_minutes', 15);
-        $status = $now->lt($endTime->copy()->subMinutes($earlyLeaveMinutes)) ? 'early_leave' : 'completed';
+        $scheduledEnd = $this->timingService->parseScheduleTime((string) $attendance->timetable?->end_time, $now);
+        $checkOutOutcome = $this->timingService->resolveCheckOutOutcome(
+            $now,
+            $scheduledEnd,
+            $attendance->attendance_status,
+            AttendanceTimingService::ROLE_ADMINISTRATOR
+        );
 
         $attendance->update([
             'check_out_time' => $now->format('H:i:s'),
@@ -271,12 +298,14 @@ class StaffAttendanceController extends Controller
             'check_out_longitude' => $validated['coordinates']['longitude'],
             'check_out_distance' => $validated['distance'],
             'check_out_within_range' => $validated['within_range'],
-            'attendance_status' => $status,
+            'attendance_status' => $checkOutOutcome['attendance_status'],
+            'departure_category' => $checkOutOutcome['departure_category'],
+            'minutes_overtime' => $checkOutOutcome['minutes_overtime'],
         ]);
 
         return response()->json([
             'success' => true,
-            'message' => 'Staff check-out successful.',
+            'message' => $this->buildCheckOutSuccessMessage($checkOutOutcome),
             'attendance' => $attendance->fresh(),
         ]);
     }
@@ -300,6 +329,9 @@ class StaffAttendanceController extends Controller
                 'check_in_time' => $attendance->check_in_time,
                 'check_out_time' => $attendance->check_out_time,
                 'attendance_status' => $attendance->attendance_status,
+                'arrival_category' => $attendance->arrival_category,
+                'minutes_early' => $attendance->minutes_early,
+                'minutes_late' => $attendance->minutes_late,
                 'location_match' => $attendance->check_in_within_range,
             ]);
 
@@ -311,6 +343,26 @@ class StaffAttendanceController extends Controller
 
     private function formatSchedule(TimeTable $schedule, ?StaffAttendance $attendance = null): array
     {
+        $isToday = ($schedule->day_of_week ?? $schedule->day) === now()->format('l');
+        $timing = $isToday
+            ? $this->timingService->buildScheduleTiming(
+                (string) $schedule->start_time,
+                (string) $schedule->end_time,
+                null,
+                AttendanceTimingService::ROLE_ADMINISTRATOR
+            )
+            : [
+                'early_checkin_minutes' => $this->timingService->getEarlyCheckInMinutes(AttendanceTimingService::ROLE_ADMINISTRATOR),
+                'checkout_grace_period_minutes' => $this->timingService->getCheckoutGracePeriodMinutes(),
+                'scheduled_start_time' => $schedule->start_time,
+                'scheduled_start_time_display' => $this->timingService->parseScheduleTime((string) $schedule->start_time)->format('h:i A'),
+                'allowed_check_in_time' => null,
+                'allowed_check_in_time_display' => null,
+                'can_check_in_now' => false,
+                'minutes_until_check_in_opens' => null,
+                'attendance_opens_message' => null,
+            ];
+
         return [
             'id' => $schedule->id,
             'classroom' => $schedule->classRoom?->name,
@@ -329,10 +381,32 @@ class StaffAttendanceController extends Controller
                 'check_out_time' => $attendance->check_out_time,
                 'status' => $attendance->check_out_time ? 'completed' : 'checked_in',
                 'attendance_status' => $attendance->attendance_status,
+                'arrival_category' => $attendance->arrival_category,
+                'minutes_early' => $attendance->minutes_early,
+                'minutes_late' => $attendance->minutes_late,
                 'location_match' => $attendance->check_in_within_range,
             ] : null,
             'is_completed' => $attendance && $attendance->check_out_time !== null,
+            'timing' => $timing,
         ];
+    }
+
+    private function buildCheckOutSuccessMessage(array $checkOutOutcome): string
+    {
+        return match ($checkOutOutcome['departure_category']) {
+            'early_leave' => 'Staff check-out recorded as early leave.',
+            'overtime' => 'Staff check-out recorded as overtime (' . $checkOutOutcome['minutes_overtime'] . ' minute(s) after grace period).',
+            default => 'Staff check-out successful.',
+        };
+    }
+
+    private function buildCheckInSuccessMessage(array $checkInOutcome): string
+    {
+        return match ($checkInOutcome['arrival_category']) {
+            'early' => 'Staff check-in successful. You checked in ' . $checkInOutcome['minutes_early'] . ' minute(s) early.',
+            'late' => 'Staff check-in recorded as late (' . $checkInOutcome['minutes_late'] . ' minute(s) after scheduled start).',
+            default => 'Staff check-in successful. You are on time.',
+        };
     }
 
     private function getOwnedStaffTimetable(int $timetableId, int $staffId): ?TimeTable

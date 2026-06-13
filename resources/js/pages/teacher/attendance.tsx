@@ -31,6 +31,20 @@ interface ClassLocation {
         location_match: boolean;
     };
     is_completed: boolean;
+    timing?: {
+        early_checkin_minutes: number;
+        checkout_grace_period_minutes: number;
+        scheduled_start_time_display?: string | null;
+        allowed_check_in_time_display?: string | null;
+        can_check_in_now?: boolean;
+        attendance_opens_message?: string | null;
+        scheduled_end_time_display?: string | null;
+        checkout_grace_deadline_display?: string | null;
+        can_check_out_now?: boolean;
+        is_within_checkout_grace?: boolean;
+        is_after_checkout_grace?: boolean;
+        checkout_grace_message?: string | null;
+    };
 }
 
 interface AttendanceRecord {
@@ -105,14 +119,19 @@ api.interceptors.request.use(
 );
 
 // Updated helper functions with grace period
+const getMinutesFromTime = (time: string): number => {
+    const [hours, minutes] = time.split(':').map(Number);
+    return hours * 60 + minutes;
+};
+
+const isBeforeAllowedCheckIn = (classStartTime: string, earlyCheckInMinutes: number): boolean => {
+    const currentTime = new Date().getHours() * 60 + new Date().getMinutes();
+    return currentTime < getMinutesFromTime(classStartTime) - earlyCheckInMinutes;
+};
+
 const isBeforeClassStart = (classStartTime: string): boolean => {
-    const now = new Date();
-    const currentTime = now.getHours() * 60 + now.getMinutes(); // Convert to minutes
-
-    const [hours, minutes, seconds = '00'] = classStartTime.split(':').map(Number);
-    const classStartTimeInMinutes = hours * 60 + minutes;
-
-    return currentTime < classStartTimeInMinutes;
+    const currentTime = new Date().getHours() * 60 + new Date().getMinutes();
+    return currentTime < getMinutesFromTime(classStartTime);
 };
 
 const isClassEnded = (classEndTime: string): boolean => {
@@ -126,27 +145,20 @@ const isClassEnded = (classEndTime: string): boolean => {
 };
 
 // Check if class has ended with grace period (30 minutes after end time)
-const isAfterCheckoutDeadline = (classEndTime: string): boolean => {
-    const now = new Date();
-    const currentTime = now.getHours() * 60 + now.getMinutes();
-
-    const [hours, minutes, seconds = '00'] = classEndTime.split(':').map(Number);
-    const checkoutDeadlineInMinutes = hours * 60 + minutes + 30; // 30 minutes grace period
-
-    return currentTime > checkoutDeadlineInMinutes;
+const isAfterCheckoutDeadline = (classEndTime: string, checkoutGraceMinutes: number): boolean => {
+    const currentTime = new Date().getHours() * 60 + new Date().getMinutes();
+    return currentTime > getMinutesFromTime(classEndTime) + checkoutGraceMinutes;
 };
 
-// Check if check-out is allowed (within 30 minutes after class ends)
-const isCheckoutAllowed = (classEndTime: string): boolean => {
-    const now = new Date();
-    const currentTime = now.getHours() * 60 + now.getMinutes();
+const isCheckoutAllowed = (classEndTime: string, checkoutGraceMinutes: number): boolean => {
+    const currentTime = new Date().getHours() * 60 + new Date().getMinutes();
+    const classEndTimeInMinutes = getMinutesFromTime(classEndTime);
+    return currentTime >= classEndTimeInMinutes && currentTime <= classEndTimeInMinutes + checkoutGraceMinutes;
+};
 
-    const [hours, minutes, seconds = '00'] = classEndTime.split(':').map(Number);
-    const classEndTimeInMinutes = hours * 60 + minutes;
-    const checkoutDeadlineInMinutes = classEndTimeInMinutes + 30;
-
-    // Check-out is allowed if class has ended but within 30 minutes grace period
-    return currentTime >= classEndTimeInMinutes && currentTime <= checkoutDeadlineInMinutes;
+const isCheckoutOpen = (classEndTime: string): boolean => {
+    const currentTime = new Date().getHours() * 60 + new Date().getMinutes();
+    return currentTime >= getMinutesFromTime(classEndTime);
 };
 
 const isClassActive = (classStartTime: string, classEndTime: string): boolean => {
@@ -188,13 +200,9 @@ const getTimeUntilClassStart = (classStartTime: string): string => {
 };
 
 // Get time remaining until checkout deadline
-const getTimeUntilCheckoutDeadline = (classEndTime: any, lateCheckInTime: any): string => {
-    const now = new Date();
-    const currentTime = now.getHours() * 60 + now.getMinutes();
-
-    const [hours, minutes, seconds = '00'] = classEndTime.split(':').map(Number);
-    const checkoutDeadlineInMinutes = hours * 60 + minutes + lateCheckInTime;
-
+const getTimeUntilCheckoutDeadline = (classEndTime: string, checkoutGraceMinutes: number): string => {
+    const currentTime = new Date().getHours() * 60 + new Date().getMinutes();
+    const checkoutDeadlineInMinutes = getMinutesFromTime(classEndTime) + checkoutGraceMinutes;
     const diffMins = checkoutDeadlineInMinutes - currentTime;
 
     if (diffMins <= 0) {
@@ -218,8 +226,8 @@ export default function AttendancePage() {
     const [locationError, setLocationError] = useState<string | null>(null);
     const { system_settings: systemSettings } = usePage().props as any;
     const [lateCheckInTime, setLateCheckInTime] = useState(systemSettings.attendance.late_check_in_minutes.value as any);
-
-    
+    const teacherEarlyCheckInMinutes = Number(systemSettings?.attendance?.teacher_early_checkin_minutes?.value ?? 30);
+    const checkoutGracePeriodMinutes = Number(systemSettings?.attendance?.checkout_grace_period_minutes?.value ?? 30);
 
     const defaultLat = Number(systemSettings?.map?.default_campus_lat?.value ?? import.meta.env.VITE_DEFAULT_CAMPUS_LAT ?? 40.7128);
     const defaultLng = Number(systemSettings?.map?.default_campus_lng?.value ?? import.meta.env.VITE_DEFAULT_CAMPUS_LNG ?? -74.006);
@@ -243,6 +251,8 @@ export default function AttendancePage() {
         isActive: boolean;
         isCheckoutAllowed: boolean;
         isAfterCheckoutDeadline: boolean;
+        isCheckoutOpen: boolean;
+        canCheckInNow: boolean;
         timeUntilStart: string;
         timeUntilCheckoutDeadline: string;
     }>({
@@ -251,6 +261,8 @@ export default function AttendancePage() {
         isActive: false,
         isCheckoutAllowed: false,
         isAfterCheckoutDeadline: false,
+        isCheckoutOpen: false,
+        canCheckInNow: false,
         timeUntilStart: '',
         timeUntilCheckoutDeadline: '',
     });
@@ -315,19 +327,27 @@ export default function AttendancePage() {
                 isActive: false,
                 isCheckoutAllowed: false,
                 isAfterCheckoutDeadline: false,
+                isCheckoutOpen: false,
+                canCheckInNow: false,
                 timeUntilStart: '',
                 timeUntilCheckoutDeadline: '',
             });
             return;
         }
 
-        const isBeforeStart = isBeforeClassStart(classData.start_time);
+        const timing = classData.timing;
+        const isBeforeStart = timing?.can_check_in_now === false
+            ? !timing.can_check_in_now
+            : isBeforeAllowedCheckIn(classData.start_time, teacherEarlyCheckInMinutes);
         const isAfterEnd = isClassEnded(classData.end_time);
         const isActive = isClassActive(classData.start_time, classData.end_time);
-        const isCheckoutAllowedNow = isCheckoutAllowed(classData.end_time);
-        const isAfterCheckoutDeadlineNow = isAfterCheckoutDeadline(classData.end_time);
+        const isCheckoutAllowedNow = timing?.is_within_checkout_grace ?? isCheckoutAllowed(classData.end_time, checkoutGracePeriodMinutes);
+        const isAfterCheckoutDeadlineNow = timing?.is_after_checkout_grace ?? isAfterCheckoutDeadline(classData.end_time, checkoutGracePeriodMinutes);
+        const isCheckoutOpenNow = timing?.can_check_out_now ?? isCheckoutOpen(classData.end_time);
+        const canCheckInNow = timing?.can_check_in_now ?? !isBeforeAllowedCheckIn(classData.start_time, teacherEarlyCheckInMinutes);
         const timeUntilStart = isBeforeStart ? getTimeUntilClassStart(classData.start_time) : '';
-        const timeUntilCheckoutDeadline = isAfterEnd && !isAfterCheckoutDeadlineNow ? getTimeUntilCheckoutDeadline(classData.end_time, lateCheckInTime) : '';
+        const timeUntilCheckoutDeadline =
+            isAfterEnd && !isAfterCheckoutDeadlineNow ? getTimeUntilCheckoutDeadline(classData.end_time, checkoutGracePeriodMinutes) : '';
 
         setTimeValidation({
             isBeforeStart,
@@ -335,10 +355,12 @@ export default function AttendancePage() {
             isActive,
             isCheckoutAllowed: isCheckoutAllowedNow,
             isAfterCheckoutDeadline: isAfterCheckoutDeadlineNow,
+            isCheckoutOpen: isCheckoutOpenNow,
+            canCheckInNow,
             timeUntilStart,
             timeUntilCheckoutDeadline,
         });
-    }, []);
+    }, [teacherEarlyCheckInMinutes, checkoutGracePeriodMinutes]);
 
     const validatePresence = useCallback((userLoc: { lat: number; lng: number }, targetClass: ClassLocation) => {
         const d = calculateDistance(userLoc.lat, userLoc.lng, targetClass.coordinates.lat, targetClass.coordinates.lng);
@@ -529,18 +551,11 @@ export default function AttendancePage() {
             return;
         }
 
-        if (!timeValidation.isActive) {
-            if (timeValidation.isBeforeStart) {
-                setApiError(`Cannot check in yet. Class starts in ${timeValidation.timeUntilStart}`);
-                return;
-            }
-
-            if (timeValidation.isAfterEnd) {
-                setApiError('This class has already ended. Cannot check in.');
-                return;
-            }
-
-            setApiError('Class is not currently active. Check the class schedule.');
+        if (!timeValidation.canCheckInNow) {
+            setApiError(
+                selectedClass.timing?.attendance_opens_message ||
+                    `Cannot check in yet. Attendance opens at ${selectedClass.timing?.allowed_check_in_time_display || to12Hour(selectedClass.start_time)}.`,
+            );
             return;
         }
 
@@ -713,15 +728,11 @@ export default function AttendancePage() {
             return;
         }
 
-        // Check if check-out is allowed (class has ended but within grace period)
-        if (!timeValidation.isCheckoutAllowed && !timeValidation.isAfterCheckoutDeadline) {
-            setApiError('Check-out is only allowed after class ends. Please wait until the class is over.');
-            return;
-        }
-
-        // Check if check-out deadline has passed
-        if (timeValidation.isAfterCheckoutDeadline) {
-            setApiError('Check-out deadline has passed. Please contact administration.');
+        if (!timeValidation.isCheckoutOpen) {
+            setApiError(
+                selectedClass?.timing?.checkout_opens_message ||
+                    'Check-out is only allowed after class ends. Please wait until the class is over.',
+            );
             return;
         }
 
@@ -843,34 +854,29 @@ export default function AttendancePage() {
         isLoadingApi ||
         !selectedClass ||
         selectedClass.is_completed ||
-        !timeValidation.isActive;
+        !timeValidation.canCheckInNow;
 
-    // Check if check-out should be disabled
     const isCheckOutDisabled =
         currentStatus !== 'checked_in' ||
         isLoadingApi ||
         !isSelectedClassCheckedIn ||
         selectedClass?.is_completed ||
-        !timeValidation.isCheckoutAllowed ||
-        timeValidation.isAfterCheckoutDeadline;
+        !timeValidation.isCheckoutOpen;
 
     const getCheckInButtonText = () => {
         if (isLoadingApi && currentStatus === 'not_checked_in') return 'Processing...';
         if (selectedClass?.is_completed) return 'Completed';
-        if (timeValidation.isBeforeStart) return 'Too Early';
-        if (timeValidation.isAfterEnd) return 'Class Ended';
-        if (!timeValidation.isActive) return 'Class Not Active';
+        if (!timeValidation.canCheckInNow) return 'Check-In Not Open';
         return 'Check In';
     };
 
-    // Get check-out button text based on state
     const getCheckOutButtonText = () => {
         if (isLoadingApi && currentStatus === 'checked_in') return 'Processing...';
         if (selectedClass?.is_completed) return 'Completed';
-        if (timeValidation.isAfterCheckoutDeadline) return 'Deadline Passed';
-        if (!timeValidation.isCheckoutAllowed && !timeValidation.isAfterEnd) return 'Wait for End';
+        if (!timeValidation.isCheckoutOpen) return 'Wait for End';
+        if (timeValidation.isAfterCheckoutDeadline) return 'Check Out (Overtime)';
         if (timeValidation.isCheckoutAllowed) return 'Check Out';
-        return 'Select Class';
+        return 'Check Out';
     };
 
     if (isLoadingClasses) {
@@ -1020,11 +1026,11 @@ export default function AttendancePage() {
                                                 const hasAttendance = c.attendance_taken;
                                                 const isOtherCheckedIn =
                                                     checkedInClass && checkedInClass.id !== c.id && currentStatus === 'checked_in';
-                                                const isClassBeforeStart = isBeforeClassStart(c.start_time);
+                                                const isClassBeforeStart = isBeforeAllowedCheckIn(c.start_time, teacherEarlyCheckInMinutes);
                                                 const classHasEnded = isClassEnded(c.end_time);
                                                 const isClassActiveNow = isClassActive(c.start_time, c.end_time);
-                                                const isAfterCheckoutDeadlineNow = isAfterCheckoutDeadline(c.end_time);
-                                                const checkoutAllowed = isCheckoutAllowed(c.end_time);
+                                                const isAfterCheckoutDeadlineNow = isAfterCheckoutDeadline(c.end_time, checkoutGracePeriodMinutes);
+                                                const checkoutAllowed = isCheckoutAllowed(c.end_time, checkoutGracePeriodMinutes);
 
                                                 let bgColor = 'bg-white';
                                                 let borderColor = 'border-slate-200';
@@ -1217,23 +1223,24 @@ export default function AttendancePage() {
 
                                     {selectedClass && !selectedClass.is_completed && (
                                         <>
-                                            {timeValidation.isBeforeStart && (
+                                            {!timeValidation.canCheckInNow && (
                                                 <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
                                                     <div className="flex items-center gap-2">
                                                         <Clock size={16} className="text-blue-600" />
                                                         <div>
                                                             <p className="text-sm font-medium text-blue-700">
-                                                                Class starts in {timeValidation.timeUntilStart}
+                                                                {selectedClass.timing?.attendance_opens_message ||
+                                                                    `Attendance opens at ${selectedClass.timing?.allowed_check_in_time_display || to12Hour(selectedClass.start_time)}`}
                                                             </p>
                                                             <p className="text-xs text-blue-600">
-                                                                Check-in will be available at {to12Hour(selectedClass.start_time)}
+                                                                Class starts at {selectedClass.timing?.scheduled_start_time_display || to12Hour(selectedClass.start_time)} • Early window: {teacherEarlyCheckInMinutes} minutes
                                                             </p>
                                                         </div>
                                                     </div>
                                                 </div>
                                             )}
 
-                                            {timeValidation.isActive && !timeValidation.isBeforeStart && !timeValidation.isAfterEnd && (
+                                            {timeValidation.canCheckInNow && !timeValidation.isAfterEnd && (
                                                 <div className="rounded-lg border border-green-200 bg-green-50 p-3">
                                                     <div className="flex items-center gap-2">
                                                         <CheckCircle size={16} className="text-green-600" />
@@ -1256,7 +1263,7 @@ export default function AttendancePage() {
                                                                 Check-out available for {timeValidation.timeUntilCheckoutDeadline}
                                                             </p>
                                                             <p className="text-xs text-amber-600">
-                                                                Class ended at {to12Hour(selectedClass.end_time)} • {`Grace period: ${lateCheckInTime} minutes`}
+                                                                Class ended at {selectedClass.timing?.scheduled_end_time_display || to12Hour(selectedClass.end_time)} • Grace period: {checkoutGracePeriodMinutes} minutes
                                                             </p>
                                                         </div>
                                                     </div>
@@ -1264,12 +1271,14 @@ export default function AttendancePage() {
                                             )}
 
                                             {timeValidation.isAfterCheckoutDeadline && (
-                                                <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+                                                <div className="rounded-lg border border-orange-200 bg-orange-50 p-3">
                                                     <div className="flex items-center gap-2">
-                                                        <XCircle size={16} className="text-red-600" />
+                                                        <Clock size={16} className="text-orange-600" />
                                                         <div>
-                                                            <p className="text-sm font-medium text-red-700">Check-out deadline has passed</p>
-                                                            <p className="text-xs text-red-600">Please contact administration for assistance</p>
+                                                            <p className="text-sm font-medium text-orange-700">Check-out will be recorded as overtime</p>
+                                                            <p className="text-xs text-orange-600">
+                                                                Grace period ended at {selectedClass.timing?.checkout_grace_deadline_display || 'the configured deadline'}
+                                                            </p>
                                                         </div>
                                                     </div>
                                                 </div>

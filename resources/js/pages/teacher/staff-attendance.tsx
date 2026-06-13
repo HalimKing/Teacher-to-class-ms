@@ -32,6 +32,27 @@ interface StaffMember {
     department?: string | null;
 }
 
+interface ScheduleTiming {
+    early_checkin_minutes: number;
+    checkout_grace_period_minutes: number;
+    scheduled_start_time?: string | null;
+    scheduled_start_time_display?: string | null;
+    allowed_check_in_time?: string | null;
+    allowed_check_in_time_display?: string | null;
+    can_check_in_now: boolean;
+    minutes_until_check_in_opens?: number | null;
+    attendance_opens_message?: string | null;
+    scheduled_end_time?: string | null;
+    scheduled_end_time_display?: string | null;
+    checkout_grace_deadline?: string | null;
+    checkout_grace_deadline_display?: string | null;
+    can_check_out_now?: boolean;
+    is_within_checkout_grace?: boolean;
+    is_after_checkout_grace?: boolean;
+    checkout_opens_message?: string | null;
+    checkout_grace_message?: string | null;
+}
+
 interface StaffSchedule {
     id: number;
     classroom: string | null;
@@ -50,9 +71,13 @@ interface StaffSchedule {
         check_out_time: string | null;
         status: 'checked_in' | 'completed';
         attendance_status: string;
+        arrival_category?: string | null;
+        minutes_early?: number | null;
+        minutes_late?: number | null;
         location_match: boolean;
     } | null;
     is_completed: boolean;
+    timing?: ScheduleTiming;
 }
 
 interface ApiResponse {
@@ -131,6 +156,8 @@ export default function StaffAttendancePage({
 
     const gpsEnforcementEnabled = Boolean(systemSettings?.attendance?.gps_enforcement_enabled?.value ?? true);
     const facialRecognitionEnabled = Boolean(systemSettings?.attendance?.facial_recognition_enabled?.value ?? false);
+    const earlyCheckInMinutes = Number(systemSettings?.attendance?.administrator_early_checkin_minutes?.value ?? 30);
+    const checkoutGracePeriodMinutes = Number(systemSettings?.attendance?.checkout_grace_period_minutes?.value ?? 30);
     const defaultLat = Number(systemSettings?.map?.default_campus_lat?.value ?? import.meta.env.VITE_DEFAULT_CAMPUS_LAT ?? 40.7128);
     const defaultLng = Number(systemSettings?.map?.default_campus_lng?.value ?? import.meta.env.VITE_DEFAULT_CAMPUS_LNG ?? -74.006);
     const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
@@ -138,6 +165,44 @@ export default function StaffAttendancePage({
         () => todaySchedulesState.find((schedule) => schedule.attendance_status?.status === 'checked_in') || null,
         [todaySchedulesState],
     );
+    const selectedTiming = selectedSchedule?.timing;
+    const canCheckInNow = Boolean(selectedTiming?.can_check_in_now);
+    const checkInBlockedReason = selectedSchedule && !selectedSchedule.is_completed && !activeSchedule && !canCheckInNow
+        ? selectedTiming?.attendance_opens_message || `Attendance opens at ${selectedTiming?.allowed_check_in_time_display || 'your allowed time'}.`
+        : null;
+    const currentArrivalStatus = useMemo(() => {
+        if (!selectedSchedule) {
+            return null;
+        }
+
+        if (selectedSchedule.attendance_status?.arrival_category === 'early') {
+            return `Checked in ${selectedSchedule.attendance_status.minutes_early ?? 0} minute(s) early`;
+        }
+
+        if (selectedSchedule.attendance_status?.arrival_category === 'late') {
+            return `Checked in ${selectedSchedule.attendance_status.minutes_late ?? 0} minute(s) late`;
+        }
+
+        if (selectedSchedule.attendance_status?.arrival_category === 'on_time') {
+            return 'Checked in on time';
+        }
+
+        if (canCheckInNow && selectedTiming?.scheduled_start_time_display) {
+            const now = new Date();
+            const [hours, minutes] = (selectedTiming.scheduled_start_time || selectedSchedule.start_time).split(':').map(Number);
+            const scheduledStart = new Date(now);
+            scheduledStart.setHours(hours, minutes, 0, 0);
+            const minutesUntilStart = Math.max(0, Math.round((scheduledStart.getTime() - now.getTime()) / 60000));
+
+            if (minutesUntilStart > 0) {
+                return `You are checking in ${minutesUntilStart} minute(s) early`;
+            }
+
+            return 'You can check in now';
+        }
+
+        return checkInBlockedReason;
+    }, [selectedSchedule, canCheckInNow, selectedTiming, checkInBlockedReason]);
 
     const canVerifyLocation =
         selectedSchedule?.coordinates?.lat !== null &&
@@ -219,6 +284,14 @@ export default function StaffAttendancePage({
 
     useEffect(() => {
         fetchTodaySchedules();
+    }, []);
+
+    useEffect(() => {
+        const interval = window.setInterval(() => {
+            fetchTodaySchedules(false);
+        }, 60000);
+
+        return () => window.clearInterval(interval);
     }, []);
 
     useEffect(() => {
@@ -528,6 +601,52 @@ export default function StaffAttendancePage({
                         </button>
                     </div>
 
+                    <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                        <LocationStatus
+                            label="Scheduled Start Time"
+                            value={selectedTiming?.scheduled_start_time_display || (selectedSchedule ? formatTime(selectedSchedule.start_time) : 'None')}
+                        />
+                        <LocationStatus
+                            label="Allowed Check-In Time"
+                            value={selectedTiming?.allowed_check_in_time_display || 'Not available'}
+                        />
+                        <LocationStatus label="Early Check-In Window" value={`${earlyCheckInMinutes} minute(s) before start`} />
+                        <LocationStatus
+                            label="Scheduled End Time"
+                            value={selectedTiming?.scheduled_end_time_display || (selectedSchedule ? formatTime(selectedSchedule.end_time) : 'None')}
+                        />
+                        <LocationStatus
+                            label="Check-Out Grace Period"
+                            value={`${checkoutGracePeriodMinutes} minute(s) after end`}
+                        />
+                        <LocationStatus
+                            label="Grace Deadline"
+                            value={selectedTiming?.checkout_grace_deadline_display || 'Not available'}
+                        />
+                        <LocationStatus
+                            label="Attendance Status"
+                            value={currentArrivalStatus || 'Select a work period'}
+                            ok={canCheckInNow || !!selectedSchedule?.attendance_status}
+                        />
+                    </div>
+
+                    {selectedTiming?.checkout_grace_message && activeSchedule && (
+                        <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+                            {selectedTiming.checkout_grace_message}
+                        </div>
+                    )}
+
+                    {checkInBlockedReason && (
+                        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                            {checkInBlockedReason}
+                            {selectedTiming?.scheduled_start_time_display && (
+                                <span className="block mt-1">
+                                    Your shift starts at {selectedTiming.scheduled_start_time_display}.
+                                </span>
+                            )}
+                        </div>
+                    )}
+
                     <div className="mt-5 grid gap-4 md:grid-cols-3">
                         <LocationStatus label="Selected Schedule" value={selectedSchedule ? `${selectedSchedule.classroom || 'Class room'} (${formatTime(selectedSchedule.start_time)} - ${formatTime(selectedSchedule.end_time)})` : 'None'} />
                         <LocationStatus label="Distance" value={distance === null ? 'Unknown' : `${Math.round(distance)}m from class room`} />
@@ -542,11 +661,11 @@ export default function StaffAttendancePage({
                         <button
                             type="button"
                             onClick={handleCheckIn}
-                            disabled={isLoadingApi || !!activeSchedule || !selectedSchedule || selectedSchedule.is_completed}
+                            disabled={isLoadingApi || !!activeSchedule || !selectedSchedule || selectedSchedule.is_completed || !canCheckInNow}
                             className="inline-flex items-center rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             {isLoadingApi ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
-                            Check In
+                            {canCheckInNow ? 'Check In' : 'Check-In Not Open'}
                         </button>
                         <button
                             type="button"
@@ -701,7 +820,13 @@ function ScheduleList({
                                 <p className="mt-1 text-xs font-medium text-emerald-600">
                                     In: {formatTime(schedule.attendance_status.check_in_time)} • Out:{' '}
                                     {schedule.attendance_status.check_out_time ? formatTime(schedule.attendance_status.check_out_time) : '--'}
+                                    {schedule.attendance_status.arrival_category === 'early' && schedule.attendance_status.minutes_early
+                                        ? ` • ${schedule.attendance_status.minutes_early}m early`
+                                        : ''}
                                 </p>
+                            )}
+                            {!schedule.attendance_status && schedule.timing?.attendance_opens_message && (
+                                <p className="mt-1 text-xs text-amber-600">{schedule.timing.attendance_opens_message}</p>
                             )}
                         </div>
                         <div className="text-right text-sm font-medium text-sidebar-foreground/80 dark:text-sidebar-foreground/80">

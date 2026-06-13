@@ -12,12 +12,13 @@ use App\Http\Controllers\Admin\SchoolManagement\TimeTableController;
 use App\Http\Controllers\Admin\TeacherFaceEnrollmentController;
 use App\Http\Controllers\Admin\TeacherController;
 use App\Http\Controllers\Admin\SystemSettingsController;
+use App\Http\Controllers\Admin\TeacherAttendanceReportController;
+use App\Http\Controllers\Admin\StaffAttendanceReportController;
 use App\Http\Controllers\Admin\TeacherAttendanceAnalysisController;
 use App\Http\Controllers\AttendanceRecordController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\Teacher\DashboardController;
 use App\Http\Controllers\TeacherAttendanceController;
-use App\Http\Controllers\TeacherAttendanceReportController;
 use App\Http\Controllers\TeacherCoursesController;
 use App\Http\Controllers\UserController;
 
@@ -26,6 +27,7 @@ use App\Http\Controllers\Teacher\FaceVerificationController;
 use App\Http\Controllers\Teacher\SessionReminderController;
 use App\Http\Controllers\Teacher\NotificationController;
 use App\Http\Controllers\Teacher\StaffAttendanceController;
+use App\Http\Controllers\Teacher\StaffAttendanceReportController as TeacherStaffAttendanceReportController;
 
 use App\Http\Controllers\AdminAttendanceController;
 use App\Models\AcademicPeriod;
@@ -97,6 +99,11 @@ Route::middleware('auth:teacher')->group(function () {
             Route::get('/history', [StaffAttendanceController::class, 'history']);
         });
 
+    Route::middleware('teacher.staff_type:administrator')->group(function () {
+        Route::get('/teacher/staff-reports', [TeacherStaffAttendanceReportController::class, 'index'])->name('teacher.staff-reports');
+        Route::get('/teacher/staff-reports/data', [TeacherStaffAttendanceReportController::class, 'data'])->name('teacher.staff-reports.data');
+    });
+
     Route::get('/teacher/records', [AttendanceRecordController::class, 'index'])
         ->middleware('teacher.staff_type:lecturer')
         ->name('teacher.records');
@@ -138,11 +145,16 @@ Route::middleware(['auth:web', 'verified'])->group(function () {
             // Admin Attendance Management
 
             Route::prefix('attendance')->group(function () {
-                Route::get('/', [AdminAttendanceController::class, 'index'])->name('admin.attendance.index')
+                Route::get('/', [TeacherAttendanceReportController::class, 'index'])->name('admin.attendance.index')
                     ->middleware('permission:admin.attendance.view');
-                Route::post('/filter', [AdminAttendanceController::class, 'filter'])->name('admin.attendance.filter')
+                Route::get('/data', [TeacherAttendanceReportController::class, 'data'])->name('admin.attendance.data')
                     ->middleware('permission:admin.attendance.view');
-                Route::get('/export', [AdminAttendanceController::class, 'export'])->name('admin.attendance.export');
+                Route::get('/export', [TeacherAttendanceReportController::class, 'export'])->name('admin.attendance.export')
+                    ->middleware('permission:admin.attendance.export');
+                Route::get('/{teacher}', [TeacherAttendanceReportController::class, 'show'])->name('admin.attendance.show')
+                    ->middleware('permission:admin.attendance.view');
+                Route::get('/{teacher}/data', [TeacherAttendanceReportController::class, 'showData'])->name('admin.attendance.show-data')
+                    ->middleware('permission:admin.attendance.view');
             });
 
             Route::get('dashboard', [\App\Http\Controllers\Admin\DashboardController::class, 'index'])->name('dashboard');
@@ -162,9 +174,27 @@ Route::middleware(['auth:web', 'verified'])->group(function () {
 
                     // Teacher Attendance Analysis Routes
                     Route::get('attendance-analysis', [TeacherAttendanceAnalysisController::class, 'index'])
-                        ->name('teachers.attendance-analysis');
+                        ->name('teachers.attendance-analysis')
+                        ->middleware('permission:admin.attendance.view');
                     Route::get('attendance-analysis/data', [TeacherAttendanceAnalysisController::class, 'getAnalysisData'])
-                        ->name('teachers.attendance-analysis.data');
+                        ->name('teachers.attendance-analysis.data')
+                        ->middleware('permission:admin.attendance.view');
+
+                    Route::get('staff-attendance-reports', [StaffAttendanceReportController::class, 'index'])
+                        ->name('staff-attendance-reports.index')
+                        ->middleware('permission:admin.staff-attendance.view');
+                    Route::get('staff-attendance-reports/data', [StaffAttendanceReportController::class, 'data'])
+                        ->name('staff-attendance-reports.data')
+                        ->middleware('permission:admin.staff-attendance.view');
+                    Route::get('staff-attendance-reports/export', [StaffAttendanceReportController::class, 'export'])
+                        ->name('staff-attendance-reports.export')
+                        ->middleware('permission:admin.staff-attendance.export');
+                    Route::get('staff-attendance-reports/{teacher}', [StaffAttendanceReportController::class, 'show'])
+                        ->name('staff-attendance-reports.show')
+                        ->middleware('permission:admin.staff-attendance.view');
+                    Route::get('staff-attendance-reports/{teacher}/data', [StaffAttendanceReportController::class, 'showData'])
+                        ->name('staff-attendance-reports.show-data')
+                        ->middleware('permission:admin.staff-attendance.view');
                 }
             );
 

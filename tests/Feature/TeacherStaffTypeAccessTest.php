@@ -48,3 +48,24 @@ it('allows administrator staff to view staff attendance pages', function () {
         ->get('/teacher/staff-attendance')
         ->assertOk();
 });
+
+it('allows administrator staff to view their attendance report', function () {
+    $administrator = makeTeacherForStaffType(Teacher::STAFF_TYPE_ADMINISTRATOR);
+
+    $this->actingAs($administrator, 'teacher')
+        ->get('/teacher/staff-reports')
+        ->assertOk();
+
+    $this->actingAs($administrator, 'teacher')
+        ->get('/teacher/staff-reports/data')
+        ->assertOk()
+        ->assertJson(['success' => true]);
+});
+
+it('blocks lecturers from administrator attendance report pages', function () {
+    $lecturer = makeTeacherForStaffType(Teacher::STAFF_TYPE_LECTURER);
+
+    $this->actingAs($lecturer, 'teacher')
+        ->get('/teacher/staff-reports')
+        ->assertForbidden();
+});
