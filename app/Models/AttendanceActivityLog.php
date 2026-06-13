@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\ActivityLogService;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -57,17 +58,41 @@ class AttendanceActivityLog extends Model
             ($action === 'attempt_failed' && $logFailed)
         );
 
-        if (!$shouldLog) {
-            return;
+        if ($shouldLog) {
+            self::query()->create([
+                'teacher_id'    => $teacherId,
+                'action'        => $action,
+                'timetable_id'  => $timetableId,
+                'payload'       => $payload,
+                'ip_address'   => request()?->ip(),
+                'user_agent'   => request()?->userAgent(),
+            ]);
         }
 
-        self::query()->create([
-            'teacher_id'    => $teacherId,
-            'action'        => $action,
-            'timetable_id'  => $timetableId,
-            'payload'       => $payload,
-            'ip_address'   => request()?->ip(),
-            'user_agent'   => request()?->userAgent(),
-        ]);
+        self::syncCentralAuditLog($action, $teacherId, $timetableId, $payload);
+    }
+
+    private static function syncCentralAuditLog(
+        string $action,
+        ?int $teacherId,
+        ?int $timetableId,
+        array $payload,
+    ): void {
+        $teacher = $teacherId ? Teacher::query()->find($teacherId) : null;
+        $service = app(ActivityLogService::class);
+        $mapped = $service->mapAttendanceAction($action, $payload);
+
+        $service->logAttendance(
+            eventType: $mapped['event_type'],
+            description: $mapped['description'],
+            status: $mapped['status'],
+            actor: $teacher ? $service->actorFromTeacher($teacher) : null,
+            metadata: array_merge($payload, [
+                'teacher_id' => $teacherId,
+                'timetable_id' => $timetableId,
+                'legacy_action' => $action,
+            ]),
+            securityFlag: $mapped['security_flag'] ?? false,
+        );
     }
 }

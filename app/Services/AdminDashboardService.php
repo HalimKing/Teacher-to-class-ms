@@ -1,0 +1,529 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\FaceVerificationAttempt;
+use App\Models\Faculty;
+use App\Models\StaffAttendance;
+use App\Models\Teacher;
+use App\Models\TeacherAttendance;
+use App\Models\TimeTable;
+use App\Models\User;
+use App\Services\Concerns\BuildsAttendanceAnalytics;
+use Carbon\Carbon;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Auth;
+
+class AdminDashboardService
+{
+    use BuildsAttendanceAnalytics;
+
+    private const TEACHER_STATUS = 'status';
+
+    private const STAFF_STATUS = 'attendance_status';
+
+    public function build(): array
+    {
+        $today = Carbon::today();
+
+        return [
+            'welcome' => $this->welcomeData(),
+            'kpiCards' => $this->kpiCards($today),
+            'stats' => $this->legacyStats($today),
+            'analytics' => $this->analytics(),
+            'attendanceBreakdown' => $this->attendanceBreakdown($today),
+            'verificationAnalytics' => $this->verificationAnalyticsForToday($today),
+            'recentActivities' => $this->recentActivities(),
+            'insights' => $this->insights($today),
+            'facultyDistribution' => $this->facultyDistribution(),
+            'teachers' => $this->teachersOverview(),
+            'initialAttendanceTrend' => $this->attendanceTrend('30days'),
+        ];
+    }
+
+    public function attendanceTrend(string $range): array
+    {
+        [$start, $labels, $granularity] = $this->resolveTrendRange($range);
+        $records = $this->combinedRecordsBetween($start, Carbon::today());
+
+        $present = [];
+        $absent = [];
+        $late = [];
+
+        foreach ($labels as $key => $label) {
+            $bucketRecords = $this->filterRecordsForBucket($records, $key, $granularity);
+            $present[] = $bucketRecords->filter(fn ($record) => $this->isPresentRecord($record, self::TEACHER_STATUS))->count();
+            $absent[] = $bucketRecords->filter(fn ($record) => ($record->{self::TEACHER_STATUS} ?? null) === 'absent')->count();
+            $late[] = $bucketRecords->filter(fn ($record) => $this->isLateRecord($record, self::TEACHER_STATUS))->count();
+        }
+
+        return [
+            'labels' => array_values($labels),
+            'present' => $present,
+            'absent' => $absent,
+            'late' => $late,
+        ];
+    }
+
+    private function welcomeData(): array
+    {
+        $user = Auth::guard('web')->user();
+
+        return [
+            'adminName' => $user?->name ?? 'Administrator',
+            'date' => now()->format('l, F j, Y'),
+            'time' => now()->format('g:i A'),
+            'systemName' => config('app.name', 'Teacher-to-Class MS'),
+        ];
+    }
+
+    private function kpiCards(Carbon $today): array
+    {
+        $todayStr = $today->toDateString();
+        $yesterdayStr = $today->copy()->subDay()->toDateString();
+
+        $totalTeachers = Teacher::where('staff_type', Teacher::STAFF_TYPE_LECTURER)->count();
+        $totalAdministrators = Teacher::where('staff_type', Teacher::STAFF_TYPE_ADMINISTRATOR)->count();
+        $totalAdmins = User::count();
+
+        $teacherToday = TeacherAttendance::query()->whereDate('date', $todayStr)->get();
+        $staffToday = StaffAttendance::query()->whereDate('date', $todayStr)->get();
+        $teacherYesterday = TeacherAttendance::query()->whereDate('date', $yesterdayStr)->get();
+        $staffYesterday = StaffAttendance::query()->whereDate('date', $yesterdayStr)->get();
+
+        $todayCombined = $this->normalizeTeacherRecords($teacherToday)->concat($this->normalizeStaffRecords($staffToday));
+        $yesterdayCombined = $this->normalizeTeacherRecords($teacherYesterday)->concat($this->normalizeStaffRecords($staffYesterday));
+
+        $presentToday = $todayCombined->filter(fn ($record) => $this->isPresentRecord($record, self::TEACHER_STATUS))->count();
+        $lateToday = $todayCombined->filter(fn ($record) => $this->isLateRecord($record, self::TEACHER_STATUS))->count();
+        $absentToday = $todayCombined->filter(fn ($record) => ($record->{self::TEACHER_STATUS} ?? null) === 'absent')->count();
+        $expectedToday = $this->expectedStaffTodayCount();
+        $inferredAbsent = max($expectedToday - $presentToday, 0);
+        $absentDisplay = $absentToday > 0 ? $absentToday : $inferredAbsent;
+
+        $attendanceRate = $todayCombined->count() > 0
+            ? round(($presentToday / $todayCombined->count()) * 100, 1)
+            : 0;
+
+        $yesterdayPresent = $yesterdayCombined->filter(fn ($record) => $this->isPresentRecord($record, self::TEACHER_STATUS))->count();
+        $yesterdayRate = $yesterdayCombined->count() > 0
+            ? round(($yesterdayPresent / $yesterdayCombined->count()) * 100, 1)
+            : 0;
+        $rateDelta = $attendanceRate - $yesterdayRate;
+
+        $faceSuccess = $todayCombined->where('face_verified', true)->count();
+        $faceFailure = $todayCombined->filter(fn ($record) => !$record->face_verified)->count();
+        $geoSuccess = $todayCombined->where('check_in_within_range', true)->count();
+        $geoRate = $todayCombined->count() > 0 ? round(($geoSuccess / $todayCombined->count()) * 100, 1) : 0;
+
+        $totalRecords = TeacherAttendance::count() + StaffAttendance::count();
+        $checkInsToday = $todayCombined->filter(fn ($record) => !empty($record->check_in_time))->count();
+        $checkOutsToday = $todayCombined->filter(fn ($record) => !empty($record->check_out_time))->count();
+
+        $activeTeacherIds = TeacherAttendance::whereDate('date', $todayStr)->distinct()->pluck('teacher_id');
+        $activeStaffIds = StaffAttendance::whereDate('date', $todayStr)->distinct()->pluck('staff_id');
+        $activeToday = $activeTeacherIds->merge($activeStaffIds)->unique()->count();
+
+        $faceAttemptsToday = FaceVerificationAttempt::whereDate('created_at', $todayStr)->count();
+        $faceAttemptSuccess = FaceVerificationAttempt::whereDate('created_at', $todayStr)->where('result', 'success')->count();
+        $faceAttemptFailure = max($faceAttemptsToday - $faceAttemptSuccess, 0);
+
+        return [
+            ['title' => 'Total Teachers', 'value' => (string) $totalTeachers, 'change' => 'Registered lecturers', 'changeType' => 'neutral', 'icon' => 'Users', 'group' => 'users'],
+            ['title' => 'Total Administrators', 'value' => (string) $totalAdministrators, 'change' => "{$totalAdmins} admin accounts", 'changeType' => 'neutral', 'icon' => 'Users', 'group' => 'users'],
+            ['title' => 'Active Users Today', 'value' => (string) $activeToday, 'change' => 'Checked in today', 'changeType' => 'positive', 'icon' => 'Activity', 'group' => 'users'],
+            ['title' => 'Present Today', 'value' => (string) $presentToday, 'change' => $expectedToday > 0 ? round(($presentToday / $expectedToday) * 100, 1) . '% of scheduled' : 'No schedules today', 'changeType' => 'positive', 'icon' => 'CheckCircle', 'group' => 'attendance'],
+            ['title' => 'Absent Today', 'value' => (string) $absentDisplay, 'change' => $expectedToday > 0 ? round(($absentDisplay / max($expectedToday, 1)) * 100, 1) . '% of scheduled' : 'No schedules today', 'changeType' => $absentDisplay > 0 ? 'negative' : 'neutral', 'icon' => 'XCircle', 'group' => 'attendance'],
+            ['title' => 'Late Arrivals', 'value' => (string) $lateToday, 'change' => $presentToday > 0 ? round(($lateToday / max($presentToday, 1)) * 100, 1) . '% of present' : 'No check-ins yet', 'changeType' => $lateToday > 0 ? 'negative' : 'neutral', 'icon' => 'Clock', 'group' => 'attendance'],
+            ['title' => 'Attendance Rate', 'value' => $attendanceRate . '%', 'change' => ($rateDelta >= 0 ? '+' : '') . $rateDelta . '% vs yesterday', 'changeType' => $rateDelta >= 0 ? 'positive' : 'negative', 'icon' => 'TrendingUp', 'group' => 'attendance'],
+            ['title' => 'Face Verification Success', 'value' => (string) ($faceSuccess + $faceAttemptSuccess), 'change' => "{$faceFailure} failures today", 'changeType' => $faceFailure > 0 ? 'negative' : 'positive', 'icon' => 'ShieldCheck', 'group' => 'verification'],
+            ['title' => 'Face Verification Failures', 'value' => (string) ($faceFailure + $faceAttemptFailure), 'change' => $faceAttemptsToday . ' attempts logged', 'changeType' => ($faceFailure + $faceAttemptFailure) > 0 ? 'negative' : 'neutral', 'icon' => 'ShieldX', 'group' => 'verification'],
+            ['title' => 'Geolocation Success Rate', 'value' => $geoRate . '%', 'change' => "{$geoSuccess} verified check-ins", 'changeType' => 'positive', 'icon' => 'MapPin', 'group' => 'verification'],
+            ['title' => 'Total Attendance Records', 'value' => (string) $totalRecords, 'change' => 'All-time records', 'changeType' => 'neutral', 'icon' => 'Calendar', 'group' => 'system'],
+            ["title" => "Today's Check-ins", 'value' => (string) $checkInsToday, 'change' => 'Across teachers & staff', 'changeType' => 'positive', 'icon' => 'LogIn', 'group' => 'system'],
+            ["title" => "Today's Check-outs", 'value' => (string) $checkOutsToday, 'change' => 'Completed sessions', 'changeType' => 'neutral', 'icon' => 'LogOut', 'group' => 'system'],
+        ];
+    }
+
+    private function legacyStats(Carbon $today): array
+    {
+        $todayStr = $today->toDateString();
+        $currentDay = $today->format('l');
+        $currentTime = now()->format('H:i:s');
+
+        return [
+            [
+                'title' => 'Total Teachers',
+                'value' => Teacher::where('staff_type', Teacher::STAFF_TYPE_LECTURER)->count(),
+                'change' => 'N/A',
+                'changeType' => 'neutral',
+            ],
+            [
+                'title' => 'Active Today',
+                'value' => TeacherAttendance::whereDate('date', $todayStr)->distinct('teacher_id')->count('teacher_id'),
+                'change' => 'N/A',
+                'changeType' => 'neutral',
+            ],
+            [
+                'title' => 'Total Classes',
+                'value' => TimeTable::count(),
+                'change' => 'N/A',
+                'changeType' => 'neutral',
+            ],
+            [
+                'title' => 'Ongoing',
+                'value' => TimeTable::where('day_of_week', $currentDay)
+                    ->where('start_time', '<=', $currentTime)
+                    ->where('end_time', '>=', $currentTime)
+                    ->count(),
+                'change' => 'N/A',
+                'changeType' => 'neutral',
+            ],
+        ];
+    }
+
+    private function analytics(): array
+    {
+        $start = Carbon::today()->subDays(89);
+        $records = $this->combinedRecordsBetween($start, Carbon::today());
+
+        return [
+            'dailyTrend' => $this->groupTrend($records, 'day', self::TEACHER_STATUS),
+            'weeklyTrend' => $this->groupTrend($records, 'week', self::TEACHER_STATUS),
+            'monthlyTrend' => $this->groupTrend($records, 'month', self::TEACHER_STATUS),
+        ];
+    }
+
+    private function attendanceBreakdown(Carbon $today): array
+    {
+        $records = $this->combinedRecordsBetween($today, $today);
+
+        return [
+            'present' => $records->filter(fn ($record) => $this->isPresentRecord($record, self::TEACHER_STATUS))->count(),
+            'late' => $records->filter(fn ($record) => $this->isLateRecord($record, self::TEACHER_STATUS))->count(),
+            'absent' => $records->filter(fn ($record) => ($record->{self::TEACHER_STATUS} ?? null) === 'absent')->count(),
+        ];
+    }
+
+    private function verificationAnalyticsForToday(Carbon $today): array
+    {
+        $records = $this->combinedRecordsBetween($today, $today);
+
+        return $this->verificationAnalytics($records);
+    }
+
+    private function recentActivities(): array
+    {
+        $teacherActivities = TeacherAttendance::query()
+            ->with(['teacher:id,first_name,last_name,staff_type,department_id', 'teacher.department:id,name'])
+            ->latest('created_at')
+            ->take(8)
+            ->get()
+            ->map(fn (TeacherAttendance $record) => $this->transformActivity($record, 'Teacher'));
+
+        $staffActivities = StaffAttendance::query()
+            ->with(['staff:id,first_name,last_name,staff_type,department_id', 'staff.department:id,name'])
+            ->latest('created_at')
+            ->take(8)
+            ->get()
+            ->map(fn (StaffAttendance $record) => $this->transformActivity($record, 'Administrator'));
+
+        return $teacherActivities
+            ->concat($staffActivities)
+            ->sortByDesc('sort_at')
+            ->take(10)
+            ->values()
+            ->map(fn (array $activity) => collect($activity)->except('sort_at')->all())
+            ->all();
+    }
+
+    private function transformActivity(TeacherAttendance|StaffAttendance $record, string $defaultRole): array
+    {
+        $person = $record instanceof TeacherAttendance ? $record->teacher : $record->staff;
+        $status = $record instanceof TeacherAttendance ? $record->status : $record->attendance_status;
+        $name = trim(($person?->first_name ?? '') . ' ' . ($person?->last_name ?? '')) ?: 'Unknown';
+        $role = $person?->staff_type === Teacher::STAFF_TYPE_ADMINISTRATOR ? 'Administrator' : $defaultRole;
+
+        return [
+            'id' => ($record instanceof TeacherAttendance ? 't-' : 's-') . $record->id,
+            'name' => $name,
+            'role' => $role,
+            'department' => $person?->department?->name ?? 'N/A',
+            'check_in_time' => $this->formatTime($record->check_in_time),
+            'check_out_time' => $this->formatTime($record->check_out_time),
+            'status' => $status ?? 'pending',
+            'face_verification' => $record->face_verified ? 'verified' : 'unverified',
+            'geolocation_status' => $record->check_in_within_range ? 'verified' : 'failed',
+            'time' => Carbon::parse($record->created_at)->diffForHumans(),
+            'sort_at' => Carbon::parse($record->created_at)->timestamp,
+        ];
+    }
+
+    private function insights(Carbon $today): array
+    {
+        $start = $today->copy()->subDays(29);
+        $teacherRecords = TeacherAttendance::query()
+            ->with(['teacher.department'])
+            ->whereBetween('date', [$start->toDateString(), $today->toDateString()])
+            ->whereHas('teacher', fn ($query) => $query->where('staff_type', Teacher::STAFF_TYPE_LECTURER))
+            ->get();
+        $staffRecords = StaffAttendance::query()
+            ->with(['staff.department'])
+            ->whereBetween('date', [$start->toDateString(), $today->toDateString()])
+            ->get();
+
+        $teacherPerformance = $this->performanceAnalytics(
+            $teacherRecords,
+            'teacher_id',
+            'status',
+            fn (TeacherAttendance $record) => [
+                'id' => $record->teacher?->id,
+                'name' => trim(($record->teacher?->first_name ?? '') . ' ' . ($record->teacher?->last_name ?? '')),
+                'department' => $record->teacher?->department?->name ?? 'N/A',
+            ]
+        );
+
+        $staffPerformance = $this->performanceAnalytics(
+            $staffRecords,
+            'staff_id',
+            'attendance_status',
+            fn (StaffAttendance $record) => [
+                'id' => $record->staff?->id,
+                'name' => trim(($record->staff?->first_name ?? '') . ' ' . ($record->staff?->last_name ?? '')),
+                'department' => $record->staff?->department?->name ?? 'N/A',
+            ]
+        );
+
+        $todayRecords = $this->combinedRecordsBetween($today, $today);
+        $presentToday = $todayRecords->filter(fn ($record) => $this->isPresentRecord($record, self::TEACHER_STATUS))->count();
+        $expectedToday = $this->expectedStaffTodayCount();
+        $complianceRate = $expectedToday > 0 ? round(($presentToday / $expectedToday) * 100, 1) : 0;
+
+        $absentToday = $this->absentStaffToday($today);
+
+        return [
+            'most_punctual_teacher' => $teacherPerformance['highest_attendance'] ?? null,
+            'most_punctual_administrator' => $staffPerformance['highest_attendance'] ?? null,
+            'highest_attendance_rate' => max(
+                $teacherPerformance['highest_attendance']['attendance_rate'] ?? 0,
+                $staffPerformance['highest_attendance']['attendance_rate'] ?? 0
+            ),
+            'absent_today_count' => count($absentToday),
+            'compliance_rate' => $complianceRate,
+            'absent_today' => $absentToday,
+        ];
+    }
+
+    private function absentStaffToday(Carbon $today): array
+    {
+        $todayStr = $today->toDateString();
+        $currentDay = $today->format('l');
+
+        $scheduledTeacherIds = TimeTable::query()
+            ->where('staff_type', Teacher::STAFF_TYPE_LECTURER)
+            ->where('day_of_week', $currentDay)
+            ->distinct()
+            ->pluck('teacher_id');
+
+        $scheduledStaffIds = TimeTable::query()
+            ->where('staff_type', Teacher::STAFF_TYPE_ADMINISTRATOR)
+            ->where('day_of_week', $currentDay)
+            ->distinct()
+            ->pluck('teacher_id');
+
+        $presentTeacherIds = TeacherAttendance::query()
+            ->whereDate('date', $todayStr)
+            ->whereIn('teacher_id', $scheduledTeacherIds)
+            ->whereIn('status', $this->presentStatuses())
+            ->pluck('teacher_id');
+
+        $presentStaffIds = StaffAttendance::query()
+            ->whereDate('date', $todayStr)
+            ->whereIn('staff_id', $scheduledStaffIds)
+            ->whereIn('attendance_status', $this->presentStatuses())
+            ->pluck('staff_id');
+
+        $absentTeacherIds = $scheduledTeacherIds->diff($presentTeacherIds);
+        $absentStaffIds = $scheduledStaffIds->diff($presentStaffIds);
+
+        $absentTeachers = Teacher::query()
+            ->with('department:id,name')
+            ->whereIn('id', $absentTeacherIds)
+            ->get()
+            ->map(fn (Teacher $teacher) => [
+                'name' => trim("{$teacher->first_name} {$teacher->last_name}"),
+                'role' => 'Teacher',
+                'department' => $teacher->department?->name ?? 'N/A',
+            ]);
+
+        $absentAdministrators = Teacher::query()
+            ->with('department:id,name')
+            ->whereIn('id', $absentStaffIds)
+            ->get()
+            ->map(fn (Teacher $teacher) => [
+                'name' => trim("{$teacher->first_name} {$teacher->last_name}"),
+                'role' => 'Administrator',
+                'department' => $teacher->department?->name ?? 'N/A',
+            ]);
+
+        return $absentTeachers->concat($absentAdministrators)->take(8)->values()->all();
+    }
+
+    private function facultyDistribution(): array
+    {
+        $faculties = Faculty::withCount([
+            'teachers as teachers_count' => fn ($query) => $query->where('staff_type', Teacher::STAFF_TYPE_LECTURER),
+        ])->get();
+
+        return [
+            'labels' => $faculties->pluck('name')->all(),
+            'data' => $faculties->pluck('teachers_count')->all(),
+        ];
+    }
+
+    private function teachersOverview(): array
+    {
+        $todayStr = Carbon::today()->toDateString();
+        $currentDay = Carbon::today()->format('l');
+
+        $activeTeacherIds = TeacherAttendance::query()
+            ->whereDate('date', $todayStr)
+            ->pluck('teacher_id')
+            ->flip();
+
+        $teachers = Teacher::query()
+            ->with([
+                'faculty:id,name',
+                'department:id,name',
+                'timeTables' => fn ($query) => $query->where('day_of_week', $currentDay),
+            ])
+            ->where('staff_type', Teacher::STAFF_TYPE_LECTURER)
+            ->get();
+
+        return $teachers->map(function (Teacher $teacher) use ($activeTeacherIds) {
+            $hasAttendance = $activeTeacherIds->has($teacher->id);
+            $status = $hasAttendance ? 'available' : 'offline';
+
+            return [
+                'id' => $teacher->id,
+                'name' => trim("{$teacher->first_name} {$teacher->last_name}"),
+                'initials' => strtoupper(substr($teacher->first_name, 0, 1) . substr($teacher->last_name, 0, 1)),
+                'subject' => $teacher->department?->name ?? 'N/A',
+                'faculty' => $teacher->faculty?->name ?? 'N/A',
+                'department' => $teacher->department?->name ?? 'N/A',
+                'status' => $status,
+                'statusTime' => $hasAttendance ? 'Checked in today' : 'Not checked in',
+                'topic' => 'N/A',
+                'room' => 'N/A',
+                'rating' => 'N/A',
+                'classes' => $teacher->timeTables->count(),
+                'avatar' => 'bg-blue-500',
+            ];
+        })->values()->all();
+    }
+
+    private function expectedStaffTodayCount(): int
+    {
+        $currentDay = now()->format('l');
+
+        $lecturers = TimeTable::query()
+            ->where('staff_type', Teacher::STAFF_TYPE_LECTURER)
+            ->where('day_of_week', $currentDay)
+            ->distinct('teacher_id')
+            ->count('teacher_id');
+
+        $administrators = TimeTable::query()
+            ->where('staff_type', Teacher::STAFF_TYPE_ADMINISTRATOR)
+            ->where('day_of_week', $currentDay)
+            ->distinct('teacher_id')
+            ->count('teacher_id');
+
+        return $lecturers + $administrators;
+    }
+
+    private function combinedRecordsBetween(Carbon $start, Carbon $end): Collection
+    {
+        $teacherRecords = TeacherAttendance::query()
+            ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
+            ->get(['id', 'teacher_id', 'date', 'status', 'face_verified', 'check_in_within_range', 'check_in_time', 'check_out_time']);
+
+        $staffRecords = StaffAttendance::query()
+            ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
+            ->get(['id', 'staff_id', 'date', 'attendance_status', 'face_verified', 'check_in_within_range', 'check_in_time', 'check_out_time']);
+
+        return $this->normalizeTeacherRecords($teacherRecords)->concat($this->normalizeStaffRecords($staffRecords));
+    }
+
+    private function normalizeTeacherRecords(Collection $records): Collection
+    {
+        return $records->map(function ($record) {
+            $record->{self::TEACHER_STATUS} = $record->status ?? null;
+
+            return $record;
+        });
+    }
+
+    private function normalizeStaffRecords(Collection $records): Collection
+    {
+        return $records->map(function ($record) {
+            $record->{self::TEACHER_STATUS} = $record->attendance_status ?? null;
+            $record->teacher_id = $record->staff_id ?? null;
+
+            return $record;
+        });
+    }
+
+    private function resolveTrendRange(string $range): array
+    {
+        if ($range === 'today') {
+            $labels = [];
+            for ($hour = 7; $hour <= 17; $hour += 2) {
+                $labels[sprintf('%02d:00', $hour)] = Carbon::createFromTime($hour)->format('g A');
+            }
+
+            return [Carbon::today(), $labels, 'hour'];
+        }
+
+        if ($range === '7days') {
+            $start = Carbon::today()->subDays(6);
+            $labels = [];
+            for ($i = 0; $i < 7; $i++) {
+                $date = $start->copy()->addDays($i);
+                $labels[$date->toDateString()] = $date->format('D');
+            }
+
+            return [$start, $labels, 'day'];
+        }
+
+        $start = Carbon::today()->subDays(29);
+        $labels = [];
+        for ($i = 0; $i < 30; $i++) {
+            $date = $start->copy()->addDays($i);
+            $labels[$date->toDateString()] = $date->format('M j');
+        }
+
+        return [$start, $labels, 'day'];
+    }
+
+    private function filterRecordsForBucket(Collection $records, string $key, string $granularity): Collection
+    {
+        if ($granularity === 'hour') {
+            $hour = (int) substr($key, 0, 2);
+
+            return $records->filter(function ($record) use ($hour) {
+                if (empty($record->check_in_time)) {
+                    return false;
+                }
+
+                try {
+                    return $this->parseFlexibleTime($record->check_in_time)->hour <= $hour
+                        && $this->parseFlexibleTime($record->check_in_time)->hour >= max($hour - 1, 0);
+                } catch (\Throwable) {
+                    return false;
+                }
+            });
+        }
+
+        return $records->filter(fn ($record) => Carbon::parse($record->date)->toDateString() === $key);
+    }
+}

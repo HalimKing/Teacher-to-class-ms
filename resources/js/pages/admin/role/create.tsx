@@ -16,7 +16,26 @@ interface Permissions {
     name: string;
 }
 
-const CreateClassRoomPage = ({ permissions }: { permissions: Permissions[] }) => {
+type GroupedPermissions = Record<string, Permissions[]>;
+
+const formatGroupName = (groupName: string) => {
+    const labels: Record<string, string> = {
+        'admin.system-logs': 'System Logs',
+        'admin.settings': 'Settings',
+        'admin.dashboard': 'Dashboard',
+        'admin.attendance': 'Teacher Attendance',
+        'admin.staff-attendance': 'Staff Attendance',
+        'admin.teachers': 'Teachers',
+        'admin.user-management': 'User Management',
+        'admin.academics': 'Academics',
+        'admin.school-management': 'School Management',
+        'admin.schedules': 'Schedules',
+    };
+
+    return labels[groupName] ?? groupName.replace(/^admin\./, '').replace(/-/g, ' ').replace(/\./g, ' › ');
+};
+
+const CreateClassRoomPage = ({ permissions }: { permissions: GroupedPermissions }) => {
     const initialFormState: FormData = {
         name: '',
         permissions: [],
@@ -100,23 +119,31 @@ const CreateClassRoomPage = ({ permissions }: { permissions: Permissions[] }) =>
                                         </div>
 
                                         <div>
-                                            {/* list permissions */}
                                             <h3 className="text-md mb-2 font-medium text-slate-700">Assign Permissions</h3>
-                                            <div className="max-h-60 overflow-y-auto rounded-md border border-slate-300 bg-slate-50 p-4">
-                                                {permissions.map((permission) => (
-                                                    <div key={permission.id} className="mb-2 flex items-center">
-                                                        <label htmlFor={`permission-${permission.id}`} className="flex justify-items-center gap-2">
-                                                            <Input
-                                                                type="checkbox"
-                                                                name="permissions"
-                                                                className="form-checkbox h-5 w-5 rounded border-slate-300 text-indigo-600"
-                                                                id={`permission-${permission.id}`}
-                                                                value={permission.name}
-                                                                // checked={data.permissions.includes(permission.id)}
-                                                                onChange={handleCheckboxChange}
-                                                            />
-                                                            <span>{permission.name}</span>
-                                                        </label>
+                                            <div className="max-h-96 space-y-4 overflow-y-auto rounded-md border border-slate-300 bg-slate-50 p-4">
+                                                {Object.entries(permissions).map(([groupName, groupPermissions]) => (
+                                                    <div key={groupName}>
+                                                        <h4 className="mb-2 text-sm font-semibold text-slate-800">
+                                                            {formatGroupName(groupName)}
+                                                        </h4>
+                                                        <div className="space-y-2">
+                                                            {groupPermissions.map((permission) => (
+                                                                <div key={permission.id} className="flex items-center">
+                                                                    <label htmlFor={`permission-${permission.id}`} className="flex items-center gap-2">
+                                                                        <Input
+                                                                            type="checkbox"
+                                                                            name="permissions"
+                                                                            className="form-checkbox h-5 w-5 rounded border-slate-300 text-indigo-600"
+                                                                            id={`permission-${permission.id}`}
+                                                                            value={permission.name}
+                                                                            checked={data.permissions.includes(permission.name)}
+                                                                            onChange={handleCheckboxChange}
+                                                                        />
+                                                                        <span>{permission.name}</span>
+                                                                    </label>
+                                                                </div>
+                                                            ))}
+                                                        </div>
                                                     </div>
                                                 ))}
                                             </div>

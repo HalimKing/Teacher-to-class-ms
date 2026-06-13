@@ -4,6 +4,7 @@ use App\Http\Middleware\AuthenticateAny;
 use App\Http\Middleware\EnsureTeacherStaffType;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Services\ActivityLogService;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -33,5 +34,17 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        //
+        $exceptions->render(function (UnauthorizedException $exception, \Illuminate\Http\Request $request) {
+            if ($request->user()) {
+                app(ActivityLogService::class)->logSecurityEvent(
+                    eventType: 'permission_denied',
+                    description: 'Permission denied while accessing ' . $request->path(),
+                    metadata: [
+                        'message' => $exception->getMessage(),
+                    ],
+                );
+            }
+
+            return null;
+        });
     })->create();

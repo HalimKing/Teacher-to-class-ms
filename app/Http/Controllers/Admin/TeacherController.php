@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Faculty;
 use App\Models\Department;
 use App\Models\Teacher;
+use App\Services\ActivityLogService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Hash;
@@ -114,6 +115,13 @@ class TeacherController extends Controller
             $teacher->staff_type = $validated['staffType'];
             // Assign other fields
             $teacher->save();
+
+            app(ActivityLogService::class)->logUserManagement(
+                'teacher_created',
+                "Created {$teacher->staff_type} {$teacher->first_name} {$teacher->last_name}",
+                ['teacher_id' => $teacher->id, 'employee_id' => $teacher->employee_id]
+            );
+
             return redirect()->route('admin.teachers.index')
             ->with('success', 'Teacher created successfully!');
         } catch(\Throwable $e) {
@@ -183,6 +191,12 @@ class TeacherController extends Controller
         $teacher->title = $validated['title'];
         $teacher->staff_type = $validated['staffType'];
         $teacher->save();
+
+        app(ActivityLogService::class)->logUserManagement(
+            'teacher_updated',
+            "Updated {$teacher->staff_type} {$teacher->first_name} {$teacher->last_name}",
+            ['teacher_id' => $teacher->id, 'employee_id' => $teacher->employee_id]
+        );
         
         return redirect()->route('admin.teachers.index')
             ->with('success', 'Teacher updated successfully!');
@@ -199,7 +213,16 @@ class TeacherController extends Controller
     {
         //
         $teacher = Teacher::findOrFail($id);
+        $label = trim("{$teacher->first_name} {$teacher->last_name}");
+        $teacherId = $teacher->id;
         $teacher->delete();
+
+        app(ActivityLogService::class)->logUserManagement(
+            'teacher_deleted',
+            "Deleted staff member {$label}",
+            ['teacher_id' => $teacherId]
+        );
+
         return redirect()->route('admin.teachers.index')
             ->with('success', 'Teacher deleted successfully!');
     }
@@ -466,7 +489,7 @@ class TeacherController extends Controller
             }
         } else {
             try {
-                $array = Excel::toArray([], $file);
+                $array = Excel::toArray(new \App\Imports\RawSheetImport(), $file);
                 if (!empty($array) && isset($array[0])) {
                     $sheet = $array[0];
                     $headerRowIndex = 0;
@@ -614,7 +637,7 @@ class TeacherController extends Controller
             }
         } else {
             try {
-                $array = Excel::toArray([], $file);
+                $array = Excel::toArray(new \App\Imports\RawSheetImport(), $file);
                 if (!empty($array) && isset($array[0])) {
                     $sheet = $array[0];
                     $headerRowIndex = 0;

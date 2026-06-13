@@ -16,7 +16,7 @@ import { useInitials } from '@/hooks/use-initials';
 import { cn } from '@/lib/utils';
 import { type BreadcrumbItem, type NavItem, type SharedData } from '@/types';
 import { Link, router, usePage } from '@inertiajs/react';
-import { LayoutGrid, Menu, Search, ChevronDown, ChevronRight, Users, Book, Settings, LogOut, BookOpen, UserCheck, ClipboardList, BarChart, Folder, Bell } from 'lucide-react';
+import { LayoutGrid, Menu, Search, ChevronDown, ChevronRight, Users, Book, Settings, LogOut, BookOpen, UserCheck, ClipboardList, BarChart, Folder, Bell, ScrollText } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import AppLogo from './app-logo';
 import AppLogoIcon from './app-logo-icon';
@@ -268,15 +268,15 @@ const mainNavItems: NavItem[] = [
                 href: '/admin/settings-reports/staff-attendance-reports',
                 permission: 'admin.staff-attendance.view',
             },
-            {
-                title: 'Attendance Analysis',
-                href: '/admin/settings-reports/attendance-analysis',
-                permission: 'admin.attendance.view',
-            },
+            // {
+            //     title: 'Attendance Analysis',
+            //     href: '/admin/settings-reports/attendance-analysis',
+            //     permission: 'admin.attendance.view',
+            // },
         ],
     },
     {
-        title: 'Settings & Reports',
+        title: 'Settings',
         href: '/admin/settings-reports/settings',
         icon: Settings,
         permission: 'admin.settings.view',
@@ -287,8 +287,15 @@ const mainNavItems: NavItem[] = [
                 icon: Settings,
                 permission: 'admin.settings.view',
             },
+            {
+                title: 'System Logs',
+                href: '/admin/system-logs',
+                icon: ScrollText,
+                permission: 'admin.system-logs.view',
+            },
         ],
     },
+    
    
 ];
 

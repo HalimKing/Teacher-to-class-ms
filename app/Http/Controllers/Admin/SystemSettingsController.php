@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\SystemSettingsUpdateRequest;
 use App\Models\SystemSetting;
+use App\Services\ActivityLogService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -16,6 +17,10 @@ use Inertia\Response;
  */
 class SystemSettingsController extends Controller
 {
+    public function __construct(
+        private ActivityLogService $activityLogService
+    ) {}
+
     /**
      * Display system settings dashboard (all groups for UI).
      */
@@ -49,6 +54,15 @@ class SystemSettingsController extends Controller
             }
         }
         SystemSetting::setMany($keyValues);
+
+        $this->activityLogService->logSystemSettings(
+            eventType: 'settings_updated',
+            description: 'System settings updated for group: ' . $request->validated('group'),
+            metadata: [
+                'group' => $request->validated('group'),
+                'keys' => array_keys($keyValues),
+            ],
+        );
 
         return redirect()->route('admin.settings-reports.settings.index')
             ->with('success', 'Settings updated successfully.');

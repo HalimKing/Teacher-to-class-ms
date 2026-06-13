@@ -122,6 +122,26 @@ class FacialRecognitionService
             'ip_address' => request()?->ip(),
             'user_agent' => request()?->userAgent(),
         ]);
+
+        $activityLog = app(ActivityLogService::class);
+        $isSuccess = in_array($result, ['passed', 'success'], true);
+
+        $activityLog->logAttendance(
+            eventType: $isSuccess ? 'face_verification_success' : 'face_verification_failed',
+            description: $isSuccess
+                ? 'Face verification succeeded'
+                : ('Face verification failed' . ($failureReason ? ': ' . $failureReason : '')),
+            status: $isSuccess ? ActivityLogService::STATUS_SUCCESS : ActivityLogService::STATUS_FAILED,
+            actor: $activityLog->actorFromTeacher($teacher),
+            metadata: [
+                'teacher_id' => $teacher->id,
+                'timetable_id' => $timetableId,
+                'score' => $score,
+                'result' => $result,
+                'failure_reason' => $failureReason,
+            ],
+            securityFlag: !$isSuccess,
+        );
     }
 
     private function cacheKey(string $signature): string

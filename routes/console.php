@@ -14,3 +14,6 @@ Schedule::command('attendance:process')
 
 Schedule::command('reminders:process')
     ->everyMinute();
+
+Schedule::command('activity-logs:prune')
+    ->dailyAt('02:00');

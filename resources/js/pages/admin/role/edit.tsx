@@ -31,6 +31,27 @@ interface EditRolePageProps {
   permissions: GroupedPermissions;
 }
 
+interface GroupedPermissions {
+  [groupName: string]: Array<{ id: number; name: string }>;
+}
+
+const formatGroupName = (groupName: string) => {
+  const labels: Record<string, string> = {
+    'admin.system-logs': 'System Logs',
+    'admin.settings': 'Settings',
+    'admin.dashboard': 'Dashboard',
+    'admin.attendance': 'Teacher Attendance',
+    'admin.staff-attendance': 'Staff Attendance',
+    'admin.teachers': 'Teachers',
+    'admin.user-management': 'User Management',
+    'admin.academics': 'Academics',
+    'admin.school-management': 'School Management',
+    'admin.schedules': 'Schedules',
+  };
+
+  return labels[groupName] ?? groupName.replace(/^admin\./, '').replace(/-/g, ' ').replace(/\./g, ' › ');
+};
+
 const EditRolePage = ({ role, permissions }: EditRolePageProps) => {
   const initialFormState: FormData = {
     name: role.name,
@@ -166,8 +187,8 @@ const EditRolePage = ({ role, permissions }: EditRolePageProps) => {
                               <div className="bg-slate-50 px-4 py-3 border-b border-slate-200">
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center space-x-2">
-                                    <span className="font-semibold text-slate-800 capitalize">
-                                      {groupName.replace('-', ' ')}
+                                    <span className="font-semibold text-slate-800">
+                                      {formatGroupName(groupName)}
                                     </span>
                                     <span className="text-sm text-slate-500 bg-slate-200 px-2 py-1 rounded-full">
                                       {groupPermissions.length} permissions

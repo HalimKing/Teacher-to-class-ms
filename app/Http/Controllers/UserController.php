@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Services\ActivityLogService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Inertia\Inertia;
@@ -88,7 +89,12 @@ class UserController extends Controller
 
        
         $user->syncRoles($request->roles);
-        
+
+        app(ActivityLogService::class)->logUserManagement(
+            'user_created',
+            "Created admin user {$user->name} ({$user->email})",
+            ['user_id' => $user->id, 'roles' => $request->roles]
+        );
 
         return redirect()->route('admin.user-management.users.index')->with('success', 'User created successfully!');
     }
@@ -143,6 +149,12 @@ class UserController extends Controller
 
         $user->syncRoles($request->roles);
 
+        app(ActivityLogService::class)->logUserManagement(
+            'user_updated',
+            "Updated admin user {$user->name} ({$user->email})",
+            ['user_id' => $user->id, 'roles' => $request->roles]
+        );
+
         return redirect()->route('admin.user-management.users.index')->with('success', 'User updated successfully!');
     }
 
@@ -151,8 +163,17 @@ class UserController extends Controller
      */
     public function destroy(User $user)
     {
-        //
+        $name = $user->name;
+        $email = $user->email;
+        $userId = $user->id;
         $user->delete();
+
+        app(ActivityLogService::class)->logUserManagement(
+            'user_deleted',
+            "Deleted admin user {$name} ({$email})",
+            ['user_id' => $userId]
+        );
+
         return redirect()->route('admin.user-management.users.index')->with('success', 'User deleted successfully!!!');
 
     }

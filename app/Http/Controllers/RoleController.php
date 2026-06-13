@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\ActivityLogService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Spatie\Permission\Models\Permission;
@@ -9,6 +10,22 @@ use Spatie\Permission\Models\Role;
 
 class RoleController extends Controller
 {
+    private function groupedPermissions()
+    {
+        return Permission::query()
+            ->orderBy('name')
+            ->get()
+            ->groupBy(function (Permission $permission) {
+                $parts = explode('.', $permission->name);
+
+                if (($parts[0] ?? null) === 'admin' && !empty($parts[1])) {
+                    return 'admin.' . $parts[1];
+                }
+
+                return $parts[0] ?? 'general';
+            });
+    }
+
     /**
      * Display a listing of the resource.
      */
@@ -60,7 +77,7 @@ class RoleController extends Controller
         //
         
         return Inertia::render('admin/role/create', [
-            'permissions' => Permission::all(['id', 'name']),
+            'permissions' => $this->groupedPermissions(),
         ]);
     }
 
@@ -83,6 +100,13 @@ class RoleController extends Controller
             if ($request->has('permissions')) {
                 $role->syncPermissions($request->permissions);
             }
+
+            app(ActivityLogService::class)->logUserManagement(
+                'role_created',
+                "Created role {$role->name}",
+                ['role_id' => $role->id, 'permissions' => $request->permissions ?? []]
+            );
+
             return redirect()->route('admin.user-management.roles.index')
             ->with('success', 'Successful created!');
         }catch(\Exception $e){
@@ -126,10 +150,6 @@ class RoleController extends Controller
         // $this->authorize('update', $role);
 
         $role->load('permissions');
-        
-        $permissions = Permission::orderBy('name')->get()->groupBy(function ($permission) {
-            return explode('.', $permission->name)[0] ?? 'general';
-        });
 
         return Inertia::render('admin/role/edit', [
             'role' => [
@@ -137,7 +157,7 @@ class RoleController extends Controller
                 'name' => $role->name,
                 'permissions' => $role->permissions->pluck('name')->toArray(),
             ],
-            'permissions' => $permissions,
+            'permissions' => $this->groupedPermissions(),
         ]);
     }
 
@@ -159,6 +179,13 @@ class RoleController extends Controller
             if ($request->has('permissions')) {
                 $role->syncPermissions($request->permissions);
             }
+
+            app(ActivityLogService::class)->logUserManagement(
+                'role_updated',
+                "Updated role {$role->name}",
+                ['role_id' => $role->id, 'permissions' => $request->permissions ?? []]
+            );
+
             return redirect()->route('admin.user-management.roles.index')
             ->with('success', 'Successful updated!');
         }catch(\Exception $e){
@@ -178,7 +205,16 @@ class RoleController extends Controller
         // $this->authorize('delete', $role);
 
         try {
+            $roleName = $role->name;
+            $roleId = $role->id;
             $role->delete();
+
+            app(ActivityLogService::class)->logUserManagement(
+                'role_deleted',
+                "Deleted role {$roleName}",
+                ['role_id' => $roleId]
+            );
+
             return redirect()->route('admin.user-management.roles.index')
             ->with('success', 'Successful deleted!');
         }catch(\Exception $e){

@@ -9,6 +9,7 @@ use App\Models\Teacher;
 use App\Models\TimeTable;
 use App\Services\FacialRecognitionService;
 use App\Services\AttendanceTimingService;
+use App\Services\ActivityLogService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -207,6 +208,17 @@ class StaffAttendanceController extends Controller
             'face_verified_at' => $faceVerificationPayload ? now() : null,
         ]);
 
+        app(ActivityLogService::class)->logAttendance(
+            'attendance_check_in',
+            'Staff attendance check-in recorded',
+            metadata: [
+                'attendance_id' => $attendance->id,
+                'staff_id' => $staff->id,
+                'within_range' => $validated['within_range'],
+                'face_verified' => $faceVerificationPayload !== null,
+            ],
+        );
+
         return response()->json([
             'success' => true,
             'message' => $this->buildCheckInSuccessMessage($checkInOutcome),
@@ -302,6 +314,16 @@ class StaffAttendanceController extends Controller
             'departure_category' => $checkOutOutcome['departure_category'],
             'minutes_overtime' => $checkOutOutcome['minutes_overtime'],
         ]);
+
+        app(ActivityLogService::class)->logAttendance(
+            'attendance_check_out',
+            'Staff attendance check-out recorded',
+            metadata: [
+                'attendance_id' => $attendance->id,
+                'staff_id' => $attendance->staff_id,
+                'within_range' => $validated['within_range'],
+            ],
+        );
 
         return response()->json([
             'success' => true,

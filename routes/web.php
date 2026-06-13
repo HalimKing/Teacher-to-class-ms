@@ -11,6 +11,7 @@ use App\Http\Controllers\Admin\SchoolManagement\ProgramController;
 use App\Http\Controllers\Admin\SchoolManagement\TimeTableController;
 use App\Http\Controllers\Admin\TeacherFaceEnrollmentController;
 use App\Http\Controllers\Admin\TeacherController;
+use App\Http\Controllers\Admin\SystemLogController;
 use App\Http\Controllers\Admin\SystemSettingsController;
 use App\Http\Controllers\Admin\TeacherAttendanceReportController;
 use App\Http\Controllers\Admin\StaffAttendanceReportController;
@@ -160,6 +161,24 @@ Route::middleware(['auth:web', 'verified'])->group(function () {
             Route::get('dashboard', [\App\Http\Controllers\Admin\DashboardController::class, 'index'])->name('dashboard');
 
             Route::get('dashboard/attendance-data', [\App\Http\Controllers\Admin\DashboardController::class, 'getAttendanceData'])->name('dashboard.attendance-data');
+
+            Route::prefix('system-logs')->name('system-logs.')->group(function () {
+                Route::get('/', [SystemLogController::class, 'index'])
+                    ->name('index')
+                    ->middleware('permission:admin.system-logs.view');
+                Route::get('/data', [SystemLogController::class, 'data'])
+                    ->name('data')
+                    ->middleware('permission:admin.system-logs.view');
+                Route::get('/export', [SystemLogController::class, 'export'])
+                    ->name('export')
+                    ->middleware('permission:admin.system-logs.export');
+                Route::post('/prune', [SystemLogController::class, 'prune'])
+                    ->name('prune')
+                    ->middleware('permission:admin.system-logs.manage');
+                Route::get('/{activityLog}', [SystemLogController::class, 'show'])
+                    ->name('show')
+                    ->middleware('permission:admin.system-logs.view');
+            });
 
 
             // System Settings (admin only)

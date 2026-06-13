@@ -9,6 +9,7 @@ use App\Models\Course;
 use App\Models\Program;
 use App\Models\Teacher;
 use App\Models\TimeTable;
+use App\Services\ActivityLogService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Maatwebsite\Excel\Facades\Excel;
@@ -469,6 +470,12 @@ class TimeTableController extends Controller
             return back()->with('success', count($scheduleDays) . ' time table entr' . (count($scheduleDays) === 1 ? 'y' : 'ies') . ' created successfully. Add another?');
         }
 
+        app(ActivityLogService::class)->logTimetable(
+            'timetable_created',
+            'Created ' . count($scheduleDays) . ' timetable entr' . (count($scheduleDays) === 1 ? 'y' : 'ies'),
+            ['teacher_id' => $validated['teacher_id'], 'days' => $scheduleDays]
+        );
+
         return redirect()->route('admin.academics.time-tables.index')
             ->with('success', count($scheduleDays) . ' time table entr' . (count($scheduleDays) === 1 ? 'y' : 'ies') . ' created successfully.');
     }
@@ -628,6 +635,12 @@ class TimeTableController extends Controller
             'end_time' => $validated['end_time'],
         ]);
 
+        app(ActivityLogService::class)->logTimetable(
+            'timetable_updated',
+            "Updated timetable entry #{$timeTable->id}",
+            ['timetable_id' => $timeTable->id, 'teacher_id' => $validated['teacher_id']]
+        );
+
         return redirect()->route('admin.academics.time-tables.index')
             ->with('success', 'Time table entry updated successfully.');
     }
@@ -637,7 +650,15 @@ class TimeTableController extends Controller
      */
     public function destroy(TimeTable $timeTable)
     {
+        $timetableId = $timeTable->id;
         $timeTable->delete();
+
+        app(ActivityLogService::class)->logTimetable(
+            'timetable_deleted',
+            "Deleted timetable entry #{$timetableId}",
+            ['timetable_id' => $timetableId]
+        );
+
         return redirect()->route('admin.academics.time-tables.index')
             ->with('success', 'Time table entry deleted successfully.');
     }

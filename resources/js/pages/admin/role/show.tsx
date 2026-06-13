@@ -62,19 +62,41 @@ const ShowRolePage = ({ role }: ShowRolePageProps) => {
   // Group permissions by resource
   const groupPermissions = () => {
     const groups: { [key: string]: Permission[] } = {};
-    
-    role.permissions.forEach(permission => {
-      const groupName = permission.name.split('.')[0] || 'general';
+
+    role.permissions.forEach((permission) => {
+      const parts = permission.name.split('.');
+      const groupName = parts[0] === 'admin' && parts[1]
+        ? `admin.${parts[1]}`
+        : parts[0] || 'general';
+
       if (!groups[groupName]) {
         groups[groupName] = [];
       }
+
       groups[groupName].push(permission);
     });
-    
+
     return groups;
   };
 
   const permissionGroups = groupPermissions();
+
+  const formatGroupName = (groupName: string) => {
+    const labels: Record<string, string> = {
+      'admin.system-logs': 'System Logs',
+      'admin.settings': 'Settings',
+      'admin.dashboard': 'Dashboard',
+      'admin.attendance': 'Teacher Attendance',
+      'admin.staff-attendance': 'Staff Attendance',
+      'admin.teachers': 'Teachers',
+      'admin.user-management': 'User Management',
+      'admin.academics': 'Academics',
+      'admin.school-management': 'School Management',
+      'admin.schedules': 'Schedules',
+    };
+
+    return labels[groupName] ?? groupName.replace(/^admin\./, '').replace(/-/g, ' ').replace(/\./g, ' › ');
+  };
 
   // Get color for permission group
   const getGroupColor = (groupName: string) => {
@@ -85,6 +107,7 @@ const ShowRolePage = ({ role }: ShowRolePageProps) => {
       'settings': 'border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-900/20',
       'dashboard': 'border-indigo-200 bg-indigo-50 dark:border-indigo-800 dark:bg-indigo-900/20',
       'admin': 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20',
+      'admin.system-logs': 'border-orange-200 bg-orange-50 dark:border-orange-800 dark:bg-orange-900/20',
     };
     
     return colorMap[groupName] || 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800';
@@ -99,6 +122,7 @@ const ShowRolePage = ({ role }: ShowRolePageProps) => {
       'settings': '⚙️',
       'dashboard': '📊',
       'admin': '👑',
+      'admin.system-logs': '📜',
     };
     
     return iconMap[groupName] || '📝';
@@ -260,7 +284,7 @@ const ShowRolePage = ({ role }: ShowRolePageProps) => {
                           <span className="text-2xl">{getGroupIcon(groupName)}</span>
                           <div>
                             <h3 className="font-bold text-slate-900 dark:text-white capitalize">
-                              {groupName.replace('-', ' ').replace('_', ' ')}
+                              {formatGroupName(groupName)}
                             </h3>
                             <p className="text-sm text-slate-600 dark:text-slate-400">
                               {permissions.length} permission{permissions.length !== 1 ? 's' : ''}

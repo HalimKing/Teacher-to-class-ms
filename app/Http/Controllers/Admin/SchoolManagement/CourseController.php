@@ -614,7 +614,7 @@ class CourseController extends Controller
             }
         } else {
             try {
-                $array = Excel::toArray([], $file);
+                $array = Excel::toArray(new \App\Imports\RawSheetImport(), $file);
                 if (!empty($array) && isset($array[0])) {
                     $sheet = $array[0];
                     $headerRowIndex = 0;
@@ -758,7 +758,7 @@ class CourseController extends Controller
             }
         } else {
             try {
-                $array = Excel::toArray([], $file);
+                $array = Excel::toArray(new \App\Imports\RawSheetImport(), $file);
                 if (!empty($array) && isset($array[0])) {
                     $sheet = $array[0];
                     $headerRowIndex = 0;

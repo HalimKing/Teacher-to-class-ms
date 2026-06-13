@@ -16,6 +16,7 @@ class SystemSettingsUpdateRequest extends FormRequest
             'timezone'        => 'nullable|string|timezone|max:64',
             'date_format'     => 'nullable|string|max:32',
             'time_format'     => 'nullable|string|max:32',
+            'log_retention_days' => 'nullable|integer|min:7|max:3650',
         ],
         'attendance' => [
             'gps_radius_meters'           => 'nullable|integer|min:1|max:5000',

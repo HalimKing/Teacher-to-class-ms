@@ -183,7 +183,7 @@ class FacultyController extends Controller
             } else {
                 // Try to read with the Excel package to support xlsx/xls if available
                 try {
-                    $array = Excel::toArray([], $file);
+                    $array = Excel::toArray(new \App\Imports\RawSheetImport(), $file);
                     if (!empty($array) && isset($array[0])) {
                         $sheet = $array[0];
                         $header = array_map(function ($h) {
@@ -332,7 +332,7 @@ class FacultyController extends Controller
             }
         } else {
             try {
-                $array = Excel::toArray([], $file);
+                $array = Excel::toArray(new \App\Imports\RawSheetImport(), $file);
                 if (!empty($array) && isset($array[0])) {
                     $sheet = $array[0];
                     
@@ -471,7 +471,7 @@ class FacultyController extends Controller
             }
         } else {
             try {
-                $array = Excel::toArray([], $file);
+                $array = Excel::toArray(new \App\Imports\RawSheetImport(), $file);
                 if (!empty($array) && isset($array[0])) {
                     $sheet = $array[0];
                     

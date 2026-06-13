@@ -8,6 +8,9 @@ import {
     TrendingUp,
     Users,
     XCircle,
+    Activity,
+    LogIn,
+    LogOut,
 } from 'lucide-react';
 import { ArrowDown, ArrowUp, Minus } from 'lucide-react';
 
@@ -85,6 +88,9 @@ export const reportIconMap: Record<string, React.ComponentType<{ className?: str
     ShieldCheck,
     ShieldX,
     MapPin,
+    Activity,
+    LogIn,
+    LogOut,
 };
 
 export const chartOptions = {
@@ -102,6 +108,8 @@ export const statusColors: Record<string, string> = {
     present: 'bg-green-100 text-green-700',
     absent: 'bg-red-100 text-red-700',
     incomplete: 'bg-gray-100 text-gray-700',
+    success: 'bg-green-100 text-green-700',
+    failed: 'bg-red-100 text-red-700',
 };
 
 export function StatusBadge({ status }: { status: string }) {

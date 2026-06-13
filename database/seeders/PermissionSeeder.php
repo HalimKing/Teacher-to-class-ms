@@ -71,12 +71,18 @@ class PermissionSeeder extends Seeder
             'admin.attendance.export',
             'admin.staff-attendance.view',
             'admin.staff-attendance.export',
+            'admin.system-logs.view',
+            'admin.system-logs.export',
+            'admin.system-logs.manage',
             // Schedules permissions
             'admin.schedules.view',
             'admin.schedules.manage',
         ];
         foreach ($permissions as $permission) {
-            Permission::create(['name' => $permission]);
+            Permission::firstOrCreate([
+                'name' => $permission,
+                'guard_name' => 'web',
+            ]);
         }
     }
 }
