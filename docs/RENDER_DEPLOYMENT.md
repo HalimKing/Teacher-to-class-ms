@@ -276,6 +276,15 @@ Use `LOG_CHANNEL=stderr` so logs appear in the Render dashboard.
 
 ## Troubleshooting
 
+### `composer install` fails during Docker build (exit code 2)
+
+The `composer:2` build image does not include PHP extensions such as `ext-zip`, `ext-gd`, and `ext-dom` that **PhpSpreadsheet** and **DomPDF** require. The Dockerfile uses `--ignore-platform-reqs` in the vendor stage (extensions are installed in the final Apache/PHP stage).
+
+If it still fails:
+
+1. Ensure **`composer.lock` is committed** and matches `composer.json` (run `composer update` locally, commit both files).
+2. Check Render build logs for `Your lock file does not contain a compatible set of packages`.
+
 ### `composer: command not found`
 
 You are on Render **Native** PHP runtime. Switch the service to **Docker** and set Dockerfile path to `./Dockerfile`.

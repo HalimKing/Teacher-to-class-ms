@@ -9,12 +9,14 @@ WORKDIR /app
 
 COPY composer.json composer.lock ./
 
+# The composer:2 image is minimal and lacks ext-zip, ext-gd, etc. required by
+# PhpSpreadsheet/DomPDF. Those extensions are installed in the runtime stage.
 RUN composer install \
     --no-dev \
     --no-interaction \
     --no-scripts \
     --prefer-dist \
-    --ignore-platform-req=ext-gd
+    --ignore-platform-reqs
 
 COPY . .
 
@@ -23,7 +25,7 @@ RUN composer install \
     --no-interaction \
     --prefer-dist \
     --optimize-autoloader \
-    --ignore-platform-req=ext-gd \
+    --ignore-platform-reqs \
     && composer clear-cache
 
 # -----------------------------------------------------------------------------
