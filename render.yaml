@@ -1,0 +1,107 @@
+# Render Blueprint for teacher-to-class-ms
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: teacher-to-class-web
+    runtime: docker
+    plan: starter
+    region: oregon
+    healthCheckPath: /up
+    dockerfilePath: ./Dockerfile
+    preDeployCommand: php artisan migrate --force --no-interaction
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: LOG_CHANNEL
+        value: stderr
+      - key: LOG_LEVEL
+        value: info
+      - key: INERTIA_SSR_ENABLED
+        value: "false"
+      - key: SESSION_DRIVER
+        value: database
+      - key: SESSION_SECURE_COOKIE
+        value: "true"
+      - key: CACHE_STORE
+        value: database
+      - key: QUEUE_CONNECTION
+        value: database
+      - key: FILESYSTEM_DISK
+        value: local
+      - key: DB_CONNECTION
+        value: pgsql
+      - key: DB_URL
+        fromDatabase:
+          name: teacher-to-class-db
+          property: connectionString
+      - key: APP_KEY
+        generateValue: true
+      - key: APP_URL
+        sync: false
+
+  - type: worker
+    name: teacher-to-class-worker
+    runtime: docker
+    plan: starter
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    dockerCommand: php artisan queue:work --sleep=3 --tries=3 --max-time=3600
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: LOG_CHANNEL
+        value: stderr
+      - key: INERTIA_SSR_ENABLED
+        value: "false"
+      - key: QUEUE_CONNECTION
+        value: database
+      - key: DB_CONNECTION
+        value: pgsql
+      - key: DB_URL
+        fromDatabase:
+          name: teacher-to-class-db
+          property: connectionString
+      - key: APP_KEY
+        fromService:
+          type: web
+          name: teacher-to-class-web
+          envVarKey: APP_KEY
+
+  - type: cron
+    name: teacher-to-class-scheduler
+    runtime: docker
+    plan: starter
+    region: oregon
+    schedule: "* * * * *"
+    dockerfilePath: ./Dockerfile
+    dockerCommand: php artisan schedule:run
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: LOG_CHANNEL
+        value: stderr
+      - key: DB_CONNECTION
+        value: pgsql
+      - key: DB_URL
+        fromDatabase:
+          name: teacher-to-class-db
+          property: connectionString
+      - key: APP_KEY
+        fromService:
+          type: web
+          name: teacher-to-class-web
+          envVarKey: APP_KEY
+
+databases:
+  - name: teacher-to-class-db
+    plan: free
+    region: oregon
+    databaseName: teacher_to_class
+    user: teacher_to_class_user
