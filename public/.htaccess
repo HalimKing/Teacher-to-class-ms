@@ -5,6 +5,13 @@
 
     RewriteEngine On
 
+    DirectoryIndex index.php
+
+    # Disable LiteSpeed page cache for Laravel (prevents 419 / missing session cookies)
+    <IfModule LiteSpeed>
+        CacheDisable public /
+    </IfModule>
+
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]

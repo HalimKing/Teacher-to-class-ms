@@ -156,7 +156,7 @@ return [
     |
     */
 
-    'domain' => env('SESSION_DOMAIN'),
+    'domain' => ($domain = env('SESSION_DOMAIN')) && ! in_array($domain, ['null', ''], true) ? $domain : null,
 
     /*
     |--------------------------------------------------------------------------
@@ -169,7 +169,13 @@ return [
     |
     */
 
-    'secure' => env('SESSION_SECURE_COOKIE'),
+    /*
+    | When unset, Laravel auto-detects HTTPS (works with trustProxies on Render/Cloudflare).
+    | Set SESSION_SECURE_COOKIE=true or false only when you need to override detection.
+    */
+    'secure' => ($secure = env('SESSION_SECURE_COOKIE')) !== null && $secure !== ''
+        ? filter_var($secure, FILTER_VALIDATE_BOOLEAN)
+        : null,
 
     /*
     |--------------------------------------------------------------------------

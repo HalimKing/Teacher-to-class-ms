@@ -336,6 +336,40 @@ php artisan migrate:status
 
 Harmless. The Dockerfile sets `ServerName localhost` to suppress it on newer deploys.
 
+### 419 Page Expired on login
+
+Laravel returns **419** when the CSRF token or session cookie is missing on POST (common behind Render’s HTTPS proxy or on cPanel with wrong `APP_URL`).
+
+See also: [CPANEL_DEPLOYMENT.md](./CPANEL_DEPLOYMENT.md#419-page-expired-on-login)
+
+#### Quick fix (Render dashboard)
+
+1. **`APP_URL`** must be `https://your-app.onrender.com` (https, no trailing slash)
+2. **`SESSION_SECURE_COOKIE`** — leave unset (auto) or set `true` for HTTPS
+3. **Do not set `SESSION_DOMAIN`** — leave it empty. If you set it to the literal word `null`, cookies break.
+4. Redeploy, then in Shell:
+   ```bash
+   php artisan config:clear
+   php artisan config:cache
+   ```
+5. Hard-refresh the browser (Ctrl+Shift+R) or use a private window before logging in again.
+
+#### Quick fix (cPanel)
+
+1. **`APP_URL`** must match the browser URL exactly (including `www` vs non-`www`)
+2. **Remove `SESSION_DOMAIN`** from `.env` if present
+3. **HTTPS**: leave `SESSION_SECURE_COOKIE` unset; if site has no SSL yet, set `SESSION_SECURE_COOKIE=false`
+4. Document root must point to **`public/`**
+5. Run `php artisan config:clear && php artisan config:cache` over SSH
+
+#### Code fix (included in repo)
+
+- Trust proxy headers (`X-Forwarded-Proto`, etc.)
+- `URL::forceRootUrl()` from `APP_URL` (fixes host mismatch on cPanel)
+- Session cookie secure flag auto-detected when `SESSION_SECURE_COOKIE` is unset
+- Ignore `SESSION_DOMAIN=null` string
+- `/` redirects to `/login` for a consistent session/CSRF flow
+
 ### Assets missing / blank page
 
 Ensure the Docker build completed the **assets** stage (`npm run build`). Check build logs for Node errors. Rebuild with cache cleared if needed.
