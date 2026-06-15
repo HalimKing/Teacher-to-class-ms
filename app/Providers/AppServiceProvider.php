@@ -10,7 +10,6 @@ use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 use Spatie\Permission\Exceptions\UnauthorizedException;
 
@@ -29,16 +28,6 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        $appUrl = config('app.url');
-
-        if (is_string($appUrl) && $appUrl !== '') {
-            URL::forceRootUrl($appUrl);
-
-            if (str_starts_with($appUrl, 'https://')) {
-                URL::forceScheme('https');
-            }
-        }
-
         Gate::define('view-lecturer-attendance', fn ($user): bool => $user instanceof Teacher && $user->isLecturer());
         Gate::define('view-class-attendance', fn ($user): bool => $user instanceof Teacher && $user->isLecturer());
         Gate::define('view-staff-attendance', fn ($user): bool => $user instanceof Teacher && $user->isAdministrator());

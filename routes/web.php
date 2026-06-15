@@ -31,13 +31,16 @@ use App\Http\Controllers\Teacher\StaffAttendanceController;
 use App\Http\Controllers\Teacher\StaffAttendanceReportController as TeacherStaffAttendanceReportController;
 
 use App\Http\Controllers\AdminAttendanceController;
+use App\Http\Controllers\DeployCheckController;
 use App\Models\AcademicPeriod;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
 Route::get('/', function () {
-    return redirect()->route('login');
+    return Inertia::render('auth/login');
 })->name('home');
+
+Route::get('/deploy-check', DeployCheckController::class)->name('deploy-check');
 
 
 

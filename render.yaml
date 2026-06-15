@@ -13,6 +13,8 @@ services:
     envVars:
       - key: APP_ENV
         value: production
+      - key: APP_NAME
+        value: Teacher-to-Class-MS
       - key: APP_DEBUG
         value: "false"
       - key: LOG_CHANNEL
@@ -23,8 +25,6 @@ services:
         value: "false"
       - key: SESSION_DRIVER
         value: database
-      - key: SESSION_SECURE_COOKIE
-        value: "true"
       - key: CACHE_STORE
         value: database
       - key: QUEUE_CONNECTION
@@ -44,7 +44,7 @@ services:
       - key: APP_KEY
         generateValue: true
       - key: APP_URL
-        sync: false
+        value: https://teacher-to-class-ms-4.onrender.com
 
   - type: worker
     name: teacher-to-class-worker
@@ -56,6 +56,8 @@ services:
     envVars:
       - key: APP_ENV
         value: production
+      - key: APP_NAME
+        value: Teacher-to-Class-MS
       - key: APP_DEBUG
         value: "false"
       - key: LOG_CHANNEL
@@ -91,6 +93,8 @@ services:
     envVars:
       - key: APP_ENV
         value: production
+      - key: APP_NAME
+        value: Teacher-to-Class-MS
       - key: APP_DEBUG
         value: "false"
       - key: LOG_CHANNEL

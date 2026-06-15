@@ -30,3 +30,9 @@
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule ^ index.php [L]
 </IfModule>
+
+# Prevent StackCDN / StackCache from caching Laravel pages without session cookies (fixes 419)
+<IfModule mod_headers.c>
+    Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+    Header set Pragma "no-cache"
+</IfModule>

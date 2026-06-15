@@ -38,8 +38,10 @@ if [ -n "${APP_KEY:-}" ]; then
     fi
 
     if [ "${APP_ENV:-local}" = "production" ]; then
-        php artisan config:cache || true
-        php artisan view:cache || true
+        php artisan config:clear --no-interaction
+        # Do not config:cache — avoids stale session/URL settings; Render env vars are read at runtime.
+        php artisan view:cache --no-interaction || true
+        php artisan session:diagnose --no-interaction 2>&1 || true
     fi
 fi
 

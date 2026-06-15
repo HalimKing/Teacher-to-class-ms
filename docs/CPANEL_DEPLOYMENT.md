@@ -143,6 +143,27 @@ Laravel could not match the CSRF token because the **session cookie was not sent
 7. Hard-refresh browser or use a private window
 8. **Cloudflare** — SSL mode “Full” or “Full (strict)”; app already trusts proxy headers
 
+#### 20i / StackCP / StackCDN (maaliyiri.com and similar hosts)
+
+If response headers include **`x-provided-by: StackCDN`** and there is **no `Set-Cookie`**, StackCache is stripping session cookies so pages can be cached. Laravel **cannot login** without session cookies.
+
+**Fix in hosting control panel (StackCache / CDN settings):**
+
+1. Open **StackCache** (or CDN settings) for the domain
+2. **Uncheck** “Remove PHP Session Cookies From All Pages”
+3. **Uncheck** “Remove PHP Session Cookies Matching Empty PHP Sessions” if login still fails
+4. **Purge / clear** the CDN cache after saving
+5. Alternatively, **disable StackCDN** entirely for this Laravel app (recommended for dynamic apps)
+
+**Also upload the latest `public/.htaccess`** — it sends `Cache-Control: no-store` so the CDN does not cache HTML without cookies.
+
+After fixing, reload `/login` and confirm Response Headers include:
+
+```
+Set-Cookie: teacher_to_class_ms_session=...
+Set-Cookie: XSRF-TOKEN=...
+```
+
 #### Verify session cookie in browser
 
 1. Open DevTools → Application → Cookies
@@ -195,7 +216,25 @@ RewriteRule ^ https://%1%{REQUEST_URI} [L,R=301]
 - Ensure `storage/` and `bootstrap/cache/` are writable
 - Temporarily set `APP_DEBUG=true` to see the error (disable after fixing)
 
-### Blank page / missing CSS
+### Blank page / console shows `5173` or `@vite/client` CORS errors
+
+The server is in **Vite dev mode**, not production. The browser tries to load scripts from `http://localhost:5173` or `http://[::1]:5173`.
+
+**Fix:**
+
+1. **Delete** `public/hot` on the server if it exists (this file is created when you run `npm run dev` locally)
+2. **Build assets** on your computer:
+   ```bash
+   npm ci
+   npm run build
+   ```
+3. **Upload** the entire `public/build/` folder to cPanel (including `manifest.json`)
+4. Set `APP_ENV=production` in `.env`
+5. Run `php artisan config:clear`
+
+Do **not** upload `public/hot` to production.
+
+### Assets missing / blank page (no 5173 in console)
 
 - Run `npm run build` and upload `public/build/`
 - Run `php artisan view:clear`
