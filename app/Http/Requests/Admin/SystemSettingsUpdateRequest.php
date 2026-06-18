@@ -45,6 +45,9 @@ class SystemSettingsUpdateRequest extends FormRequest
             'log_gps_attempts'        => 'nullable|boolean',
             'log_failed_attempts'    => 'nullable|boolean',
         ],
+        'security' => [
+            'forgot_password_enabled' => 'nullable|boolean',
+        ],
     ];
 
     // public function authorize(): bool

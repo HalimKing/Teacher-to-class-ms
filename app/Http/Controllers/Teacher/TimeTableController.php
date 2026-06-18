@@ -14,7 +14,7 @@ class TimeTableController extends Controller
 {
     public function index(Request $request)
     {
-        $teacherId = auth()->id();
+        $teacherId = auth('teacher')->id();
 
         $query = TimeTable::with(['academicYear', 'course.program', 'course.teacher', 'classRoom'])
             ->where('teacher_id', $teacherId)
@@ -92,7 +92,7 @@ class TimeTableController extends Controller
      */
     public function export(Request $request)
     {
-        $teacherId = auth()->id();
+        $teacherId = auth('teacher')->id();
         $format = $request->get('format', 'csv');
 
         $timeTables = TimeTable::with(['academicYear', 'course.program', 'course.teacher', 'classRoom'])

@@ -1,3 +1,5 @@
+import RecentNotificationsWidget from '@/components/notifications/RecentNotificationsWidget';
+import { type TeacherNotificationItem } from '@/components/notifications/types';
 import AppLayout from '@/layouts/app-layout';
 import { SharedData, type BreadcrumbItem } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react';
@@ -110,6 +112,8 @@ interface UpcomingReminder {
     session: string | null;
 }
 
+interface DashboardNotification extends TeacherNotificationItem {}
+
 export default function TeacherDashboard({
     upcomingClasses,
     todayLectures,
@@ -134,6 +138,8 @@ export default function TeacherDashboard({
     const page = usePage<SharedData>();
 
     const { auth } = page.props;
+    const unreadNotifications =
+        (page.props as { unreadNotifications?: DashboardNotification[] }).unreadNotifications ?? [];
     const isLecturer = (staffType || String(auth.user.staff_type || 'lecturer')) === 'lecturer';
 
     console.log("today's lectures: ", todayLectures);
@@ -290,6 +296,8 @@ export default function TeacherDashboard({
                         )}
                     </div>
                 </div>
+
+                {isLecturer && <RecentNotificationsWidget notifications={unreadNotifications} />}
 
                 {!isLecturer ? (
                     <div className="rounded-xl border border-sidebar-border/70 bg-white p-6 shadow-sm dark:border-sidebar-border dark:bg-sidebar-accent">

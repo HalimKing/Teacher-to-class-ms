@@ -1,20 +1,25 @@
 <?php
 
-namespace App\Http\Controllers\Auth; 
+namespace App\Http\Controllers\Auth;
+
+use App\Http\Controllers\Controller;
+use App\Services\AuthSecuritySettingsService;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Inertia\Inertia;
-use App\Http\Controllers\Controller;
-use App\Models\SystemSetting;
-use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Route;
+use Inertia\Inertia;
 
 class UnifiedLoginController extends Controller
 {
+    public function __construct(
+        private AuthSecuritySettingsService $authSecuritySettings,
+    ) {}
+
     public function show(Request $request)
     {
-         return Inertia::render('auth/login', [
-            'canResetPassword' => Route::has('password.request'),
+        return Inertia::render('auth/login', [
+            'canResetPassword' => Route::has('password.request') && $this->authSecuritySettings->isForgotPasswordEnabled(),
             'status' => $request->session()->get('status'),
         ]);
     }

@@ -17,6 +17,10 @@ class LogAuthenticationEvents
 
     public function handleLogin(Login $event): void
     {
+        if ($event->user instanceof User && $event->guard === 'web') {
+            $event->user->forceFill(['last_login_at' => now()])->saveQuietly();
+        }
+
         $actor = $this->resolveActorFromUser($event->user);
 
         $this->activityLogService->logAuthentication(

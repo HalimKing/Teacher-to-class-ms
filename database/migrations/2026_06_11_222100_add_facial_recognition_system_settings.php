@@ -14,14 +14,14 @@ return new class extends Migration
         $settings = [
             [
                 'key' => 'facial_recognition_enabled',
-                'value' => '0',
+                'value' => '1',
                 'group' => 'attendance',
                 'type' => 'boolean',
                 'description' => 'Require facial recognition as an additional attendance verification layer.',
             ],
             [
                 'key' => 'face_match_threshold',
-                'value' => '0.6',
+                'value' => '0.45',
                 'group' => 'attendance',
                 'type' => 'string',
                 'description' => 'Maximum descriptor distance accepted for a face match.',
@@ -47,6 +47,10 @@ return new class extends Migration
                 ['key' => $setting['key']],
                 array_merge($setting, ['created_at' => $now, 'updated_at' => $now])
             );
+        }
+
+        if (class_exists(\App\Models\SystemSetting::class)) {
+            \App\Models\SystemSetting::clearCache();
         }
     }
 

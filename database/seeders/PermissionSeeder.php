@@ -21,6 +21,8 @@ class PermissionSeeder extends Seeder
             'admin.user-management.users.create',
             'admin.user-management.users.edit',
             'admin.user-management.users.delete',
+            'admin.user-management.users.reset-password',
+            'admin.user-management.users.export',
             'admin.academics.time-tables.view',
             'admin.academics.time-tables.create',
             'admin.academics.time-tables.edit',

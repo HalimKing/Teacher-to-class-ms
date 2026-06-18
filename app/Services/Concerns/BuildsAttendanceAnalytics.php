@@ -123,8 +123,12 @@ trait BuildsAttendanceAnalytics
         return sprintf('%02d:%02d', intdiv($average, 60), $average % 60);
     }
 
-    protected function groupTrend(Collection $records, string $period, string $statusColumn): array
+    protected function groupTrend(Collection $records, string $period, string $statusColumn, ?Carbon $start = null, ?Carbon $end = null): array
     {
+        if ($start !== null && $end !== null) {
+            return $this->groupTrendForRange($records, $period, $statusColumn, $start, $end);
+        }
+
         return $records->groupBy(function ($record) use ($period) {
             $date = Carbon::parse($record->date);
 
@@ -133,21 +137,122 @@ trait BuildsAttendanceAnalytics
                 'month' => $date->format('Y-m'),
                 default => $date->format('Y-m-d'),
             };
-        })->map(function (Collection $group, string $label) use ($period, $statusColumn) {
+        })->map(function (Collection $group, string $key) use ($period, $statusColumn) {
             $present = $group->filter(fn ($record) => $this->isPresentRecord($record, $statusColumn))->count();
 
             return [
-                'label' => match ($period) {
-                    'week' => 'Week of ' . Carbon::parse($label)->format('M d'),
-                    'month' => Carbon::createFromFormat('Y-m', $label)->format('M Y'),
-                    default => Carbon::parse($label)->format('M d'),
-                },
+                'label' => $this->formatTrendBucketLabel($period, $key),
                 'total' => $group->count(),
                 'present' => $present,
                 'late' => $group->filter(fn ($record) => $this->isLateRecord($record, $statusColumn))->count(),
+                'absent' => $group->filter(fn ($record) => ($record->{$statusColumn} ?? null) === 'absent')->count(),
                 'attendance_rate' => $group->count() > 0 ? round(($present / $group->count()) * 100, 1) : 0,
             ];
-        })->values()->sortBy('label')->values()->all();
+        })->sortKeys()->values()->all();
+    }
+
+    protected function groupTrendForRange(
+        Collection $records,
+        string $period,
+        string $statusColumn,
+        Carbon $start,
+        Carbon $end,
+    ): array {
+        $grouped = $records->groupBy(function ($record) use ($period) {
+            $date = Carbon::parse($record->date);
+
+            return match ($period) {
+                'week' => $date->copy()->startOfWeek()->format('Y-m-d'),
+                'month' => $date->format('Y-m'),
+                default => $date->format('Y-m-d'),
+            };
+        });
+
+        $trend = [];
+
+        foreach ($this->buildTrendBuckets($period, $start, $end) as $key => $label) {
+            /** @var Collection $group */
+            $group = $grouped->get($key, collect());
+            $present = $group->filter(fn ($record) => $this->isPresentRecord($record, $statusColumn))->count();
+
+            $trend[] = [
+                'label' => $label,
+                'total' => $group->count(),
+                'present' => $present,
+                'late' => $group->filter(fn ($record) => $this->isLateRecord($record, $statusColumn))->count(),
+                'absent' => $group->filter(fn ($record) => ($record->{$statusColumn} ?? null) === 'absent')->count(),
+                'attendance_rate' => $group->count() > 0 ? round(($present / $group->count()) * 100, 1) : 0,
+            ];
+        }
+
+        return $trend;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected function buildTrendBuckets(string $period, Carbon $start, Carbon $end): array
+    {
+        $start = $start->copy()->startOfDay();
+        $end = $end->copy()->startOfDay();
+
+        if ($start->gt($end)) {
+            [$start, $end] = [$end->copy(), $start->copy()];
+        }
+
+        $buckets = [];
+
+        if ($period === 'week') {
+            $cursor = $start->copy()->startOfWeek();
+            while ($cursor->lte($end)) {
+                $key = $cursor->format('Y-m-d');
+                $buckets[$key] = $this->formatTrendBucketLabel('week', $key);
+                $cursor->addWeek();
+            }
+
+            return $buckets;
+        }
+
+        if ($period === 'month') {
+            $cursor = $start->copy()->startOfMonth();
+            while ($cursor->lte($end)) {
+                $key = $cursor->format('Y-m');
+                $buckets[$key] = $this->formatTrendBucketLabel('month', $key);
+                $cursor->addMonth();
+            }
+
+            return $buckets;
+        }
+
+        $cursor = $start->copy();
+        while ($cursor->lte($end)) {
+            $key = $cursor->format('Y-m-d');
+            $buckets[$key] = $this->formatTrendBucketLabel('day', $key);
+            $cursor->addDay();
+        }
+
+        return $buckets;
+    }
+
+    protected function formatTrendBucketLabel(string $period, string $key): string
+    {
+        return match ($period) {
+            'week' => 'Week of ' . Carbon::parse($key)->format('M d'),
+            'month' => Carbon::createFromFormat('Y-m', $key)->format('M Y'),
+            default => Carbon::parse($key)->format('M d'),
+        };
+    }
+
+    protected function resolveReportDateRange(?string $startDate, ?string $endDate): array
+    {
+        $end = $endDate ? Carbon::parse($endDate)->startOfDay() : Carbon::today();
+        $start = $startDate ? Carbon::parse($startDate)->startOfDay() : $end->copy()->subMonth();
+
+        if ($start->gt($end)) {
+            [$start, $end] = [$end->copy(), $start->copy()];
+        }
+
+        return [$start, $end];
     }
 
     protected function verificationAnalytics(Collection $records): array
@@ -166,9 +271,9 @@ trait BuildsAttendanceAnalytics
         ];
     }
 
-    protected function verificationTrendOverTime(Collection $records, string $statusColumn): array
+    protected function verificationTrendOverTime(Collection $records, string $statusColumn, ?Carbon $start = null, ?Carbon $end = null): array
     {
-        return $this->groupTrend($records, 'day', $statusColumn);
+        return $this->groupTrend($records, 'day', $statusColumn, $start, $end);
     }
 
     protected function performanceAnalytics(Collection $records, string $groupKey, string $statusColumn, callable $personResolver): array

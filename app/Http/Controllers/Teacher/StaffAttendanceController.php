@@ -22,7 +22,7 @@ class StaffAttendanceController extends Controller
         private AttendanceTimingService $timingService
     ) {}
 
-    public function index(): Response
+    public function index(FacialRecognitionService $facialRecognition): Response
     {
         $teacher = auth('teacher')->user();
         $schedules = TimeTable::where('teacher_id', $teacher->id)
@@ -45,6 +45,7 @@ class StaffAttendanceController extends Controller
             'assignedSchedules' => $schedules->map(fn (TimeTable $schedule) => $this->formatSchedule($schedule))->values(),
             'todaySchedules' => $schedules->where('day_of_week', $today)->map(fn (TimeTable $schedule) => $this->formatSchedule($schedule))->values(),
             'upcomingSchedules' => $schedules->filter(fn (TimeTable $schedule) => $this->isUpcoming($schedule))->map(fn (TimeTable $schedule) => $this->formatSchedule($schedule))->values(),
+            'facialRecognitionEnabled' => $facialRecognition->isEnabled(),
         ]);
     }
 
@@ -79,7 +80,7 @@ class StaffAttendanceController extends Controller
 
     public function checkIn(Request $request, FacialRecognitionService $facialRecognition): JsonResponse
     {
-        $validated = $request->validate([
+        $validated = $request->validate(array_merge([
             'timetable_id' => 'required|exists:time_tables,id',
             'check_in_time' => 'required|date',
             'coordinates.latitude' => 'required|numeric',
@@ -87,8 +88,7 @@ class StaffAttendanceController extends Controller
             'coordinates.accuracy' => 'required|numeric',
             'distance' => 'required|numeric',
             'within_range' => 'required|boolean',
-            'face_verification_token' => 'nullable|string',
-        ]);
+        ], $facialRecognition->attendanceValidationRules($facialRecognition->isEnabled())));
 
         $staff = auth('teacher')->user();
         $timetable = $this->getOwnedStaffTimetable((int) $validated['timetable_id'], $staff->id);
@@ -123,6 +123,7 @@ class StaffAttendanceController extends Controller
         $checkInOutcome = $this->timingService->resolveCheckInOutcome($now, $scheduledStart, AttendanceTimingService::ROLE_ADMINISTRATOR);
         $today = $now->format('Y-m-d');
         $faceVerificationPayload = null;
+        $faceMatchScore = null;
 
         $existingAttendance = StaffAttendance::where('staff_id', $staff->id)
             ->where('timetable_id', $timetable->id)
@@ -167,17 +168,25 @@ class StaffAttendanceController extends Controller
                 ], 422);
             }
 
-            $token = (string) $request->input('face_verification_token', '');
-            $faceVerificationPayload = $facialRecognition->consumeVerificationToken($token, $staff, (int) $validated['timetable_id']);
+            $verifiedFace = $facialRecognition->resolveVerifiedAttendanceFace(
+                $staff,
+                (int) $validated['timetable_id'],
+                (string) $request->input('face_verification_token', ''),
+                $request->input('face_descriptor', []),
+                $request->input('quality'),
+            );
 
-            if (!$faceVerificationPayload) {
+            if ($verifiedFace === null) {
                 $facialRecognition->logAttempt($staff, (int) $validated['timetable_id'], 'failed', null, 'invalid_or_expired_token');
 
                 return response()->json([
                     'success' => false,
-                    'message' => 'Face verification is required before staff attendance can be marked.',
+                    'message' => 'Face verification failed. The captured face does not match the enrolled staff member.',
                 ], 422);
             }
+
+            $faceVerificationPayload = $verifiedFace['payload'];
+            $faceMatchScore = $verifiedFace['score'];
         }
 
         $gpsEnforcement = SystemSetting::getValue('gps_enforcement_enabled', true);
@@ -204,7 +213,7 @@ class StaffAttendanceController extends Controller
             'minutes_early' => $checkInOutcome['minutes_early'],
             'minutes_late' => $checkInOutcome['minutes_late'],
             'face_verified' => $faceVerificationPayload !== null,
-            'face_match_score' => $faceVerificationPayload['score'] ?? null,
+            'face_match_score' => $faceMatchScore ?? ($faceVerificationPayload['score'] ?? null),
             'face_verified_at' => $faceVerificationPayload ? now() : null,
         ]);
 
@@ -234,7 +243,7 @@ class StaffAttendanceController extends Controller
 
     public function checkOut(Request $request, FacialRecognitionService $facialRecognition): JsonResponse
     {
-        $validated = $request->validate([
+        $validated = $request->validate(array_merge([
             'attendance_id' => 'required|exists:staff_attendances,id',
             'check_out_time' => 'required|date',
             'coordinates.latitude' => 'required|numeric',
@@ -242,8 +251,7 @@ class StaffAttendanceController extends Controller
             'coordinates.accuracy' => 'required|numeric',
             'distance' => 'required|numeric',
             'within_range' => 'required|boolean',
-            'face_verification_token' => 'nullable|string',
-        ]);
+        ], $facialRecognition->attendanceValidationRules($facialRecognition->isEnabled())));
 
         $staff = auth('teacher')->user();
         $attendance = StaffAttendance::with('timetable')
@@ -274,15 +282,20 @@ class StaffAttendanceController extends Controller
                 ], 422);
             }
 
-            $token = (string) $request->input('face_verification_token', '');
-            $faceVerificationPayload = $facialRecognition->consumeVerificationToken($token, $staff, (int) $attendance->timetable_id);
+            $verifiedFace = $facialRecognition->resolveVerifiedAttendanceFace(
+                $staff,
+                (int) $attendance->timetable_id,
+                (string) $request->input('face_verification_token', ''),
+                $request->input('face_descriptor', []),
+                $request->input('quality'),
+            );
 
-            if (!$faceVerificationPayload) {
+            if ($verifiedFace === null) {
                 $facialRecognition->logAttempt($staff, (int) $attendance->timetable_id, 'failed', null, 'invalid_or_expired_token');
 
                 return response()->json([
                     'success' => false,
-                    'message' => 'Face verification is required before staff check-out can be completed.',
+                    'message' => 'Face verification failed. The captured face does not match the enrolled staff member.',
                 ], 422);
             }
         }

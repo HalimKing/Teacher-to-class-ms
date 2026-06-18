@@ -6,8 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import AuthLayout from '@/layouts/auth-layout';
-import { Form, Head } from '@inertiajs/react';
-import { Github, LoaderCircle, Mail } from 'lucide-react';
+import { Form, Head, Link } from '@inertiajs/react';
+import { Clock, Github, LoaderCircle, Mail } from 'lucide-react';
 
 interface LoginProps {
     status?: string;
@@ -98,6 +98,13 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                                     ) : (
                                         'Sign in'
                                     )}
+                                </Button>
+
+                                <Button asChild variant="outline" className="h-11 w-full text-sm font-medium">
+                                    <Link href={route('attendance.login')}>
+                                        <Clock className="size-4" aria-hidden="true" />
+                                        Attendance Portal
+                                    </Link>
                                 </Button>
                             </div>
 

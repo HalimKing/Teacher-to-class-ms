@@ -8,6 +8,8 @@ use App\Models\Faculty;
 use App\Models\Teacher;
 use App\Models\TeacherAttendance;
 use App\Models\TimeTable;
+use App\Support\AttendanceRecordSource;
+use App\Services\RescheduledAttendanceService;
 use App\Services\Concerns\BuildsAttendanceAnalytics;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -21,7 +23,8 @@ class AdminTeacherAttendanceReportService
     private const STATUS_COLUMN = 'status';
 
     public function __construct(
-        private AttendanceTimingService $timingService
+        private AttendanceTimingService $timingService,
+        private RescheduledAttendanceService $rescheduledAttendance,
     ) {}
 
     public function baseQuery(): Builder
@@ -35,6 +38,8 @@ class AdminTeacherAttendanceReportService
                 'classroom',
                 'timetable',
                 'academicYear',
+                'rescheduledSession.classroom',
+                'rescheduledSession.timetable.classRoom',
             ]);
     }
 
@@ -92,6 +97,31 @@ class AdminTeacherAttendanceReportService
             $query->where(self::STATUS_COLUMN, $request->attendance_status);
         }
 
+        if ($request->filled('attendance_source') && $request->attendance_source !== 'all') {
+            if ($request->attendance_source === AttendanceRecordSource::SYSTEM) {
+                $query->where(function (Builder $sourceQuery) {
+                    $sourceQuery->where('auto_generated', true)
+                        ->orWhere('attendance_source', AttendanceRecordSource::SYSTEM);
+                });
+            } elseif ($request->attendance_source === AttendanceRecordSource::MANUAL) {
+                $query->where(function (Builder $sourceQuery) {
+                    $sourceQuery->where('auto_generated', false)
+                        ->where(function (Builder $manualQuery) {
+                            $manualQuery->whereNull('attendance_source')
+                                ->orWhere('attendance_source', AttendanceRecordSource::MANUAL);
+                        });
+                });
+            }
+        }
+
+        if ($request->filled('session_type') && $request->session_type !== 'all') {
+            if ($request->session_type === 'rescheduled') {
+                $query->whereNotNull('rescheduled_session_id');
+            } elseif ($request->session_type === 'normal') {
+                $query->whereNull('rescheduled_session_id');
+            }
+        }
+
         if ($request->filled('face_verification_status') && $request->face_verification_status !== 'all') {
             if ($request->face_verification_status === 'verified') {
                 $query->where('face_verified', true);
@@ -109,6 +139,25 @@ class AdminTeacherAttendanceReportService
                 $query->where(function (Builder $geoQuery) {
                     $geoQuery->where('check_in_within_range', false)->orWhereNull('check_in_within_range');
                 });
+            }
+        }
+
+        if ($request->filled('arrival_category') && $request->arrival_category !== 'all') {
+            $query->where('arrival_category', $request->arrival_category);
+        }
+
+        if ($request->filled('day_of_week') && $request->day_of_week !== 'all') {
+            $dayName = (string) $request->day_of_week;
+            $dayIndex = array_search($dayName, ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'], true);
+
+            if ($dayIndex !== false) {
+                $driver = $query->getConnection()->getDriverName();
+
+                if ($driver === 'sqlite') {
+                    $query->whereRaw("CAST(strftime('%w', date) AS INTEGER) = ?", [$dayIndex]);
+                } else {
+                    $query->whereRaw('DAYNAME(date) = ?', [$dayName]);
+                }
             }
         }
 
@@ -174,9 +223,13 @@ class AdminTeacherAttendanceReportService
 
     public function getRecords(Request $request): Collection
     {
-        return $this->applySorting($this->applyFilters($this->baseQuery(), $request), $request)
-            ->get()
+        return $this->getFilteredAttendanceRecords($request)
             ->map(fn (TeacherAttendance $record) => $this->transformRecord($record));
+    }
+
+    public function getFilteredAttendanceRecords(Request $request): Collection
+    {
+        return $this->applySorting($this->applyFilters($this->baseQuery(), $request), $request)->get();
     }
 
     public function getSummaryCards(Request $request): array
@@ -193,7 +246,8 @@ class AdminTeacherAttendanceReportService
         $presentToday = $todayRecords->filter(fn ($record) => $this->isPresentRecord($record, self::STATUS_COLUMN))->count();
         $lateToday = $todayRecords->filter(fn ($record) => $this->isLateRecord($record, self::STATUS_COLUMN))->count();
         $expectedToday = $this->expectedTeachersTodayCount();
-        $absentToday = max($expectedToday - $presentToday, 0);
+        $absentToday = $todayRecords->where(self::STATUS_COLUMN, 'absent')->count();
+        $autoGeneratedToday = $todayRecords->where('auto_generated', true)->count();
         $attendanceRate = $records->count() > 0
             ? round(($records->filter(fn ($record) => $this->isPresentRecord($record, self::STATUS_COLUMN))->count() / $records->count()) * 100, 1)
             : 0;
@@ -227,6 +281,7 @@ class AdminTeacherAttendanceReportService
             ['title' => 'Total Attendance Records', 'value' => (string) $records->count(), 'change' => 'Filtered range', 'changeType' => 'neutral', 'icon' => 'Calendar'],
             ['title' => 'Present Today', 'value' => (string) $presentToday, 'change' => $expectedToday > 0 ? round(($presentToday / $expectedToday) * 100, 1) . '% of scheduled' : 'No schedules', 'changeType' => 'positive', 'icon' => 'CheckCircle'],
             ['title' => 'Absent Today', 'value' => (string) $absentToday, 'change' => $expectedToday > 0 ? round(($absentToday / $expectedToday) * 100, 1) . '% of scheduled' : 'No schedules', 'changeType' => $absentToday > 0 ? 'negative' : 'neutral', 'icon' => 'XCircle'],
+            ['title' => 'Auto Generated Absences', 'value' => (string) $autoGeneratedToday, 'change' => 'System recorded today', 'changeType' => $autoGeneratedToday > 0 ? 'negative' : 'neutral', 'icon' => 'AlertTriangle'],
             ['title' => 'Late Arrivals', 'value' => (string) $lateToday, 'change' => $presentToday > 0 ? round(($lateToday / max($presentToday, 1)) * 100, 1) . '% of present' : '', 'changeType' => $lateToday > 0 ? 'negative' : 'neutral', 'icon' => 'Clock'],
             ['title' => 'Attendance Rate', 'value' => $attendanceRate . '%', 'change' => ($rateChange >= 0 ? '+' : '') . $rateChange . '% vs previous period', 'changeType' => $rateChange >= 0 ? 'positive' : 'negative', 'icon' => 'TrendingUp'],
             ['title' => 'Face Verification Success Rate', 'value' => $faceSuccessRate . '%', 'change' => $faceVerified . ' verified records', 'changeType' => 'positive', 'icon' => 'ShieldCheck'],
@@ -239,13 +294,17 @@ class AdminTeacherAttendanceReportService
     public function getAnalytics(Request $request): array
     {
         $records = $this->applyFilters($this->baseQuery(), $request)->get();
+        [$start, $end] = $this->resolveReportDateRange(
+            $request->input('start_date'),
+            $request->input('end_date'),
+        );
 
         return [
-            'dailyTrend' => $this->groupTrend($records, 'day', self::STATUS_COLUMN),
-            'weeklyTrend' => $this->groupTrend($records, 'week', self::STATUS_COLUMN),
-            'monthlyTrend' => $this->groupTrend($records, 'month', self::STATUS_COLUMN),
+            'dailyTrend' => $this->groupTrend($records, 'day', self::STATUS_COLUMN, $start, $end),
+            'weeklyTrend' => $this->groupTrend($records, 'week', self::STATUS_COLUMN, $start, $end),
+            'monthlyTrend' => $this->groupTrend($records, 'month', self::STATUS_COLUMN, $start, $end),
             'verificationAnalytics' => $this->verificationAnalytics($records),
-            'verificationTrend' => $this->verificationTrendOverTime($records, self::STATUS_COLUMN),
+            'verificationTrend' => $this->verificationTrendOverTime($records, self::STATUS_COLUMN, $start, $end),
             'performanceAnalytics' => $this->performanceAnalytics(
                 $records,
                 'teacher_id',
@@ -263,6 +322,10 @@ class AdminTeacherAttendanceReportService
     {
         $request->merge(['teacher_id' => $teacher->id]);
         $records = $this->applyFilters($this->baseQuery(), $request)->get();
+        [$start, $end] = $this->resolveReportDateRange(
+            $request->input('start_date'),
+            $request->input('end_date'),
+        );
         $checkIns = $records->filter(fn (TeacherAttendance $record) => !empty($record->check_in_time));
         $checkOuts = $records->filter(fn (TeacherAttendance $record) => !empty($record->check_out_time));
 
@@ -306,7 +369,7 @@ class AdminTeacherAttendanceReportService
                 ->sortByDesc('month')
                 ->values()
                 ->all(),
-            'attendanceTrend' => $this->groupTrend($records, 'day', self::STATUS_COLUMN),
+            'attendanceTrend' => $this->groupTrend($records, 'day', self::STATUS_COLUMN, $start, $end),
             'attendanceCalendar' => $this->attendanceCalendar($records, self::STATUS_COLUMN),
             'records' => $records->map(fn (TeacherAttendance $record) => $this->transformRecord($record))->values()->all(),
         ];
@@ -329,6 +392,14 @@ class AdminTeacherAttendanceReportService
             'departments' => Department::orderBy('name')->get(['id', 'name', 'faculty_id'])->values()->all(),
             'courses' => Course::orderBy('name')->get(['id', 'name', 'program_id'])->values()->all(),
             'attendanceStatuses' => ['pending', 'present', 'absent', 'completed', 'incomplete', 'late', 'checked_in', 'early_leave', 'overtime'],
+            'attendanceSources' => [
+                ['value' => AttendanceRecordSource::MANUAL, 'label' => 'Manual Attendance'],
+                ['value' => AttendanceRecordSource::SYSTEM, 'label' => 'System Generated'],
+            ],
+            'sessionTypes' => [
+                ['value' => 'normal', 'label' => 'Normal Sessions'],
+                ['value' => 'rescheduled', 'label' => 'Rescheduled Sessions'],
+            ],
         ];
     }
 
@@ -354,9 +425,21 @@ class AdminTeacherAttendanceReportService
                 'Face Verification Status' => $record['face_verification_status'],
                 'Face Match Score' => $record['face_match_score'],
                 'Attendance Source' => $record['attendance_source'],
+                'Session Type' => $record['reschedule_status'],
+                'Original Schedule' => $record['reschedule']
+                    ? ($record['reschedule']['original_date_display'] . ', ' . $record['reschedule']['original_start_time_display'] . ' – ' . $record['reschedule']['original_end_time_display'] . ', ' . ($record['reschedule']['original_venue'] ?? '—'))
+                    : '—',
+                'Rescheduled Schedule' => $record['reschedule']
+                    ? ($record['reschedule']['new_date_display'] . ', ' . $record['reschedule']['new_start_time_display'] . ' – ' . $record['reschedule']['new_end_time_display'] . ', ' . ($record['reschedule']['new_venue'] ?? '—'))
+                    : '—',
                 'Created Date' => $record['created_at'],
             ];
         })->all();
+    }
+
+    public function transformAttendanceRecord(TeacherAttendance $record): array
+    {
+        return $this->transformRecord($record);
     }
 
     private function transformRecord(TeacherAttendance $record): array
@@ -410,25 +493,29 @@ class AdminTeacherAttendanceReportService
             'face_verification_status' => $record->face_verified ? 'Verified' : 'Unverified',
             'face_match_score' => $record->face_match_score,
             'attendance_source' => $this->resolveAttendanceSource($record),
+            'auto_generated' => (bool) $record->auto_generated,
+            'auto_absence_reason' => $record->auto_absence_reason,
+            'is_rescheduled' => $record->rescheduled_session_id !== null,
+            'reschedule_status' => $record->rescheduled_session_id ? 'Rescheduled' : 'Normal',
+            'reschedule' => $this->rescheduledAttendance->formatRecordReschedule($record),
             'created_at' => $record->created_at?->format('Y-m-d H:i:s'),
         ];
     }
 
     private function resolveAttendanceSource(TeacherAttendance $record): string
     {
-        if ($record->face_verified && $record->check_in_within_range) {
-            return 'Teacher Portal (Face + Geo)';
+        if ($record->auto_generated || $record->attendance_source === AttendanceRecordSource::SYSTEM) {
+            return AttendanceRecordSource::label(AttendanceRecordSource::SYSTEM, true);
         }
 
-        if ($record->face_verified) {
-            return 'Teacher Portal (Face)';
+        if ($record->check_in_time) {
+            return AttendanceRecordSource::portalLabel(
+                (bool) $record->face_verified,
+                (bool) $record->check_in_within_range,
+            );
         }
 
-        if ($record->check_in_within_range) {
-            return 'Teacher Portal (Geo)';
-        }
-
-        return 'Teacher Portal';
+        return AttendanceRecordSource::label(AttendanceRecordSource::MANUAL);
     }
 
     private function expectedTeachersTodayCount(): int

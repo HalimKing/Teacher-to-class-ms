@@ -6,6 +6,15 @@ use Illuminate\Foundation\Http\FormRequest;
 
 class VerifyFaceRequest extends FormRequest
 {
+    public function messages(): array
+    {
+        return [
+            'face_descriptor.required' => 'Face capture data is missing. Please capture your face again.',
+            'face_descriptor.size' => 'Face capture data is incomplete. Please capture your face again.',
+            'quality.detection_confidence.required' => 'Face quality data is missing. Please capture your face again.',
+        ];
+    }
+
     public function rules(): array
     {
         return [

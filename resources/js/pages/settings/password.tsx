@@ -18,7 +18,11 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-export default function Password() {
+interface PasswordPageProps {
+    mustChangePassword?: boolean;
+}
+
+export default function Password({ mustChangePassword = false }: PasswordPageProps) {
     const passwordInput = useRef<HTMLInputElement>(null);
     const currentPasswordInput = useRef<HTMLInputElement>(null);
 
@@ -28,7 +32,20 @@ export default function Password() {
 
             <SettingsLayout>
                 <div className="space-y-6">
-                    <HeadingSmall title="Update password" description="Ensure your account is using a long, random password to stay secure" />
+                    {mustChangePassword && (
+                        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                            Your administrator requires you to set a new password before you can continue using the admin portal.
+                        </div>
+                    )}
+
+                    <HeadingSmall
+                        title={mustChangePassword ? 'Set a new password' : 'Update password'}
+                        description={
+                            mustChangePassword
+                                ? 'Choose a strong password that you have not used before.'
+                                : 'Ensure your account is using a long, random password to stay secure'
+                        }
+                    />
 
                     <Form
                         method="put"
@@ -36,7 +53,7 @@ export default function Password() {
                         options={{
                             preserveScroll: true,
                         }}
-                        resetOnError={['password', 'password_confirmation', 'current_password']}
+                        resetOnError={mustChangePassword ? ['password', 'password_confirmation'] : ['password', 'password_confirmation', 'current_password']}
                         resetOnSuccess
                         onError={(errors) => {
                             if (errors.password) {
@@ -51,21 +68,23 @@ export default function Password() {
                     >
                         {({ errors, processing, recentlySuccessful }) => (
                             <>
-                                <div className="grid gap-2">
-                                    <Label htmlFor="current_password">Current password</Label>
+                                {!mustChangePassword && (
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="current_password">Current password</Label>
 
-                                    <Input
-                                        id="current_password"
-                                        ref={currentPasswordInput}
-                                        name="current_password"
-                                        type="password"
-                                        className="mt-1 block w-full"
-                                        autoComplete="current-password"
-                                        placeholder="Current password"
-                                    />
+                                        <Input
+                                            id="current_password"
+                                            ref={currentPasswordInput}
+                                            name="current_password"
+                                            type="password"
+                                            className="mt-1 block w-full"
+                                            autoComplete="current-password"
+                                            placeholder="Current password"
+                                        />
 
-                                    <InputError message={errors.current_password} />
-                                </div>
+                                        <InputError message={errors.current_password} />
+                                    </div>
+                                )}
 
                                 <div className="grid gap-2">
                                     <Label htmlFor="password">New password</Label>
@@ -99,7 +118,7 @@ export default function Password() {
                                 </div>
 
                                 <div className="flex items-center gap-4">
-                                    <Button disabled={processing}>Save password</Button>
+                                    <Button disabled={processing}>{mustChangePassword ? 'Set password and continue' : 'Save password'}</Button>
 
                                     <Transition
                                         show={recentlySuccessful}

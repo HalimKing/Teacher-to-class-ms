@@ -14,6 +14,7 @@ use App\Http\Controllers\Admin\TeacherController;
 use App\Http\Controllers\Admin\SystemLogController;
 use App\Http\Controllers\Admin\SystemSettingsController;
 use App\Http\Controllers\Admin\TeacherAttendanceReportController;
+use App\Http\Controllers\TeacherAttendanceReportController as LecturerAttendanceReportController;
 use App\Http\Controllers\Admin\StaffAttendanceReportController;
 use App\Http\Controllers\Admin\TeacherAttendanceAnalysisController;
 use App\Http\Controllers\AttendanceRecordController;
@@ -31,6 +32,7 @@ use App\Http\Controllers\Teacher\StaffAttendanceController;
 use App\Http\Controllers\Teacher\StaffAttendanceReportController as TeacherStaffAttendanceReportController;
 
 use App\Http\Controllers\AdminAttendanceController;
+use App\Http\Controllers\AttendancePortalController;
 use App\Http\Controllers\DeployCheckController;
 use App\Models\AcademicPeriod;
 use Illuminate\Support\Facades\Route;
@@ -48,8 +50,19 @@ Route::get('api/faculties/{faculty}/departments', [DepartmentController::class, 
 Route::post('api/time-tables/check-conflict', [TimeTableController::class, 'checkConflict'])
     ->middleware(['auth:web', 'permission:admin.academics.time-tables.view']);
 
+// Attendance portal (Staff ID only — kiosk / quick access)
+Route::get('/attendance', [AttendancePortalController::class, 'showLogin'])->name('attendance.login');
+Route::post('/attendance', [AttendancePortalController::class, 'login'])->name('attendance.login.submit');
+
+Route::middleware(['auth:teacher', 'attendance.portal'])->prefix('attendance')->name('attendance.')->group(function () {
+    Route::get('/portal', [AttendancePortalController::class, 'portal'])->name('portal');
+    Route::get('/mark', [AttendancePortalController::class, 'mark'])->name('mark');
+    Route::post('/refresh', [AttendancePortalController::class, 'refresh'])->name('refresh');
+    Route::post('/logout', [AttendancePortalController::class, 'logout'])->name('logout');
+});
+
 // teachers middleware group
-Route::middleware('auth:teacher')->group(function () {
+Route::middleware(['auth:teacher', 'attendance.portal.restrict'])->group(function () {
 
 
 
@@ -113,8 +126,11 @@ Route::middleware('auth:teacher')->group(function () {
         ->name('teacher.records');
 
     Route::middleware('teacher.staff_type:lecturer')->group(function () {
-        Route::get('/teacher/reports', [TeacherAttendanceReportController::class, 'index'])->name('teacher.reports');
-        Route::get('/teacher/reports/data', [TeacherAttendanceReportController::class, 'getReportData'])->name('teacher.reports.data');
+        Route::get('/teacher/reports', [LecturerAttendanceReportController::class, 'index'])->name('teacher.reports');
+        Route::get('/teacher/reports/data', [LecturerAttendanceReportController::class, 'getReportData'])->name('teacher.reports.data');
+        Route::get('/teacher/reports/records', [LecturerAttendanceReportController::class, 'records'])->name('teacher.reports.records');
+        Route::get('/teacher/reports/records/{attendance}', [LecturerAttendanceReportController::class, 'showRecord'])->name('teacher.reports.records.show');
+        Route::get('/teacher/reports/export', [LecturerAttendanceReportController::class, 'export'])->name('teacher.reports.export');
     });
 
     Route::get('/teacher/my-courses', [TeacherCoursesController::class, 'index'])
@@ -138,9 +154,14 @@ Route::middleware('auth:teacher')->group(function () {
 
     Route::post('/teacher/notifications/{id}/read', [NotificationController::class, 'markAsRead'])->name('teacher.notifications.mark-read');
     Route::post('/teacher/notifications/read-all', [NotificationController::class, 'markAllAsRead'])->name('teacher.notifications.mark-all-read');
+    Route::get('/teacher/notifications/summary', [NotificationController::class, 'summary'])->name('teacher.notifications.summary');
+    Route::get('/teacher/notifications', [NotificationController::class, 'index'])->name('teacher.notifications.index');
+    Route::post('/teacher/notifications/bulk-read', [NotificationController::class, 'bulkMarkRead'])->name('teacher.notifications.bulk-read');
+    Route::get('/teacher/notifications/preferences', [NotificationController::class, 'preferences'])->name('teacher.notifications.preferences');
+    Route::put('/teacher/notifications/preferences', [NotificationController::class, 'updatePreferences'])->name('teacher.notifications.preferences.update');
 });
 
-Route::middleware(['auth:web', 'verified'])->group(function () {
+Route::middleware(['auth:web', 'verified', 'password.changed'])->group(function () {
 
 
 
@@ -237,7 +258,10 @@ Route::middleware(['auth:web', 'verified'])->group(function () {
                 ->name('teachers.template');
             Route::get('teachers/export/{format}', [TeacherController::class, 'export'])
                 ->name('teachers.export')
-                ->where('format', 'excel|csv');
+                ->where('format', 'excel|csv|pdf|print');
+            Route::get('teachers/{teacher}/quick-view', [TeacherController::class, 'quickView'])
+                ->name('teachers.quick-view')
+                ->middleware('permission:admin.teachers.view');
             Route::post('teachers/preview', [TeacherController::class, 'preview'])
                 ->name('teachers.preview');
             Route::post('teachers/confirm-import', [TeacherController::class, 'confirmImport'])
@@ -498,21 +522,41 @@ Route::middleware(['auth:web', 'verified'])->group(function () {
                     //     ->only(['destroy'])
                     //     ->middleware('permission:admin.user-management.roles.delete');
 
-                    // Users routes
-                    // Route::resource('users', UserController::class);
-                    Route::resource('users', UserController::class);
-                    //  Route::resource('users', UserController::class)
-                    //     ->only(['create', 'store'])
-                    //     ->middleware('permission:admin.user-management.users.create');
-                    // Route::resource('users', UserController::class)
-                    //     ->only(['index', 'show'])
-                    //     ->middleware('permission:admin.user-management.users.view');
-                    // Route::resource('users', UserController::class)
-                    //     ->only(['edit', 'update'])
-                    //     ->middleware('permission:admin.user-management.users.edit');
-                    // Route::resource('users', UserController::class)
-                    //     ->only(['destroy'])
-                    //     ->middleware('permission:admin.user-management.users.delete');
+                    Route::get('users/export/{format}', [UserController::class, 'export'])
+                        ->name('users.export')
+                        ->where('format', 'excel|csv|pdf|print')
+                        ->middleware('permission:admin.user-management.users.export');
+                    Route::get('users/{user}/quick-view', [UserController::class, 'quickView'])
+                        ->name('users.quick-view')
+                        ->middleware('permission:admin.user-management.users.view');
+                    Route::post('users/{user}/reset-password', [UserController::class, 'resetPassword'])
+                        ->name('users.reset-password')
+                        ->middleware('permission:admin.user-management.users.reset-password');
+                    Route::patch('users/{user}/status', [UserController::class, 'updateStatus'])
+                        ->name('users.update-status')
+                        ->middleware('permission:admin.user-management.users.edit');
+                    Route::post('users/bulk/status', [UserController::class, 'bulkUpdateStatus'])
+                        ->name('users.bulk.status')
+                        ->middleware('permission:admin.user-management.users.edit');
+                    Route::post('users/bulk/require-password-change', [UserController::class, 'bulkRequirePasswordChange'])
+                        ->name('users.bulk.require-password-change')
+                        ->middleware('permission:admin.user-management.users.edit');
+                    Route::post('users/bulk/delete', [UserController::class, 'bulkDelete'])
+                        ->name('users.bulk.delete')
+                        ->middleware('permission:admin.user-management.users.delete');
+
+                    Route::resource('users', UserController::class)
+                        ->only(['create', 'store'])
+                        ->middleware('permission:admin.user-management.users.create');
+                    Route::resource('users', UserController::class)
+                        ->only(['index'])
+                        ->middleware('permission:admin.user-management.users.view');
+                    Route::resource('users', UserController::class)
+                        ->only(['edit', 'update'])
+                        ->middleware('permission:admin.user-management.users.edit');
+                    Route::resource('users', UserController::class)
+                        ->only(['destroy'])
+                        ->middleware('permission:admin.user-management.users.delete');
                 }
             );
         }

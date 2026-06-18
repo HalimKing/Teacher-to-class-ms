@@ -65,7 +65,7 @@ const ClassRoomIndexPage = ({ classRoomData, search }: TeachersIndexPageProps) =
   // Show toast notifications based on flash messages
   useEffect(() => {
     if (flash?.success) {
-      toast.success(flash.success || 'Class room created successfully!', {
+      toast.success(flash.success || 'Venue created successfully!', {
         position: "top-right",
         autoClose: 5000,
         hideProgressBar: false,
@@ -117,7 +117,7 @@ const ClassRoomIndexPage = ({ classRoomData, search }: TeachersIndexPageProps) =
       href: '/admin/dashboard',
     },
     {
-      title: 'Class Rooms',
+      title: 'Venues',
       href: '/admin/school-management/class-rooms',
     }
   ];
@@ -266,7 +266,7 @@ const ClassRoomIndexPage = ({ classRoomData, search }: TeachersIndexPageProps) =
 
   return (
     <AppLayout breadcrumbs={breadcrumbs}>
-      <Head title="Class Rooms" />
+      <Head title="Venues" />
       <div className="min-h-screen bg-slate-50 flex">
         {/* -------------------- MAIN CONTENT AREA -------------------- */}
         <div className="flex-1 min-w-0 flex flex-col">
@@ -274,7 +274,7 @@ const ClassRoomIndexPage = ({ classRoomData, search }: TeachersIndexPageProps) =
           <div className="p-4 sm:p-6 lg:p-8 flex-1 overflow-auto">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
               <div>
-                <h1 className="text-3xl font-extrabold text-slate-900 mb-2">Class Rooms</h1>
+                <h1 className="text-3xl font-extrabold text-slate-900 mb-2">Venues</h1>
                 <p className="text-slate-600">Manage classroom information, locations, and attendance boundaries</p>
               </div>
               {can('admin.school-management.class-rooms.create') && (
@@ -283,7 +283,7 @@ const ClassRoomIndexPage = ({ classRoomData, search }: TeachersIndexPageProps) =
                 className="mt-4 sm:mt-0 flex items-center justify-center px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-700 hover:from-indigo-700 hover:to-purple-800 text-white font-semibold rounded-xl transition-all duration-200 shadow-md hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-500/50"
               >
                 <Plus className="w-5 h-5 mr-2" />
-                Add Class Room
+                Add Venue
               </Link>
               )}
             </div>
@@ -370,7 +370,7 @@ const ClassRoomIndexPage = ({ classRoomData, search }: TeachersIndexPageProps) =
               <div className="bg-white rounded-xl p-6 shadow-md border border-slate-200">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-slate-500">Total Class Rooms</p>
+                    <p className="text-sm text-slate-500">Total Venues</p>
                     <p className="text-3xl font-bold text-slate-900">{class_rooms.total}</p>
                   </div>
                   <div className="p-3 bg-indigo-50 rounded-lg">
@@ -381,7 +381,7 @@ const ClassRoomIndexPage = ({ classRoomData, search }: TeachersIndexPageProps) =
               <div className="bg-white rounded-xl p-6 shadow-md border border-slate-200">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-slate-500">Active Class Rooms</p>
+                    <p className="text-sm text-slate-500">Active Venues</p>
                     <p className="text-3xl font-bold text-slate-900">
                       {class_rooms.data.filter(cr => cr.is_active).length}
                     </p>
@@ -422,17 +422,17 @@ const ClassRoomIndexPage = ({ classRoomData, search }: TeachersIndexPageProps) =
               </div>
             </div>
 
-            {/* Class Rooms Table */}
+            {/* Venues Table */}
             <div className="bg-white rounded-2xl shadow-lg border border-slate-200">
               <div className="p-6 border-b border-slate-200">
                 <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
-                  <h3 className="text-xl font-bold text-slate-900">Class Room List</h3>
+                  <h3 className="text-xl font-bold text-slate-900">Venue List</h3>
                   <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4">
                     <div className="relative">
                       <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
                       <input
                         type="text"
-                        placeholder="Search class rooms..."
+                        placeholder="Search Venues..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         className="pl-10 pr-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-sm w-full sm:w-64 transition-shadow"
@@ -519,7 +519,7 @@ const ClassRoomIndexPage = ({ classRoomData, search }: TeachersIndexPageProps) =
                             <div className="flex items-center space-x-1">
                               {can('admin.school-management.class-rooms.edit') && (
                               <Link 
-                                title="Edit Class Room" 
+                                title="Edit Venue" 
                                 className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                                 href={route('admin.school-management.class-rooms.edit', class_room.id)}
                               >
@@ -529,10 +529,10 @@ const ClassRoomIndexPage = ({ classRoomData, search }: TeachersIndexPageProps) =
 
                               {can('admin.school-management.class-rooms.delete') && (
                               <Link 
-                                title="Delete Class Room" 
+                                title="Delete Venue" 
                                 method='delete'
                                 className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                onClick={() => confirm('Are you sure you want to permanently delete this class room?')}
+                                onClick={() => confirm('Are you sure you want to permanently delete this Venue?')}
                                 href={route('admin.school-management.class-rooms.destroy', class_room.id)}
                               >
                                 <Trash2 className="w-5 h-5" />
@@ -545,14 +545,14 @@ const ClassRoomIndexPage = ({ classRoomData, search }: TeachersIndexPageProps) =
                     ) : (
                       <tr>
                         <td colSpan={7} className="px-6 py-8 text-center text-slate-500">
-                          No Class Rooms Found. {searchTerm && 'Try adjusting your search terms.'}
+                          No Venues Found. {searchTerm && 'Try adjusting your search terms.'}
                           <div className="mt-4">
                             <Link 
                               href={route('admin.school-management.class-rooms.create')}
                               className="inline-flex items-center text-indigo-600 hover:text-indigo-800 font-medium"
                             >
                               <Plus className="w-4 h-4 mr-2" />
-                              Create your first class room
+                              Create your first Venue
                             </Link>
                           </div>
                         </td>
@@ -563,7 +563,7 @@ const ClassRoomIndexPage = ({ classRoomData, search }: TeachersIndexPageProps) =
               </div>
               <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-between flex-wrap gap-4">
                 <div className="text-sm text-slate-600">
-                  Showing <span className="font-semibold text-slate-800">{class_rooms.from}</span> to <span className="font-semibold text-slate-800">{class_rooms.to}</span> of <span className="font-semibold text-slate-800">{class_rooms.total}</span> Class Rooms
+                  Showing <span className="font-semibold text-slate-800">{class_rooms.from}</span> to <span className="font-semibold text-slate-800">{class_rooms.to}</span> of <span className="font-semibold text-slate-800">{class_rooms.total}</span> Venues
                 </div>
                 <div className="flex space-x-2">
                   <button 

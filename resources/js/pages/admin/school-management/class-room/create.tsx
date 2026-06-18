@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Head, useForm } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
+import ClassRoomLocationPicker from '@/components/class-room/ClassRoomLocationPicker';
 import { AlertCircle } from 'lucide-react';
 import TextField from '@mui/material/TextField';
 import { Switch, FormControlLabel } from '@mui/material';
@@ -41,6 +42,14 @@ const CreateClassRoomPage = () => {
     setData('is_active', e.target.checked);
   };
 
+  const handleLocationChange = (latitude: number, longitude: number) => {
+    setData((current) => ({
+      ...current,
+      latitude,
+      longitude,
+    }));
+  };
+
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     post(route('admin.school-management.class-rooms.store'));
@@ -52,25 +61,25 @@ const CreateClassRoomPage = () => {
       href: '/admin/dashboard',
     },
     {
-      title: 'Class Rooms',
+      title: 'Venue',
       href: '/admin/school-management/class-rooms',
     },
     {
-      title: 'Create Class Room',
+      title: 'Create Venue',
       href: '/admin/school-management/class-rooms/create',
     }
   ];
 
   return (
     <AppLayout breadcrumbs={breadcrumbs}>
-      <Head title="Create Class Room" />
+      <Head title="Create Venue" />
       
       <div className="min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8">
         <div className="max-w-5xl mx-auto">
           <div className="bg-white rounded-2xl shadow-lg border border-slate-200">
             <div className="p-6 border-b border-slate-200">
-              <h1 className="text-2xl font-bold text-slate-900">Create New Class Room</h1>
-              <p className="mt-1 text-sm text-slate-500">Fill in the details to create a new class room.</p>
+              <h1 className="text-2xl font-bold text-slate-900">Create New Venue</h1>
+              <p className="mt-1 text-sm text-slate-500">Fill in the details to create a new Venue.</p>
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-6">
@@ -82,7 +91,7 @@ const CreateClassRoomPage = () => {
                     <div>
                       <TextField
                         fullWidth
-                        label="Class Room Name"
+                        label="Venue Name"
                         type="text"
                         name="name"
                         value={data.name}
@@ -162,6 +171,16 @@ const CreateClassRoomPage = () => {
                       />
                     </div>
                   </div>
+
+                  <div className="mt-6">
+                    <ClassRoomLocationPicker
+                      latitude={data.latitude}
+                      longitude={data.longitude}
+                      radiusMeters={data.radius_meters}
+                      onChange={handleLocationChange}
+                    />
+                  </div>
+
                   <p className="mt-2 text-sm text-slate-500">
                     Optional: Set geographical boundaries for attendance tracking
                   </p>
@@ -184,8 +203,8 @@ const CreateClassRoomPage = () => {
                     />
                     <span className="ml-4 text-sm text-slate-500">
                       {data.is_active 
-                        ? "This class room is active and available for use."
-                        : "This class room is inactive and won't be available for scheduling."
+                        ? "This Venue is active and available for use."
+                        : "This Venue is inactive and won't be available for scheduling."
                       }
                     </span>
                   </div>
@@ -206,7 +225,7 @@ const CreateClassRoomPage = () => {
                   disabled={processing}
                   className="bg-gradient-to-r from-indigo-600 to-purple-700 hover:from-indigo-700 hover:to-purple-800 text-white md:h-12"
                 >
-                  {processing ? 'Creating...' : 'Create Class Room'}
+                  {processing ? 'Creating...' : 'Create Venue'}
                 </Button>
               </div>
             </form>

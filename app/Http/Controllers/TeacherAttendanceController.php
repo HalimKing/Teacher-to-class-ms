@@ -9,6 +9,9 @@ use App\Models\TeacherAttendance;
 use App\Models\TimeTable;
 use App\Services\AttendanceTimingService;
 use App\Services\FacialRecognitionService;
+use App\Services\LecturerNotificationService;
+use App\Services\RescheduledAttendanceService;
+use App\Support\LecturerNotificationPayload;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -16,10 +19,12 @@ use Inertia\Inertia;
 class TeacherAttendanceController extends Controller
 {
     public function __construct(
-        private AttendanceTimingService $timingService
+        private AttendanceTimingService $timingService,
+        private LecturerNotificationService $lecturerNotifications,
+        private RescheduledAttendanceService $rescheduledAttendance,
     ) {}
 
-    public function index()
+    public function index(FacialRecognitionService $facialRecognition)
     {
         // $Lectures = TimeTable::todaysLectures();
         // $teacherId = auth()->id();
@@ -69,71 +74,22 @@ class TeacherAttendanceController extends Controller
         //     ];
         // }
 
-        return Inertia::render('teacher/attendance');
+        return Inertia::render('teacher/attendance', [
+            'facialRecognitionEnabled' => $facialRecognition->isEnabled(),
+        ]);
     }
 
 
 
     public function getTodaysClasses(Request $request)
     {
-        $Lectures = TimeTable::todaysLectures();
         $teacherId = auth('teacher')->id();
-        $today = Carbon::now()->format('Y-m-d');
-
-        $todaysClasses = [];
-        foreach ($Lectures as $lecture) {
-            // Check attendance status for this lecture
-            $attendance = TeacherAttendance::where('teacher_id', $teacherId)
-                ->where('timetable_id', $lecture->id)
-                ->where('date', $today)
-                ->first();
-
-            $attendanceStatus = null;
-            $attendanceTaken = false;
-
-            if ($attendance) {
-                $attendanceTaken = true;
-                $attendanceStatus = [
-                    'id' => $attendance->id,
-                    'check_in_time' => $attendance->check_in_time,
-                    'check_out_time' => $attendance->check_out_time,
-                    'status' => $attendance->check_out_time ? 'completed' : 'checked_in',
-                    'location_match' => $attendance->check_in_within_range,
-                ];
-            }
-
-            $todaysClasses[] = [
-                'timetable_id' => $lecture->id,
-                'id' => $lecture->course->id,
-                'name' => $lecture->course->name,
-                'code' => $lecture->course->course_code,
-                'building' => $lecture->classroom->name,
-                'room' => $lecture->classroom->room_number ?? 'N/A',
-                'type' => 'lecture',
-                'students' => $lecture->course->student_size,
-                'start_time' => $lecture->start_time,
-                'end_time' => $lecture->end_time,
-                'coordinates' => [
-                    'lat' => $lecture->classroom->latitude,
-                    'lng' => $lecture->classroom->longitude,
-                ],
-                'radius' => $lecture->classroom->radius_meters,
-                'attendance_taken' => $attendanceTaken,
-                'attendance_status' => $attendanceStatus,
-                'is_completed' => $attendance && $attendance->check_out_time !== null,
-                'timing' => $this->timingService->buildScheduleTiming(
-                    (string) $lecture->start_time,
-                    (string) $lecture->end_time,
-                    null,
-                    AttendanceTimingService::ROLE_TEACHER
-                ),
-            ];
-        }
+        $today = Carbon::now();
 
         return response()->json([
             'success' => true,
-            'data' => $todaysClasses,
-            'message' => 'Today\'s classes fetched successfully'
+            'data' => $this->rescheduledAttendance->buildTodaysClasses($teacherId, $today),
+            'message' => 'Today\'s classes fetched successfully',
         ]);
     }
 
@@ -143,7 +99,7 @@ class TeacherAttendanceController extends Controller
     public function checkIn(Request $request, FacialRecognitionService $facialRecognition)
     {
         // Validate request
-        $request->validate([
+        $request->validate(array_merge([
             'coordinates.latitude' => 'required|numeric',
             'coordinates.longitude' => 'required|numeric',
             'coordinates.accuracy' => 'required|numeric',
@@ -154,8 +110,7 @@ class TeacherAttendanceController extends Controller
             'check_in_time' => 'required|date',
             'distance' => 'required|numeric',
             'within_range' => 'required|boolean',
-            'face_verification_token' => 'nullable|string',
-        ]);
+        ], $facialRecognition->attendanceValidationRules($facialRecognition->isEnabled())));
 
         // Select from timetable where id = timetable_id
         $timetable = TimeTable::find($request->timetable_id);
@@ -166,6 +121,25 @@ class TeacherAttendanceController extends Controller
         // Check if the course_id matches the timetable's course_id
         if ($timetable->course_id != $request->course_id) {
             return response()->json(['success' => false, 'message' => 'Course ID does not match timetable'], 400);
+        }
+
+        if ($timetable->teacher_id !== auth('teacher')->id()) {
+            return response()->json(['success' => false, 'message' => 'You are not authorized to mark attendance for this session.'], 403);
+        }
+
+        $now = Carbon::now();
+        $attendanceContext = $this->rescheduledAttendance->resolveAttendanceContext($timetable, $now);
+        if ($blocked = $this->rescheduledAttendance->assertSessionAttendanceAllowed(
+            $timetable,
+            $now,
+            $attendanceContext['rescheduled_session_id'],
+        )) {
+            AttendanceActivityLog::logAttempt('attempt_failed', auth('teacher')->id(), (int) $request->timetable_id, [
+                'reason' => ($blocked['state'] ?? null) === 'missed' ? 'missed_session_blocked' : 'rescheduled_session_blocked',
+                'state' => $blocked['state'] ?? null,
+            ]);
+
+            return response()->json($blocked, 422);
         }
 
         // Check if user already has an active check-in for today
@@ -181,8 +155,7 @@ class TeacherAttendanceController extends Controller
             ], 400);
         }
 
-        $now = Carbon::now();
-        $scheduledStart = $this->timingService->parseScheduleTime((string) $timetable->start_time, $now);
+        $scheduledStart = $this->timingService->parseScheduleTime((string) $attendanceContext['effective_start_time'], $now);
 
         if (!$this->timingService->canCheckInNow($now, $scheduledStart, AttendanceTimingService::ROLE_TEACHER)) {
             $allowedCheckIn = $this->timingService->getAllowedCheckInTime($scheduledStart, AttendanceTimingService::ROLE_TEACHER);
@@ -201,10 +174,16 @@ class TeacherAttendanceController extends Controller
         }
 
         $faceVerificationPayload = null;
+        $faceMatchScore = null;
         $teacher = auth('teacher')->user();
         if ($facialRecognition->isEnabled()) {
             if (!$teacher->hasFaceEnrollment()) {
                 $facialRecognition->logAttempt($teacher, (int) $request->timetable_id, 'failed', null, 'not_enrolled');
+                $this->notifyAttendanceFailure(
+                    'face_enrollment_required',
+                    'Face Enrollment Required',
+                    'Face enrollment is required before attendance can be marked.',
+                );
 
                 return response()->json([
                     'success' => false,
@@ -212,17 +191,30 @@ class TeacherAttendanceController extends Controller
                 ], 422);
             }
 
-            $token = (string) $request->input('face_verification_token', '');
-            $faceVerificationPayload = $facialRecognition->consumeVerificationToken($token, $teacher, (int) $request->timetable_id);
+            $verifiedFace = $facialRecognition->resolveVerifiedAttendanceFace(
+                $teacher,
+                (int) $request->timetable_id,
+                (string) $request->input('face_verification_token', ''),
+                $request->input('face_descriptor', []),
+                $request->input('quality'),
+            );
 
-            if (!$faceVerificationPayload) {
+            if ($verifiedFace === null) {
                 $facialRecognition->logAttempt($teacher, (int) $request->timetable_id, 'failed', null, 'invalid_or_expired_token');
+                $this->notifyAttendanceFailure(
+                    'face_verification_failed',
+                    'Face Verification Failed',
+                    'Face verification is required before attendance can be marked.',
+                );
 
                 return response()->json([
                     'success' => false,
-                    'message' => 'Face verification is required before attendance can be marked.',
+                    'message' => 'Face verification failed. The captured face does not match the enrolled lecturer.',
                 ], 422);
             }
+
+            $faceVerificationPayload = $verifiedFace['payload'];
+            $faceMatchScore = $verifiedFace['score'];
         }
 
         // System setting: enforce GPS after identity has been verified.
@@ -234,6 +226,11 @@ class TeacherAttendanceController extends Controller
                 'distance' => $request->distance,
                 'within_range' => false,
             ]);
+            $this->notifyAttendanceFailure(
+                'attendance_geolocation_failed',
+                'Geolocation Verification Failed',
+                'You are outside the allowed attendance location. Please move within range.',
+            );
             return response()->json([
                 'success' => false,
                 'message' => 'You are outside the allowed attendance location. Please move within range.'
@@ -244,14 +241,16 @@ class TeacherAttendanceController extends Controller
         $status = $checkInOutcome['attendance_status'];
 
         try {
+            $effectiveClassroom = $attendanceContext['effective_classroom'] ?? $timetable->classRoom;
             $attendance = new TeacherAttendance();
-            $attendance->classroom_id = $timetable->class_room_id;
+            $attendance->classroom_id = $effectiveClassroom?->id ?? $timetable->class_room_id;
             $attendance->teacher_id = auth('teacher')->id();
             $attendance->course_id = $request->course_id;
             $attendance->timetable_id = $request->timetable_id;
+            $attendance->rescheduled_session_id = $attendanceContext['rescheduled_session_id'];
             $attendance->academic_year_id = $timetable->academic_year_id;
             $attendance->date = $now->format('Y-m-d');
-            $attendance->check_in_time = $now->format('h:i A');
+            $attendance->check_in_time = $now->format('H:i:s');
             $attendance->check_in_latitude = $request->coordinates['latitude'];
             $attendance->check_in_longitude = $request->coordinates['longitude'];
             $attendance->check_in_distance = $request->distance;
@@ -261,7 +260,7 @@ class TeacherAttendanceController extends Controller
             $attendance->minutes_early = $checkInOutcome['minutes_early'];
             $attendance->minutes_late = $checkInOutcome['minutes_late'];
             $attendance->face_verified = $faceVerificationPayload !== null;
-            $attendance->face_match_score = $faceVerificationPayload['score'] ?? null;
+            $attendance->face_match_score = $faceMatchScore ?? ($faceVerificationPayload['score'] ?? null);
             $attendance->face_verified_at = $faceVerificationPayload ? now() : null;
 
             $attendance->save();
@@ -275,6 +274,25 @@ class TeacherAttendanceController extends Controller
                 'face_verified' => $attendance->face_verified,
                 'face_match_score' => $attendance->face_match_score,
             ]);
+
+            $this->notifyAttendanceEvent(
+                $teacher,
+                LecturerNotificationPayload::make(
+                    'attendance_check_in',
+                    LecturerNotificationPayload::CATEGORY_ATTENDANCE,
+                    $checkInOutcome['arrival_category'] === 'late'
+                        ? LecturerNotificationPayload::PRIORITY_HIGH
+                        : LecturerNotificationPayload::PRIORITY_MEDIUM,
+                    'Check-in Successful',
+                    match ($checkInOutcome['arrival_category']) {
+                        'early' => 'You checked in early for ' . $request->course_name . '.',
+                        'late' => 'You checked in late for ' . $request->course_name . '.',
+                        default => 'Your attendance was recorded for ' . $request->course_name . '.',
+                    },
+                    '/teacher/attendance',
+                    ['course_name' => $request->course_name, 'attendance_id' => $attendance->id],
+                ),
+            );
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => 'Error during check-in: ' . $e->getMessage()], 500);
         }
@@ -298,14 +316,13 @@ class TeacherAttendanceController extends Controller
 
     public function checkOut(Request $request, FacialRecognitionService $facialRecognition)
     {
-        $rules = [
+        $rules = array_merge([
             'attendance_id' => 'required|exists:teacher_attendances,id',
             'check_out_time' => 'required|date',
             'coordinates.latitude' => 'required|numeric',
             'coordinates.longitude' => 'required|numeric',
             'coordinates.accuracy' => 'required|numeric',
-            'face_verification_token' => 'nullable|string',
-        ];
+        ], $facialRecognition->attendanceValidationRules($facialRecognition->isEnabled()));
         if (SystemSetting::getValue('gps_enforcement_enabled', true)) {
             $rules['distance'] = 'required|numeric';
             $rules['within_range'] = 'required|boolean';
@@ -332,8 +349,33 @@ class TeacherAttendanceController extends Controller
         }
 
         $timetable = TimeTable::find($attendance->timetable_id);
+        if (!$timetable) {
+            return response()->json(['success' => false, 'message' => 'Invalid timetable for this attendance record.'], 400);
+        }
+
         $now = Carbon::now();
-        $scheduledEnd = $this->timingService->parseScheduleTime((string) $timetable->end_time, $now);
+        $attendanceContext = $this->rescheduledAttendance->resolveAttendanceContext(
+            $timetable,
+            Carbon::parse($attendance->date),
+            $attendance->rescheduledSession,
+        );
+
+        if (!$attendanceContext['can_take_attendance']) {
+            return response()->json([
+                'success' => false,
+                'message' => $attendanceContext['attendance_blocked_message']
+                    ?? 'Attendance is unavailable because this session has been rescheduled.',
+            ], 422);
+        }
+
+        if ($this->rescheduledAttendance->isMissedAttendance($attendance)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This session was marked as missed. Attendance is no longer available.',
+            ], 422);
+        }
+
+        $scheduledEnd = $this->timingService->parseScheduleTime((string) $attendanceContext['effective_end_time'], $now);
 
         if (!$this->timingService->canCheckOutAfterEnd($now, $scheduledEnd)) {
             return response()->json([
@@ -353,15 +395,20 @@ class TeacherAttendanceController extends Controller
                 ], 422);
             }
 
-            $token = (string) $request->input('face_verification_token', '');
-            $faceVerificationPayload = $facialRecognition->consumeVerificationToken($token, $teacher, (int) $attendance->timetable_id);
+            $verifiedFace = $facialRecognition->resolveVerifiedAttendanceFace(
+                $teacher,
+                (int) $attendance->timetable_id,
+                (string) $request->input('face_verification_token', ''),
+                $request->input('face_descriptor', []),
+                $request->input('quality'),
+            );
 
-            if (!$faceVerificationPayload) {
+            if ($verifiedFace === null) {
                 $facialRecognition->logAttempt($teacher, (int) $attendance->timetable_id, 'failed', null, 'invalid_or_expired_token');
 
                 return response()->json([
                     'success' => false,
-                    'message' => 'Face verification is required before attendance check-out can be completed.',
+                    'message' => 'Face verification failed. The captured face does not match the enrolled lecturer.',
                 ], 422);
             }
         }
@@ -391,14 +438,16 @@ class TeacherAttendanceController extends Controller
 
         try {
             $checkoutTime = Carbon::now();
-            $attendance->check_out_time = $checkoutTime->format('h:i A');
+            $attendance->check_out_time = $checkoutTime->format('H:i:s');
             $attendance->check_out_latitude = $request->coordinates['latitude'];
             $attendance->check_out_longitude = $request->coordinates['longitude'];
             $attendance->check_out_distance = $request->input('distance');
             $attendance->check_out_within_range = $request->boolean('within_range', true);
             $attendance->status = $status;
             $attendance->departure_category = $checkOutOutcome['departure_category'];
-            $attendance->minutes_overtime = $checkOutOutcome['minutes_overtime'];
+            $attendance->minutes_overtime = $checkOutOutcome['minutes_overtime'] !== null
+                ? (int) $checkOutOutcome['minutes_overtime']
+                : null;
             $attendance->save();
 
             AttendanceActivityLog::logAttempt('check_out', auth('teacher')->id(), (int) $attendance->timetable_id, [
@@ -408,6 +457,19 @@ class TeacherAttendanceController extends Controller
                 'within_range' => $request->boolean('within_range', true),
                 'status' => $status,
             ]);
+
+            $this->notifyAttendanceEvent(
+                $teacher,
+                LecturerNotificationPayload::make(
+                    'attendance_check_out',
+                    LecturerNotificationPayload::CATEGORY_ATTENDANCE,
+                    LecturerNotificationPayload::PRIORITY_MEDIUM,
+                    'Check-out Successful',
+                    'Your check-out was recorded successfully.',
+                    '/teacher/attendance',
+                    ['attendance_id' => $attendance->id],
+                ),
+            );
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -507,7 +569,7 @@ class TeacherAttendanceController extends Controller
     {
         try {
             $query = TeacherAttendance::where('teacher_id', auth()->id())
-                ->with(['timetable', 'course', 'classroom'])
+                ->with(['timetable', 'course', 'classroom', 'rescheduledSession.classroom', 'rescheduledSession.timetable.classRoom'])
                 ->orderBy('date', 'desc')
                 ->orderBy('check_in_time', 'desc');
 
@@ -552,6 +614,12 @@ class TeacherAttendanceController extends Controller
                 $query->where('status', $request->get('status'));
             }
 
+            if ($request->get('rescheduleType') === 'rescheduled') {
+                $query->whereNotNull('rescheduled_session_id');
+            } elseif ($request->get('rescheduleType') === 'normal') {
+                $query->whereNull('rescheduled_session_id');
+            }
+
             // Search filter
             if ($request->has('search') && $request->get('search') !== '') {
                 $search = $request->get('search');
@@ -575,9 +643,12 @@ class TeacherAttendanceController extends Controller
                     $course = $record->timetable->course;
                 }
 
-                // Get time from timetable
+                // Get time from effective schedule (rescheduled or original)
                 $time = 'N/A';
-                if ($record->timetable) {
+                $reschedule = $this->rescheduledAttendance->formatRecordReschedule($record);
+                if ($reschedule) {
+                    $time = $reschedule['new_start_time_display'] . ' - ' . $reschedule['new_end_time_display'];
+                } elseif ($record->timetable) {
                     $startTime = Carbon::parse($record->timetable->start_time);
                     $endTime = Carbon::parse($record->timetable->end_time);
                     $time = $startTime->format('g:i A') . ' - ' . $endTime->format('g:i A');
@@ -589,6 +660,8 @@ class TeacherAttendanceController extends Controller
                 $record->course_code = $course?->course_code ?? 'N/A';
                 $record->course_id = $course?->id ?? 0;
                 $record->class_time = $time;
+                $record->is_rescheduled = $record->rescheduled_session_id !== null;
+                $record->reschedule = $reschedule;
                 $record->total_students = $course?->student_size ?? 0;
                 $record->present_count = 0;
                 $record->absent_count = 0;
@@ -675,5 +748,34 @@ class TeacherAttendanceController extends Controller
                 'code' => $course->course_code,
             ])
             ->toArray();
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function notifyAttendanceEvent($teacher, array $payload): void
+    {
+        if (!$teacher) {
+            return;
+        }
+
+        $this->lecturerNotifications->notify($teacher, $payload, false);
+    }
+
+    private function notifyAttendanceFailure(string $type, string $title, string $message): void
+    {
+        $teacher = auth('teacher')->user();
+        if (!$teacher) {
+            return;
+        }
+
+        $this->lecturerNotifications->notify($teacher, LecturerNotificationPayload::make(
+            $type,
+            LecturerNotificationPayload::CATEGORY_ATTENDANCE,
+            LecturerNotificationPayload::PRIORITY_HIGH,
+            $title,
+            $message,
+            '/teacher/attendance',
+        ), false);
     }
 }

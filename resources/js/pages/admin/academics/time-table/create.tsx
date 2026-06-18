@@ -373,13 +373,13 @@ const CreateTimeTablePage = ({ academicYear, courses, classRooms, teachers, staf
                                 </div>
                             )}
 
-                            {/* Class Room */}
+                            {/* Venue */}
                             <div>
-                                <label className="mb-2 block text-sm font-medium text-slate-700">Class Room *</label>
+                                <label className="mb-2 block text-sm font-medium text-slate-700">Venue *</label>
                                 <div>
                                     <ComboBox
                                         options={classRooms}
-                                        label="Select Class Room"
+                                        label="Select Venue"
                                         externalValue={handleValueChange('class_room_id')}
                                         defaultValue={null}
                                     />

@@ -12,8 +12,8 @@ class TeacherAttendance extends Model
         'teacher_id',
         'course_id',
         'timetable_id',
+        'rescheduled_session_id',
         'classroom_id',
-        'timetable_id',
         'academic_year_id',
         'date',
         'check_in_time',
@@ -36,7 +36,10 @@ class TeacherAttendance extends Model
         'face_verified',
         'face_match_score',
         'face_verified_at',
-
+        'attendance_source',
+        'auto_generated',
+        'auto_generated_at',
+        'auto_absence_reason',
     ];
 
     protected function casts(): array
@@ -48,6 +51,8 @@ class TeacherAttendance extends Model
             'face_verified_at' => 'datetime',
             'check_in_within_range' => 'boolean',
             'check_out_within_range' => 'boolean',
+            'auto_generated' => 'boolean',
+            'auto_generated_at' => 'datetime',
         ];
     }
 
@@ -69,6 +74,11 @@ class TeacherAttendance extends Model
     public function timetable()
     {
         return $this->belongsTo(TimeTable::class);
+    }
+
+    public function rescheduledSession()
+    {
+        return $this->belongsTo(RescheduledSession::class, 'rescheduled_session_id');
     }
     public function academicYear()
     {

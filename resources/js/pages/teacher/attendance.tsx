@@ -1,14 +1,36 @@
 import AppLayout from '@/layouts/app-layout';
+import { RescheduleSessionBanner } from '@/components/attendance/RescheduleSessionBanner';
 import FaceCaptureModal from '@/components/face/FaceCaptureModal';
 import { type FaceCaptureResult } from '@/lib/face-recognition';
+import { buildFaceVerificationPayload, getApiErrorMessage, teacherJsonRequest } from '@/lib/teacher-api';
+import { getBooleanSetting } from '@/lib/system-settings';
 import { BreadcrumbItem } from '@/types';
 import { usePage } from '@inertiajs/react';
 import { Circle, GoogleMap, LoadScript, Marker } from '@react-google-maps/api';
-import axios from 'axios';
-import { CheckCircle, Clock, Loader2, Map as MapIcon, MapPin, RefreshCw, XCircle } from 'lucide-react';
+import { CheckCircle, Clock, Loader2, Map as MapIcon, MapPin, RefreshCw, XCircle, AlertTriangle, CalendarClock } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 // Types (keep as before)
+interface RescheduleInfo {
+    id: number;
+    reason?: string | null;
+    note?: string | null;
+    approved_by_name?: string | null;
+    approved_at_display?: string | null;
+    original_date_display?: string;
+    original_start_time_display?: string;
+    original_end_time_display?: string;
+    original_venue?: string | null;
+    new_date_display?: string;
+    new_start_time_display?: string;
+    new_end_time_display?: string;
+    new_venue?: string | null;
+    venue_changed?: boolean;
+    time_changed?: boolean;
+    rescheduled_from_badge?: string;
+    summary?: string;
+}
+
 interface ClassLocation {
     timetable_id: number;
     id: number;
@@ -17,17 +39,25 @@ interface ClassLocation {
     room: string;
     start_time: string;
     end_time: string;
+    original_start_time?: string;
+    original_end_time?: string;
     coordinates: {
         lat: number;
         lng: number;
     };
     radius: number;
     attendance_taken: boolean;
+    attendance_state?: 'normal' | 'rescheduled_away' | 'rescheduled_active' | 'missed';
+    can_take_attendance?: boolean;
+    attendance_blocked_message?: string | null;
+    rescheduled_session_id?: number | null;
+    reschedule?: RescheduleInfo | null;
+    is_missed?: boolean;
     attendance_status?: {
         id: number;
-        check_in_time: string;
+        check_in_time: string | null;
         check_out_time: string | null;
-        status: 'completed' | 'checked_in' | 'present';
+        status: 'completed' | 'checked_in' | 'present' | 'absent';
         location_match: boolean;
     };
     is_completed: boolean;
@@ -97,26 +127,6 @@ const createUserLocationIcon = () => ({
     strokeColor: '#ffffff',
     strokeWeight: 2,
 });
-
-const api = axios.create({
-    baseURL: import.meta.env.VITE_API_URL || '/',
-    headers: {
-        'Content-Type': 'application/json',
-    },
-});
-
-api.interceptors.request.use(
-    (config) => {
-        const token = localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token');
-        if (token) {
-            config.headers.Authorization = `Bearer ${token}`;
-        }
-        return config;
-    },
-    (error) => {
-        return Promise.reject(error);
-    },
-);
 
 // Updated helper functions with grace period
 const getMinutesFromTime = (time: string): number => {
@@ -224,7 +234,7 @@ export default function AttendancePage() {
     const [isWithinRange, setIsWithinRange] = useState(false);
     const [isLoadingLocation, setIsLoadingLocation] = useState(false);
     const [locationError, setLocationError] = useState<string | null>(null);
-    const { system_settings: systemSettings } = usePage().props as any;
+    const { system_settings: systemSettings, facialRecognitionEnabled: facialRecognitionEnabledProp } = usePage().props as any;
     const [lateCheckInTime, setLateCheckInTime] = useState(systemSettings.attendance.late_check_in_minutes.value as any);
     const teacherEarlyCheckInMinutes = Number(systemSettings?.attendance?.teacher_early_checkin_minutes?.value ?? 30);
     const checkoutGracePeriodMinutes = Number(systemSettings?.attendance?.checkout_grace_period_minutes?.value ?? 30);
@@ -268,16 +278,19 @@ export default function AttendancePage() {
     });
 
     const apiKey = (systemSettings?.map?.google_maps_api_key?.value as string) || import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
-    const facialRecognitionEnabled = Boolean(systemSettings?.attendance?.facial_recognition_enabled?.value ?? false);
+    const facialRecognitionEnabled =
+        typeof facialRecognitionEnabledProp === 'boolean'
+            ? facialRecognitionEnabledProp
+            : getBooleanSetting(systemSettings?.attendance, 'facial_recognition_enabled');
 
     const fetchTodaysClasses = async () => {
         setIsLoadingClasses(true);
         setApiError(null);
         try {
-            const response = await api.get<ApiResponse>('/teacher/attendance/todays-classes');
+            const response = await teacherJsonRequest<ApiResponse>('/teacher/attendance/todays-classes');
 
-            if (response.data.success && response.data.data) {
-                const classesData = response.data.data;
+            if (response.success && response.data) {
+                const classesData = response.data;
                 setTodaysClasses(classesData);
 
                 let foundActiveCheckIn = false;
@@ -301,7 +314,9 @@ export default function AttendancePage() {
                     setActiveAttendanceId(null);
                     setCheckInTime(null);
 
-                    const firstNonCompleted = classesData.find((cls: ClassLocation) => !cls.is_completed);
+                    const firstNonCompleted = classesData.find(
+                        (cls: ClassLocation) => !cls.is_completed && !cls.is_missed && cls.can_take_attendance !== false,
+                    );
                     if (firstNonCompleted) {
                         setSelectedClass(firstNonCompleted);
                     } else if (classesData.length > 0) {
@@ -309,7 +324,7 @@ export default function AttendancePage() {
                     }
                 }
             } else {
-                setApiError(response.data.message || "Failed to fetch today's classes");
+                setApiError(response.message || "Failed to fetch today's classes");
             }
         } catch (error: any) {
             console.error("Error fetching today's classes:", error);
@@ -459,20 +474,32 @@ export default function AttendancePage() {
         requestCurrentLocation().catch(() => undefined);
     };
 
-    const handleClassSelect = (clsId: string) => {
-        const cls = todaysClasses.find((c) => c.id === Number(clsId));
+    const handleClassSelect = (timetableId: string) => {
+        const cls = todaysClasses.find((c) => c.timetable_id === Number(timetableId));
         if (cls) {
             if (cls.is_completed) {
                 setApiError('Attendance already completed for this session');
                 return;
             }
 
-            if (checkedInClass && checkedInClass.id !== cls.id) {
+            if (cls.is_missed || cls.can_take_attendance === false) {
+                setSelectedClass(cls);
+                setApiError(
+                    cls.attendance_blocked_message ||
+                        (cls.is_missed
+                            ? 'This session was marked as missed. Attendance is no longer available.'
+                            : 'Attendance is unavailable because this session has been rescheduled.'),
+                );
+                return;
+            }
+
+            if (checkedInClass && checkedInClass.timetable_id !== cls.timetable_id) {
                 setApiError(`Please check out from ${checkedInClass.name} first`);
                 return;
             }
 
             setSelectedClass(cls);
+            setApiError(null);
             updateTimeValidation(cls);
 
             if (!userLocation) {
@@ -482,21 +509,24 @@ export default function AttendancePage() {
     };
 
     const submitCheckIn = async (checkInData: Record<string, any>) => {
-        const response = await api.post<ApiResponse>('/teacher/attendance/check-in', checkInData);
+        const response = await teacherJsonRequest<ApiResponse>('/teacher/attendance/check-in', {
+            method: 'POST',
+            body: JSON.stringify(checkInData),
+        });
 
-        if (response.status === 200) {
+        if (response.success) {
             const now = new Date();
             const time = now.toLocaleTimeString();
             setCheckInTime(time);
             setCurrentStatus('checked_in');
             setCheckedInClass(selectedClass);
-            setActiveAttendanceId(response.data.attendance_id || Date.now());
+            setActiveAttendanceId(response.attendance_id || Date.now());
             setApiSuccess('Successfully checked in!');
 
             if (selectedClass && userLocation) {
                 setAttendanceRecords((prev) => [
                     {
-                        id: response.data.attendance_id || Date.now(),
+                        id: response.attendance_id || Date.now(),
                         timetable_id: selectedClass.timetable_id,
                         course_id: selectedClass.id,
                         date: now.toLocaleDateString(),
@@ -513,7 +543,7 @@ export default function AttendancePage() {
             fetchAttendanceRecords();
             fetchTodaysClasses();
         } else {
-            setApiError(response.data.message || 'Failed to check in');
+            setApiError(response.message || 'Failed to check in');
         }
     };
 
@@ -551,6 +581,16 @@ export default function AttendancePage() {
             return;
         }
 
+        if (selectedClass.is_missed || selectedClass.can_take_attendance === false) {
+            setApiError(
+                selectedClass.attendance_blocked_message ||
+                    (selectedClass.is_missed
+                        ? 'This session was marked as missed. Attendance is no longer available.'
+                        : 'Attendance is unavailable because this session has been rescheduled.'),
+            );
+            return;
+        }
+
         if (!timeValidation.canCheckInNow) {
             setApiError(
                 selectedClass.timing?.attendance_opens_message ||
@@ -584,16 +624,19 @@ export default function AttendancePage() {
             }
         } catch (error: any) {
             console.error('Check-in error:', error);
-            setApiError(error.response?.data?.message || 'Network error: Unable to check in. Please try again.');
+            setApiError(getApiErrorMessage(error, 'Network error: Unable to check in. Please try again.'));
         } finally {
             setIsLoadingApi(false);
         }
     };
 
     const submitCheckOut = async (checkOutData: Record<string, any>) => {
-        const response = await api.post<ApiResponse>('/teacher/attendance/check-out', checkOutData);
+        const response = await teacherJsonRequest<ApiResponse>('/teacher/attendance/check-out', {
+            method: 'POST',
+            body: JSON.stringify(checkOutData),
+        });
 
-        if (response.data.success) {
+        if (response.success) {
             const time = new Date().toLocaleTimeString();
             setCurrentStatus('checked_out');
             setCheckedInClass(null);
@@ -648,7 +691,7 @@ export default function AttendancePage() {
                 }
             }
         } else {
-            setApiError(response.data.message || 'Failed to check out');
+            setApiError(response.message || 'Failed to check out');
         }
     };
 
@@ -663,17 +706,22 @@ export default function AttendancePage() {
         setApiSuccess(null);
 
         try {
-            const verification = await api.post<ApiResponse>('/teacher/attendance/verify-face', {
-                timetable_id: selectedClass.timetable_id,
-                face_descriptor: result.descriptor,
-                quality: result.quality,
+            const verification = await teacherJsonRequest<ApiResponse>('/teacher/attendance/verify-face', {
+                method: 'POST',
+                body: JSON.stringify(
+                    buildFaceVerificationPayload(selectedClass.timetable_id, result.descriptor, result.quality),
+                ),
             });
 
-            if (!verification.data.success || !verification.data.verification_token) {
-                throw new Error(verification.data.message || 'Face verification failed.');
+            if (!verification.success || !verification.verification_token) {
+                throw new Error(verification.message || 'Face verification failed.');
             }
 
             const locationPayload = await getVerifiedLocationPayload(selectedClass);
+            const facePayload = {
+                face_descriptor: result.descriptor,
+                face_verification_token: verification.verification_token,
+            };
 
             if (pendingAttendanceAction === 'check-in') {
                 const now = new Date();
@@ -686,7 +734,7 @@ export default function AttendancePage() {
                     ...locationPayload,
                     status: 'present',
                     location_match: true,
-                    face_verification_token: verification.data.verification_token,
+                    ...facePayload,
                 });
             } else {
                 if (!activeAttendanceId) {
@@ -698,7 +746,7 @@ export default function AttendancePage() {
                     check_out_time: new Date().toISOString(),
                     ...locationPayload,
                     status: 'present',
-                    face_verification_token: verification.data.verification_token,
+                    ...facePayload,
                 });
             }
 
@@ -706,7 +754,7 @@ export default function AttendancePage() {
             setFaceModalOpen(false);
         } catch (error: any) {
             console.error('Face verification error:', error);
-            const message = error.response?.data?.message || error.message || 'Face verification failed. Please try again.';
+            const message = getApiErrorMessage(error, 'Face verification failed. Please try again.');
             setApiError(message);
             throw new Error(message);
         } finally {
@@ -716,7 +764,7 @@ export default function AttendancePage() {
 
     const handleCheckOut = async () => {
         // Check if selected class matches the checked-in class
-        const isCorrectClassSelected = selectedClass && checkedInClass && selectedClass.id === checkedInClass.id;
+        const isCorrectClassSelected = selectedClass && checkedInClass && selectedClass.timetable_id === checkedInClass.timetable_id;
 
         if (currentStatus !== 'checked_in' || !activeAttendanceId || !isCorrectClassSelected) {
             setApiError('Cannot check out: Please select the same class you checked in for');
@@ -755,7 +803,7 @@ export default function AttendancePage() {
             }
         } catch (error: any) {
             console.error('Check-out error:', error);
-            setApiError(error.response?.data?.message || 'Network error: Unable to check out. Please try again.');
+            setApiError(getApiErrorMessage(error, 'Network error: Unable to check out. Please try again.'));
         } finally {
             setIsLoadingApi(false);
         }
@@ -764,10 +812,10 @@ export default function AttendancePage() {
     const fetchAttendanceRecords = async () => {
         try {
             const today = new Date().toISOString().split('T')[0];
-            const response = await api.get<ApiResponse>(`/teacher/attendance/history?date=${today}`);
+            const response = await teacherJsonRequest<ApiResponse>(`/teacher/attendance/history?date=${today}`);
 
-            if (response.status === 200) {
-                const records = response.data.data.map((record: any) => ({
+            if (response.success && response.data) {
+                const records = response.data.map((record: any) => ({
                     id: record.id,
                     timetable_id: record.timetable_id,
                     course_id: record.course_id,
@@ -844,7 +892,7 @@ export default function AttendancePage() {
         return () => clearInterval(interval);
     }, [selectedClass, updateTimeValidation]);
 
-    const isSelectedClassCheckedIn = selectedClass && checkedInClass && selectedClass.id === checkedInClass.id;
+    const isSelectedClassCheckedIn = selectedClass && checkedInClass && selectedClass.timetable_id === checkedInClass.timetable_id;
 
     // Check if check-in should be disabled
     const gpsEnforcementEnabled = Boolean(systemSettings?.attendance?.gps_enforcement_enabled?.value ?? true);
@@ -854,6 +902,8 @@ export default function AttendancePage() {
         isLoadingApi ||
         !selectedClass ||
         selectedClass.is_completed ||
+        selectedClass.is_missed ||
+        selectedClass.can_take_attendance === false ||
         !timeValidation.canCheckInNow;
 
     const isCheckOutDisabled =
@@ -861,10 +911,14 @@ export default function AttendancePage() {
         isLoadingApi ||
         !isSelectedClassCheckedIn ||
         selectedClass?.is_completed ||
+        selectedClass?.is_missed ||
+        selectedClass?.can_take_attendance === false ||
         !timeValidation.isCheckoutOpen;
 
     const getCheckInButtonText = () => {
         if (isLoadingApi && currentStatus === 'not_checked_in') return 'Processing...';
+        if (selectedClass?.is_missed) return 'Missed';
+        if (selectedClass?.can_take_attendance === false) return 'Rescheduled';
         if (selectedClass?.is_completed) return 'Completed';
         if (!timeValidation.canCheckInNow) return 'Check-In Not Open';
         return 'Check In';
@@ -872,6 +926,8 @@ export default function AttendancePage() {
 
     const getCheckOutButtonText = () => {
         if (isLoadingApi && currentStatus === 'checked_in') return 'Processing...';
+        if (selectedClass?.is_missed) return 'Missed';
+        if (selectedClass?.can_take_attendance === false) return 'Rescheduled';
         if (selectedClass?.is_completed) return 'Completed';
         if (!timeValidation.isCheckoutOpen) return 'Wait for End';
         if (timeValidation.isAfterCheckoutDeadline) return 'Check Out (Overtime)';
@@ -933,7 +989,7 @@ export default function AttendancePage() {
                                         </p>
                                     </div>
                                 </div>
-                                {selectedClass && checkedInClass.id !== selectedClass.id && (
+                                {selectedClass && checkedInClass.timetable_id !== selectedClass.timetable_id && (
                                     <p className="text-sm text-amber-600">Select this class above to check out</p>
                                 )}
                             </div>
@@ -942,6 +998,31 @@ export default function AttendancePage() {
 
                     <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
                         <div className="space-y-6 lg:col-span-7">
+                            {selectedClass?.is_missed && (
+                                <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
+                                    <div className="flex items-start gap-2">
+                                        <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-700" />
+                                        <div>
+                                            <p className="font-semibold">Session Missed</p>
+                                            <p className="mt-1">
+                                                {selectedClass.attendance_blocked_message ||
+                                                    'This session was marked as missed. Attendance is no longer available.'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {selectedClass?.reschedule &&
+                                (selectedClass.attendance_state === 'rescheduled_away' ||
+                                    selectedClass.attendance_state === 'rescheduled_active') && (
+                                    <RescheduleSessionBanner
+                                        reschedule={selectedClass.reschedule}
+                                        variant={selectedClass.attendance_state === 'rescheduled_away' ? 'away' : 'active'}
+                                        showBlockedMessage={selectedClass.can_take_attendance === false}
+                                    />
+                                )}
+
                             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                                 {apiKey ? (
                                     <LoadScript googleMapsApiKey={apiKey}>
@@ -1020,12 +1101,15 @@ export default function AttendancePage() {
                                         </div>
                                         <div className="custom-scrollbar grid max-h-[320px] grid-cols-2 gap-3 overflow-y-auto pr-1 max-sm:grid-cols-1">
                                             {todaysClasses.map((c) => {
-                                                const isSelected = selectedClass?.id === c.id;
-                                                const isCheckedIn = checkedInClass?.id === c.id && currentStatus === 'checked_in';
+                                                const isSelected = selectedClass?.timetable_id === c.timetable_id;
+                                                const isCheckedIn = checkedInClass?.timetable_id === c.timetable_id && currentStatus === 'checked_in';
                                                 const isCompleted = c.is_completed;
+                                                const isRescheduledAway = c.attendance_state === 'rescheduled_away';
+                                                const isRescheduledActive = c.attendance_state === 'rescheduled_active';
+                                                const isMissed = c.is_missed || c.attendance_status?.status === 'absent';
                                                 const hasAttendance = c.attendance_taken;
                                                 const isOtherCheckedIn =
-                                                    checkedInClass && checkedInClass.id !== c.id && currentStatus === 'checked_in';
+                                                    checkedInClass && checkedInClass.timetable_id !== c.timetable_id && currentStatus === 'checked_in';
                                                 const isClassBeforeStart = isBeforeAllowedCheckIn(c.start_time, teacherEarlyCheckInMinutes);
                                                 const classHasEnded = isClassEnded(c.end_time);
                                                 const isClassActiveNow = isClassActive(c.start_time, c.end_time);
@@ -1044,6 +1128,22 @@ export default function AttendancePage() {
                                                     textColor = 'text-emerald-800';
                                                     cursorStyle = 'cursor-default';
                                                     hoverStyle = '';
+                                                } else if (isRescheduledAway) {
+                                                    bgColor = 'bg-amber-50';
+                                                    borderColor = 'border-amber-300';
+                                                    textColor = 'text-amber-900';
+                                                    cursorStyle = 'cursor-not-allowed';
+                                                    hoverStyle = '';
+                                                } else if (isMissed) {
+                                                    bgColor = 'bg-red-50';
+                                                    borderColor = 'border-red-300';
+                                                    textColor = 'text-red-900';
+                                                    cursorStyle = 'cursor-not-allowed';
+                                                    hoverStyle = '';
+                                                } else if (isRescheduledActive) {
+                                                    bgColor = isSelected ? 'bg-sky-50' : 'bg-sky-50/70';
+                                                    borderColor = isSelected ? 'border-sky-500' : 'border-sky-300';
+                                                    textColor = 'text-sky-900';
                                                 } else if (isSelected) {
                                                     if (isCheckedIn) {
                                                         bgColor = 'bg-blue-50';
@@ -1088,9 +1188,15 @@ export default function AttendancePage() {
 
                                                 return (
                                                     <button
-                                                        key={c.id}
-                                                        onClick={() => handleClassSelect(c.id.toString())}
-                                                        disabled={isCompleted || isOtherCheckedIn || isAfterCheckoutDeadlineNow}
+                                                        key={c.timetable_id}
+                                                        onClick={() => handleClassSelect(c.timetable_id.toString())}
+                                                        disabled={
+                                                            isCompleted ||
+                                                            isOtherCheckedIn ||
+                                                            isAfterCheckoutDeadlineNow ||
+                                                            isRescheduledAway ||
+                                                            isMissed
+                                                        }
                                                         className={`rounded-xl border p-3 text-left transition-all duration-200 ${bgColor} ${borderColor} ${cursorStyle} ${hoverStyle} ${
                                                             isSelected ? 'ring-1 ring-blue-500' : ''
                                                         }`}
@@ -1104,6 +1210,29 @@ export default function AttendancePage() {
                                                                     .join(' ')}
                                                             </h4>
                                                             <div className="flex items-center gap-1">
+                                                                {isRescheduledAway && (
+                                                                    <div className="flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5">
+                                                                        <AlertTriangle size={12} className="text-amber-700" />
+                                                                        <span className="text-[10px] font-bold text-amber-800">RESCHEDULED</span>
+                                                                    </div>
+                                                                )}
+                                                                {isMissed && (
+                                                                    <div className="flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5">
+                                                                        <XCircle size={12} className="text-red-700" />
+                                                                        <span className="text-[10px] font-bold text-red-800">MISSED</span>
+                                                                    </div>
+                                                                )}
+                                                                {isRescheduledActive && (
+                                                                    <div
+                                                                        className="flex max-w-[140px] items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5"
+                                                                        title={c.reschedule?.rescheduled_from_badge}
+                                                                    >
+                                                                        <CalendarClock size={12} className="text-sky-700" />
+                                                                        <span className="truncate text-[10px] font-bold text-sky-800">
+                                                                            RESCHEDULED
+                                                                        </span>
+                                                                    </div>
+                                                                )}
                                                                 {isCompleted && (
                                                                     <div className="flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5">
                                                                         <CheckCircle size={12} className="text-emerald-600" />
@@ -1128,7 +1257,10 @@ export default function AttendancePage() {
                                                                     !isCompleted &&
                                                                     !isCheckedIn &&
                                                                     !checkoutAllowed &&
-                                                                    !isClassBeforeStart && <CheckCircle size={14} className="text-green-600" />}
+                                                                    !isClassBeforeStart &&
+                                                                    !isRescheduledAway &&
+                                                                    !isMissed &&
+                                                                    c.can_take_attendance !== false && <CheckCircle size={14} className="text-green-600" />}
                                                             </div>
                                                         </div>
 
@@ -1146,6 +1278,23 @@ export default function AttendancePage() {
                                                                 </span>
                                                             </div>
                                                         </div>
+
+                                                        {c.reschedule && (isRescheduledAway || isRescheduledActive) && (
+                                                            <div className="mt-2">
+                                                                <RescheduleSessionBanner
+                                                                    reschedule={c.reschedule}
+                                                                    variant={isRescheduledAway ? 'away' : 'active'}
+                                                                    compact
+                                                                    showBlockedMessage={isRescheduledAway}
+                                                                />
+                                                            </div>
+                                                        )}
+
+                                                        {isMissed && (
+                                                            <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-800">
+                                                                This session was marked as missed. Attendance is no longer available.
+                                                            </div>
+                                                        )}
 
                                                         {isCompleted && c.attendance_status && (
                                                             <div className="mt-2">
@@ -1190,7 +1339,10 @@ export default function AttendancePage() {
                                                             !isCompleted &&
                                                             !isCheckedIn &&
                                                             !checkoutAllowed &&
-                                                            !isClassBeforeStart && (
+                                                            !isClassBeforeStart &&
+                                                            !isRescheduledAway &&
+                                                            !isMissed &&
+                                                            c.can_take_attendance !== false && (
                                                                 <div className="mt-2 text-xs font-medium text-green-600">
                                                                     ✅ Class is currently active
                                                                 </div>
@@ -1223,7 +1375,7 @@ export default function AttendancePage() {
 
                                     {selectedClass && !selectedClass.is_completed && (
                                         <>
-                                            {!timeValidation.canCheckInNow && (
+                                            {!timeValidation.canCheckInNow && selectedClass.can_take_attendance !== false && (
                                                 <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
                                                     <div className="flex items-center gap-2">
                                                         <Clock size={16} className="text-blue-600" />
@@ -1288,7 +1440,11 @@ export default function AttendancePage() {
 
                                     <button
                                         onClick={getCurrentLocation}
-                                        disabled={isLoadingLocation || facialRecognitionEnabled}
+                                        disabled={
+                                            isLoadingLocation ||
+                                            facialRecognitionEnabled ||
+                                            selectedClass?.can_take_attendance === false
+                                        }
                                         className="flex w-full items-center justify-center gap-2 rounded-lg bg-slate-100 px-4 py-2.5 font-medium text-slate-700 transition-colors hover:bg-slate-200 disabled:opacity-50"
                                     >
                                         {isLoadingLocation ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
@@ -1299,7 +1455,10 @@ export default function AttendancePage() {
                                         <div className="rounded-lg border border-red-100 bg-red-50 p-3 text-sm text-red-600">{locationError}</div>
                                     )}
 
-                                    {distance !== null && selectedClass && !selectedClass.is_completed && (
+                                    {distance !== null &&
+                                        selectedClass &&
+                                        !selectedClass.is_completed &&
+                                        selectedClass.can_take_attendance !== false && (
                                         <div
                                             className={`rounded-xl border p-4 ${isWithinRange ? 'border-green-100 bg-green-50' : 'border-amber-100 bg-amber-50'}`}
                                         >
@@ -1458,7 +1617,7 @@ export default function AttendancePage() {
                 open={faceModalOpen}
                 onOpenChange={setFaceModalOpen}
                 title="Facial Verification Required"
-                description="Geolocation passed. Please verify your identity with a live face capture before attendance is submitted."
+                description="Please verify your identity with a live face capture before attendance is submitted."
                 captureLabel="Verify Face"
                 onCapture={handleFaceVerified}
             />

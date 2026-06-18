@@ -112,7 +112,7 @@ it('allows a teacher to check out successfully after class end', function () {
         'timetable_id' => $timetable->id,
         'academic_year_id' => $this->academicYear->id,
         'date' => Carbon::now()->format('Y-m-d'),
-        'check_in_time' => Carbon::now()->subMinutes(30)->format('h:i A'),
+        'check_in_time' => Carbon::now()->subMinutes(30)->format('H:i:s'),
         'check_in_latitude' => 1.2345,
         'check_in_longitude' => 2.3456,
         'check_in_distance' => 10,

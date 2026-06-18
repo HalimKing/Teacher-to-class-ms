@@ -7,10 +7,10 @@ import AppLayout from '@/layouts/app-layout';
 import { cn } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm, usePage } from '@inertiajs/react';
-import { Bell, Building2, Clock, Loader2, MapPin, Save } from 'lucide-react';
+import { Bell, Building2, Clock, Eye, EyeOff, Loader2, MapPin, Save, Shield } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-type SettingEntry = { key: string; value: unknown; type: string; masked?: boolean };
+type SettingEntry = { key: string; value: unknown; type: string; masked?: boolean; description?: string | null };
 type GroupedSettings = Record<string, Record<string, SettingEntry>>;
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -23,11 +23,13 @@ const TAB_GROUPS = [
     { id: 'attendance', label: 'Attendance', icon: Clock },
     { id: 'map', label: 'Map & Location', icon: MapPin },
     { id: 'notifications', label: 'Notifications & Logs', icon: Bell },
+    { id: 'security', label: 'Security', icon: Shield },
 ] as const;
 
 export default function AdminSystemSettingsPage() {
     const { settings: initialSettings, flash } = usePage<{ settings: GroupedSettings; flash?: { success?: string } }>().props;
     const [activeTab, setActiveTab] = useState<string>('general');
+    const [visibleSecrets, setVisibleSecrets] = useState<Record<string, boolean>>({});
 
     const groupSettings = initialSettings?.[activeTab] ?? {};
     const groupKeys = Object.keys(groupSettings);
@@ -67,6 +69,14 @@ export default function AdminSystemSettingsPage() {
     const settingsData = (data.settings ?? {}) as Record<string, unknown>;
 
     const isBoolean = (key: string) => groupSettings[key]?.type === 'boolean';
+    const isSecretField = (key: string) => key.includes('api_key');
+
+    const toggleSecretVisibility = (key: string) => {
+        setVisibleSecrets((current) => ({
+            ...current,
+            [key]: !current[key],
+        }));
+    };
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -74,7 +84,7 @@ export default function AdminSystemSettingsPage() {
             <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto rounded-xl p-4 md:p-6">
                 <div>
                     <h1 className="text-2xl font-bold text-sidebar-foreground dark:text-sidebar-foreground">System Settings</h1>
-                    <p className="mt-1 text-sm text-sidebar-foreground/60">Configure institution, attendance, map, and logging options.</p>
+                    <p className="mt-1 text-sm text-sidebar-foreground/60">Configure institution, attendance, map, security, and logging options.</p>
                 </div>
 
                 {flash?.success && (
@@ -114,6 +124,9 @@ export default function AdminSystemSettingsPage() {
                                     <Label htmlFor={key} className="text-sidebar-foreground/80">
                                         {key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
                                     </Label>
+                                    {groupSettings[key]?.description && (
+                                        <p className="text-xs text-sidebar-foreground/60">{groupSettings[key].description}</p>
+                                    )}
                                     {isBoolean(key) ? (
                                         <div className="flex items-center gap-2">
                                             <input
@@ -125,15 +138,44 @@ export default function AdminSystemSettingsPage() {
                                             />
                                             <span className="text-sm text-sidebar-foreground/70">Enable</span>
                                         </div>
+                                    ) : isSecretField(key) ? (
+                                        <div className="max-w-md">
+                                            <div className="relative">
+                                                <Input
+                                                    id={key}
+                                                    type={visibleSecrets[key] ? 'text' : 'password'}
+                                                    value={String(settingsData[key] ?? '')}
+                                                    onChange={(e) => handleChange(key, e.target.value)}
+                                                    placeholder={groupSettings[key]?.masked ? 'Leave blank to keep current' : ''}
+                                                    className="border-sidebar-border/50 pr-11 dark:bg-sidebar-accent"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => toggleSecretVisibility(key)}
+                                                    className="absolute right-1 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-md text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                                                    aria-label={visibleSecrets[key] ? 'Hide API key' : 'Show API key'}
+                                                    aria-pressed={Boolean(visibleSecrets[key])}
+                                                >
+                                                    {visibleSecrets[key] ? (
+                                                        <EyeOff className="size-4" aria-hidden="true" />
+                                                    ) : (
+                                                        <Eye className="size-4" aria-hidden="true" />
+                                                    )}
+                                                </button>
+                                            </div>
+                                            {groupSettings[key]?.masked && (
+                                                <p className="mt-1 text-xs text-sidebar-foreground/60">
+                                                    Showing a masked preview. Enter a new key to replace the stored value.
+                                                </p>
+                                            )}
+                                        </div>
                                     ) : (
                                         <Input
                                             id={key}
                                             type={
-                                                key.includes('api_key')
-                                                    ? 'password'
-                                                    : key === 'default_campus_lat' || key === 'default_campus_lng'
-                                                      ? 'number'
-                                                      : 'text'
+                                                key === 'default_campus_lat' || key === 'default_campus_lng'
+                                                    ? 'number'
+                                                    : 'text'
                                             }
                                             value={String(settingsData[key] ?? '')}
                                             onChange={(e) =>

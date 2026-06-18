@@ -47,9 +47,10 @@ class SystemSetting extends Model
             $out = [];
             foreach ($rows as $row) {
                 $out[$row->key] = [
-                    'value'  => $row->value,
-                    'type'   => $row->type,
-                    'group'  => $row->group,
+                    'value'       => $row->value,
+                    'type'        => $row->type,
+                    'group'       => $row->group,
+                    'description' => $row->description,
                 ];
             }
             return $out;
@@ -69,9 +70,10 @@ class SystemSetting extends Model
                 $grouped[$g] = [];
             }
             $grouped[$g][$key] = [
-                'key'   => $key,
-                'value' => self::castValue($item['value'], $item['type']),
-                'type'  => $item['type'],
+                'key'         => $key,
+                'value'       => self::castValue($item['value'], $item['type']),
+                'type'        => $item['type'],
+                'description' => $item['description'] ?? null,
             ];
         }
         return $grouped;

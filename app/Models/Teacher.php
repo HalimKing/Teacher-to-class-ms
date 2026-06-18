@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\FacialRecognitionService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -34,6 +35,7 @@ class Teacher extends Authenticatable
         'last_name',
         'email',
         'phone',
+        'password',
         'faculty_id',
         'department_id',
         'employee_id',
@@ -41,15 +43,19 @@ class Teacher extends Authenticatable
         'staff_type',
         'face_descriptor',
         'face_registered_at',
+        'password_changed_at',
     ];
 
     protected $hidden = [
+        'password',
+        'remember_token',
         'face_descriptor',
     ];
 
     protected function casts(): array
     {
         return [
+            'password' => 'hashed',
             'face_descriptor' => 'encrypted:array',
             'face_registered_at' => 'datetime',
         ];
@@ -109,7 +115,7 @@ class Teacher extends Authenticatable
 
     public function hasFaceEnrollment(): bool
     {
-        return !empty($this->face_descriptor) && $this->face_registered_at !== null;
+        return app(FacialRecognitionService::class)->hasValidEnrollment($this);
     }
 
     public function faceEnrollmentStatus(): string

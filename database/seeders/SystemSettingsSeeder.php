@@ -27,8 +27,12 @@ class SystemSettingsSeeder extends Seeder
             ['key' => 'teacher_early_checkin_minutes', 'value' => '30', 'group' => 'attendance', 'type' => 'integer', 'description' => 'Number of minutes before scheduled start time that teachers are allowed to check in.'],
             ['key' => 'checkout_grace_period_minutes', 'value' => '30', 'group' => 'attendance', 'type' => 'integer', 'description' => 'Number of minutes after scheduled end time that check-out is still considered compliant.'],
             ['key' => 'early_leave_minutes', 'value' => '15', 'group' => 'attendance', 'type' => 'integer', 'description' => 'Minutes before class end to count as early leave'],
-            ['key' => 'auto_mark_absent_after_end', 'value' => '0', 'group' => 'attendance', 'type' => 'boolean', 'description' => 'Auto-mark absent after class end time'],
+            ['key' => 'auto_mark_absent_after_end', 'value' => '1', 'group' => 'attendance', 'type' => 'boolean', 'description' => 'Auto-mark absent after class end time'],
             ['key' => 'allow_manual_override', 'value' => '1', 'group' => 'attendance', 'type' => 'boolean', 'description' => 'Allow admin to manually override attendance'],
+            ['key' => 'facial_recognition_enabled', 'value' => '1', 'group' => 'attendance', 'type' => 'boolean', 'description' => 'Require facial recognition as an additional attendance verification layer.'],
+            ['key' => 'face_match_threshold', 'value' => '0.45', 'group' => 'attendance', 'type' => 'string', 'description' => 'Maximum descriptor distance accepted for a face match.'],
+            ['key' => 'face_verification_timeout', 'value' => '120', 'group' => 'attendance', 'type' => 'integer', 'description' => 'Face verification token lifetime in seconds.'],
+            ['key' => 'face_enrollment_required', 'value' => '0', 'group' => 'attendance', 'type' => 'boolean', 'description' => 'Block attendance when a lecturer has no enrolled face descriptor.'],
 
             // Map & Location
             ['key' => 'google_maps_api_key', 'value' => '', 'group' => 'map', 'type' => 'string', 'description' => 'Google Maps API key (optional)'],
@@ -41,6 +45,9 @@ class SystemSettingsSeeder extends Seeder
             ['key' => 'attendance_logs_enabled', 'value' => '1', 'group' => 'notifications', 'type' => 'boolean', 'description' => 'Enable attendance activity logs'],
             ['key' => 'log_gps_attempts', 'value' => '1', 'group' => 'notifications', 'type' => 'boolean', 'description' => 'Log GPS check-in/check-out attempts'],
             ['key' => 'log_failed_attempts', 'value' => '1', 'group' => 'notifications', 'type' => 'boolean', 'description' => 'Log failed attendance attempts'],
+
+            // Security
+            ['key' => 'forgot_password_enabled', 'value' => '1', 'group' => 'security', 'type' => 'boolean', 'description' => 'Allow admin users and lecturers to request a password reset link from the login page.'],
         ];
 
         foreach ($defaults as $item) {

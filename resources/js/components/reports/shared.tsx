@@ -20,6 +20,7 @@ export interface SummaryCard {
     change: string;
     changeType: 'positive' | 'negative' | 'neutral';
     icon: string;
+    group?: string;
 }
 
 export interface PaginatedRecords<T> {
@@ -37,6 +38,7 @@ export interface TrendPoint {
     total: number;
     present: number;
     late: number;
+    absent?: number;
     attendance_rate: number;
 }
 
@@ -69,6 +71,8 @@ export interface ReportAnalytics {
         lowest_attendance?: PerformancePerson | null;
     };
     verificationTrend?: TrendPoint[];
+    attendanceBreakdown?: Array<{ label: string; value: number }>;
+    punctualityAnalytics?: Array<{ label: string; value: number }>;
 }
 
 export interface TableColumn<T> {
@@ -97,6 +101,34 @@ export const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: { legend: { position: 'top' as const } },
+};
+
+export const trendChartOptions = {
+    ...chartOptions,
+    scales: {
+        x: {
+            ticks: {
+                maxTicksLimit: 12,
+                maxRotation: 0,
+            },
+        },
+        y: {
+            beginAtZero: true,
+            ticks: {
+                precision: 0,
+            },
+        },
+    },
+    elements: {
+        line: {
+            tension: 0.3,
+            borderWidth: 2,
+        },
+        point: {
+            radius: 3,
+            hoverRadius: 5,
+        },
+    },
 };
 
 export const statusColors: Record<string, string> = {

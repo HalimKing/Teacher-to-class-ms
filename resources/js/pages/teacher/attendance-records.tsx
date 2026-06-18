@@ -50,6 +50,12 @@ interface AttendanceRecord {
     taken_by: string;
     check_in_time: string;
     check_out_time: string;
+    is_rescheduled?: boolean;
+    reschedule?: {
+        summary?: string;
+        original_date_display?: string;
+        new_date_display?: string;
+    } | null;
 }
 
 interface SummaryStats {
@@ -105,6 +111,7 @@ export default function AttendanceRecordsPage() {
     const [selectedCourse, setSelectedCourse] = useState('all');
     const [selectedDateRange, setSelectedDateRange] = useState('last-30-days');
     const [selectedStatus, setSelectedStatus] = useState('all');
+    const [selectedRescheduleType, setSelectedRescheduleType] = useState('all');
     const [currentPage, setCurrentPage] = useState(1);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -122,6 +129,7 @@ export default function AttendanceRecordsPage() {
                 courseId: selectedCourse,
                 dateRange: selectedDateRange,
                 status: selectedStatus,
+                rescheduleType: selectedRescheduleType,
                 page: pageNum.toString(),
             });
 
@@ -168,7 +176,7 @@ export default function AttendanceRecordsPage() {
     // Fetch records on mount and when filters change
     useEffect(() => {
         fetchRecords(1);
-    }, [searchQuery, selectedCourse, selectedDateRange, selectedStatus]);
+    }, [searchQuery, selectedCourse, selectedDateRange, selectedStatus, selectedRescheduleType]);
 
     // Format stats for display
     const summaryStats = useMemo(() => {
@@ -513,7 +521,7 @@ export default function AttendanceRecordsPage() {
 
                 {/* Filters Section */}
                 <div className="rounded-xl border border-sidebar-border/70 bg-white p-4 shadow-sm dark:border-sidebar-border dark:bg-sidebar-accent">
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-5">
                         {/* Search */}
                         <div className="lg:col-span-1">
                             <label className="mb-2 block text-xs font-semibold tracking-wider text-sidebar-foreground/60 uppercase">Search</label>
@@ -580,6 +588,22 @@ export default function AttendanceRecordsPage() {
                                     <option value="all">All Status</option>
                                     <option value="completed">Completed</option>
                                     <option value="pending">Pending</option>
+                                </select>
+                                <ChevronDown className="pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-sidebar-foreground/60" />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="mb-2 block text-xs font-semibold tracking-wider text-sidebar-foreground/60 uppercase">Session Type</label>
+                            <div className="relative">
+                                <select
+                                    value={selectedRescheduleType}
+                                    onChange={(e) => setSelectedRescheduleType(e.target.value)}
+                                    className="w-full cursor-pointer appearance-none rounded-lg border border-sidebar-border/50 bg-white px-3 py-2 text-sm text-sidebar-foreground focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none dark:bg-sidebar-accent dark:text-sidebar-foreground"
+                                >
+                                    <option value="all">All Sessions</option>
+                                    <option value="normal">Normal Classes</option>
+                                    <option value="rescheduled">Rescheduled Classes</option>
                                 </select>
                                 <ChevronDown className="pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-sidebar-foreground/60" />
                             </div>
@@ -672,6 +696,11 @@ export default function AttendanceRecordsPage() {
                                                     <span className="text-xs text-sidebar-foreground/60 dark:text-sidebar-foreground/60">
                                                         {record.day_of_week} • {record.class_time}
                                                     </span>
+                                                    {record.is_rescheduled && (
+                                                        <span className="mt-1 inline-flex w-fit rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold text-sky-800">
+                                                            Rescheduled Session
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </td>
 

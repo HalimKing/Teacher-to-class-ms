@@ -8,11 +8,13 @@ interface ReportAttendanceTableProps<T extends { id: number }> {
     title?: string;
     records: PaginatedRecords<T> | null;
     columns: TableColumn<T>[];
+    visibleColumnKeys?: string[];
     sortBy: string;
     sortDir: 'asc' | 'desc';
     perPage: number;
     isLoading: boolean;
     detailHref?: (record: T) => string;
+    onRowClick?: (record: T) => void;
     onSort: (column: string) => void;
     onPerPageChange: (size: number) => void;
     onPageChange: (page: number) => void;
@@ -22,15 +24,20 @@ export function ReportAttendanceTable<T extends { id: number }>({
     title = 'Attendance Records',
     records,
     columns,
+    visibleColumnKeys,
     sortBy,
     sortDir,
     perPage,
     isLoading,
     detailHref,
+    onRowClick,
     onSort,
     onPerPageChange,
     onPageChange,
 }: ReportAttendanceTableProps<T>) {
+    const activeColumns = visibleColumnKeys?.length
+        ? columns.filter((column) => visibleColumnKeys.includes(column.key))
+        : columns;
     return (
         <div className="rounded-xl border border-sidebar-border/70 bg-white shadow-sm dark:border-sidebar-border dark:bg-sidebar-accent">
             <div className="flex flex-col gap-3 border-b border-sidebar-border/50 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -57,7 +64,7 @@ export function ReportAttendanceTable<T extends { id: number }>({
                     <table className="min-w-full text-sm">
                         <thead className="bg-sidebar-accent/50 text-left text-xs uppercase tracking-wider text-sidebar-foreground/60">
                             <tr>
-                                {columns.map((column) => (
+                                {activeColumns.map((column) => (
                                     <th key={column.key} className="px-4 py-3">
                                         {column.sortable !== false ? (
                                             <button onClick={() => onSort(column.key)} className="inline-flex items-center gap-1 hover:text-sidebar-foreground">
@@ -72,8 +79,12 @@ export function ReportAttendanceTable<T extends { id: number }>({
                         </thead>
                         <tbody>
                             {records.data.map((record) => (
-                                <tr key={record.id} className="border-t border-sidebar-border/40">
-                                    {columns.map((column) => (
+                                <tr
+                                    key={record.id}
+                                    className={`border-t border-sidebar-border/40 ${onRowClick ? 'cursor-pointer hover:bg-sidebar-accent/40' : ''}`}
+                                    onClick={() => onRowClick?.(record)}
+                                >
+                                    {activeColumns.map((column) => (
                                         <td key={column.key} className="px-4 py-3">
                                             {column.render ? column.render(record) : String((record as Record<string, unknown>)[column.key] ?? '—')}
                                         </td>

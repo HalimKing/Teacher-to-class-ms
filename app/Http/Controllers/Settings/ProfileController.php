@@ -21,6 +21,7 @@ class ProfileController extends Controller
         return Inertia::render('settings/profile', [
             'mustVerifyEmail' => $request->user() instanceof MustVerifyEmail,
             'status' => $request->session()->get('status'),
+            'canEditProfile' => auth()->guard('web')->check(),
         ]);
     }
 
@@ -29,18 +30,20 @@ class ProfileController extends Controller
      */
     public function update(ProfileUpdateRequest $request): RedirectResponse
     {
-        $user = $request->user();
         if (auth()->guard('teacher')->check()) {
-            $user->first_name = $request->first_name;
-            $user->last_name = $request->last_name;
+            abort(403, 'Staff profile details are managed by the administration.');
         }
+
+        $user = $request->user();
 
         if (auth()->guard('web')->check()) {
             $user->name = $request->name;
         }
-           
-        if ($request->user()->isDirty('email')) {
-            $request->user()->email_verified_at = null;
+
+        $user->email = $request->validated('email');
+
+        if ($user->isDirty('email')) {
+            $user->email_verified_at = null;
         }
 
         $user->save();

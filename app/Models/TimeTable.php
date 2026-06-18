@@ -87,4 +87,9 @@ class TimeTable extends Model
     {
         return $this->staff_type === Teacher::STAFF_TYPE_ADMINISTRATOR;
     }
+
+    public function rescheduledSessions()
+    {
+        return $this->hasMany(RescheduledSession::class, 'timetable_id');
+    }
 }

@@ -3,19 +3,19 @@
 namespace App\Notifications;
 
 use App\Models\SessionReminder;
+use App\Services\RescheduledAttendanceService;
+use App\Support\LecturerNotificationPayload;
+use Carbon\Carbon;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
 class SessionReminderNotification extends Notification
 {
-
     public function __construct(
         public SessionReminder $reminder
     ) {}
 
     /**
-     * Get the notification's delivery channels.
-     *
      * @return array<int, string>
      */
     public function via(object $notifiable): array
@@ -23,13 +23,11 @@ class SessionReminderNotification extends Notification
         return ['mail', 'database'];
     }
 
-    /**
-     * Get the mail representation of the notification.
-     */
     public function toMail(object $notifiable): MailMessage
     {
         $reminder = $this->reminder;
         $reminder->loadMissing('timetable.course', 'timetable.classRoom');
+        $sessionDetails = $this->resolveSessionDetails();
 
         $message = (new MailMessage)
             ->subject('Reminder: ' . $reminder->title)
@@ -42,10 +40,15 @@ class SessionReminderNotification extends Notification
         }
 
         if ($reminder->timetable) {
-            $session = $reminder->timetable;
-            $message->line('Session: ' . ($session->course?->name ?? 'N/A') . ' – ' . $session->day . ' ' . substr($session->start_time ?? '', 0, 5));
-            if ($session->classRoom) {
-                $message->line('Room: ' . $session->classRoom->name);
+            $message->line('Session: ' . ($reminder->timetable->course?->name ?? 'N/A'));
+            $message->line('When: ' . $sessionDetails['date_display'] . ' • ' . $sessionDetails['start_time_display'] . ' – ' . $sessionDetails['end_time_display']);
+
+            if ($sessionDetails['venue']) {
+                $message->line('Venue: ' . $sessionDetails['venue']);
+            }
+
+            if ($sessionDetails['is_rescheduled'] && !empty($sessionDetails['reschedule']['rescheduled_from_badge'])) {
+                $message->line($sessionDetails['reschedule']['rescheduled_from_badge']);
             }
         }
 
@@ -56,26 +59,33 @@ class SessionReminderNotification extends Notification
     }
 
     /**
-     * Get the array representation of the notification for database.
-     *
      * @return array<string, mixed>
      */
     public function toArray(object $notifiable): array
     {
         $reminder = $this->reminder;
         $reminder->loadMissing('timetable.course', 'timetable.classRoom');
+        $sessionDetails = $this->resolveSessionDetails();
 
         $sessionLine = null;
         if ($reminder->timetable) {
-            $t = $reminder->timetable;
-            $sessionLine = ($t->course?->name ?? '') . ' – ' . $t->day . ' ' . substr($t->start_time ?? '', 0, 5);
-            if ($t->classRoom) {
-                $sessionLine .= ' (' . $t->classRoom->name . ')';
+            $sessionLine = ($reminder->timetable->course?->name ?? 'Session')
+                . ' – ' . $sessionDetails['date_display']
+                . ' ' . $sessionDetails['start_time_display'];
+
+            if ($sessionDetails['venue']) {
+                $sessionLine .= ' (' . $sessionDetails['venue'] . ')';
+            }
+
+            if ($sessionDetails['is_rescheduled'] && !empty($sessionDetails['reschedule']['rescheduled_from_badge'])) {
+                $sessionLine .= ' • ' . $sessionDetails['reschedule']['rescheduled_from_badge'];
             }
         }
 
         return [
             'type' => 'session_reminder',
+            'category' => LecturerNotificationPayload::CATEGORY_ATTENDANCE,
+            'priority' => LecturerNotificationPayload::PRIORITY_MEDIUM,
             'reminder_id' => $reminder->id,
             'title' => $reminder->title,
             'message' => $reminder->message,
@@ -83,5 +93,27 @@ class SessionReminderNotification extends Notification
             'session' => $sessionLine,
             'url' => '/teacher/reminders',
         ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function resolveSessionDetails(): array
+    {
+        $reminder = $this->reminder;
+
+        if (!$reminder->timetable) {
+            return [
+                'date_display' => $reminder->reminder_at->format('l, F j, Y'),
+                'start_time_display' => $reminder->reminder_at->format('g:i A'),
+                'end_time_display' => '',
+                'venue' => null,
+                'is_rescheduled' => false,
+                'reschedule' => null,
+            ];
+        }
+
+        return app(RescheduledAttendanceService::class)
+            ->resolveEffectiveSessionDetails($reminder->timetable, Carbon::parse($reminder->reminder_at));
     }
 }

@@ -20,6 +20,7 @@ import { LayoutGrid, Menu, Search, ChevronDown, ChevronRight, Users, Book, Setti
 import { useState, useMemo } from 'react';
 import AppLogo from './app-logo';
 import AppLogoIcon from './app-logo-icon';
+import NotificationBell from '@/components/notifications/NotificationBell';
 import { can } from '@/lib/can';
 import { log } from 'console';
 import { useMobileNavigation } from '@/hooks/use-mobile-navigation';
@@ -99,18 +100,18 @@ const mainNavItems: NavItem[] = [
         permission: 'admin.dashboard.view',
     },
     {
-        title: 'Teachers',
+        title: 'Staffs',
         href: '/admin/teachers',
         icon: LayoutGrid,
         permission: 'admin.teachers.view',
         subItems: [
             {
-                title: 'All Teachers',
+                title: 'All Staff',
                 href: '/admin/teachers',
                 permission: 'admin.teachers.view',
             },
             {
-                title: 'Add Teacher',
+                title: 'Add Staff',
                 href: '/admin/teachers/create',
                 permission: 'admin.teachers.create',
             },
@@ -149,12 +150,12 @@ const mainNavItems: NavItem[] = [
                 permission: 'admin.school-management.departments.create',
             },
             {
-                title: 'Class List',
+                title: 'Venue List',
                 href: '/admin/school-management/class-rooms',
                 permission: 'admin.school-management.class-rooms.view',
             },
             {
-                title: 'Add Class',
+                title: 'Add Venue',
                 href: '/admin/school-management/class-rooms/create',
                 permission: 'admin.school-management.class-rooms.create',
             },
@@ -233,7 +234,7 @@ const mainNavItems: NavItem[] = [
         title: 'Users',
         href: '/admin/user-management',
         icon: Users,
-        permission: 'user-management.view',
+        permission: 'admin.user-management.users.view',
         subItems: [
             {
                 title: 'All Users',
@@ -315,6 +316,19 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
     const isTeacher = auth.user && auth.guard === 'teacher';
     const teacherStaffType = isTeacher ? String(auth.user.staff_type || 'lecturer') : null;
     const isLecturer = teacherStaffType === 'lecturer';
+
+    const userDisplayName = useMemo(() => {
+        if (!auth.user) {
+            return '';
+        }
+
+        if (isTeacher) {
+            const fullName = [auth.user.first_name, auth.user.last_name].filter(Boolean).join(' ').trim();
+            return fullName || auth.user.name || auth.user.email || 'User';
+        }
+
+        return auth.user.name || auth.user.email || 'User';
+    }, [auth.user, isTeacher]);
 
     console.log('User Info:', isTeacher ? 'Teacher' : 'Admin', auth.user);
     
@@ -557,66 +571,10 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
         </Button>
     </div>
 
-    {/* Teacher: Notifications (session reminders) */}
-    {isTeacher && isLecturer && (
-        <div className="relative hidden md:block">
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="relative h-9 w-9 cursor-pointer">
-                        <Bell className="h-5 w-5" />
-                        {(page.props as { unreadNotificationsCount?: number }).unreadNotificationsCount > 0 && (
-                            <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
-                                {(page.props as { unreadNotificationsCount?: number }).unreadNotificationsCount}
-                            </span>
-                        )}
-                    </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-80" align="end" sideOffset={8}>
-                    <div className="flex items-center justify-between border-b px-3 py-2">
-                        <span className="font-semibold">Notifications</span>
-                        {(page.props as { unreadNotificationsCount?: number }).unreadNotificationsCount > 0 && (
-                            <Link
-                                href={route('teacher.notifications.mark-all-read')}
-                                method="post"
-                                as="button"
-                                className="text-xs text-blue-600 hover:underline"
-                            >
-                                Mark all read
-                            </Link>
-                        )}
-                    </div>
-                    <div className="max-h-[320px] overflow-y-auto">
-                        {((page.props as { unreadNotifications?: Array<{ id: string; data: { title?: string; message?: string; session?: string; url?: string }; created_at: string }> }).unreadNotifications?.length ?? 0) > 0 ? (
-                            (page.props as { unreadNotifications?: Array<{ id: string; data: { title?: string; message?: string; session?: string; url?: string }; created_at: string }> }).unreadNotifications?.map((n) => (
-                                <Link
-                                    key={n.id}
-                                    href={n.data?.url ?? '/teacher/reminders'}
-                                    method="get"
-                                    className="block border-b px-3 py-2.5 text-left text-sm transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800"
-                                >
-                                    <p className="font-medium text-sidebar-foreground">{n.data?.title ?? 'Reminder'}</p>
-                                    {n.data?.session && (
-                                        <p className="mt-0.5 text-xs text-sidebar-foreground/60">{n.data.session}</p>
-                                    )}
-                                    <p className="mt-0.5 text-xs text-sidebar-foreground/50">
-                                        {new Date(n.created_at).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
-                                    </p>
-                                </Link>
-                            ))
-                        ) : (
-                            <p className="px-3 py-6 text-center text-sm text-sidebar-foreground/60">No new notifications</p>
-                        )}
-                    </div>
-                    <div className="border-t px-3 py-2">
-                        <Link
-                            href="/teacher/reminders"
-                            className="text-sm font-medium text-blue-600 hover:underline"
-                        >
-                            View all reminders →
-                        </Link>
-                    </div>
-                </DropdownMenuContent>
-            </DropdownMenu>
+    {/* Teacher notifications */}
+    {isTeacher && (
+        <div className="relative">
+            <NotificationBell />
         </div>
     )}
 
@@ -626,7 +584,7 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                 <Avatar className="h-8 w-8 sm:h-8 sm:w-8 overflow-hidden rounded-full">
                     <AvatarImage src={''} alt='' />
                     <AvatarFallback className="rounded-lg bg-neutral-200 text-black dark:bg-neutral-700 dark:text-white">
-                        {getInitials(isTeacher ? auth.user.first_name + ' ' + auth.user.last_name : auth.user.name)}
+                        {getInitials(userDisplayName)}
                     </AvatarFallback>
                 </Avatar>
             </Button>
@@ -636,7 +594,7 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
             {/* User Info Header */}
             <DropdownMenuLabel className="font-normal">
                 <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">{auth.user.first_name + ' ' + auth.user.last_name}</p>
+                    <p className="text-sm font-medium leading-none">{userDisplayName}</p>
                     <p className="text-xs leading-none text-muted-foreground">{auth.user.email}</p>
                 </div>
             </DropdownMenuLabel>

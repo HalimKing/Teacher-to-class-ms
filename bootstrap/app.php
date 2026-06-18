@@ -1,10 +1,12 @@
 <?php
 
 use App\Http\Middleware\AuthenticateAny;
+use App\Http\Middleware\EnsureAttendancePortalSession;
 use App\Http\Middleware\EnsureTeacherStaffType;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\PreventHttpCaching;
+use App\Http\Middleware\RestrictAttendancePortalAccess;
 use App\Services\ActivityLogService;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -28,6 +30,9 @@ return Application::configure(basePath: dirname(__DIR__))
             'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
             'auth.any' => AuthenticateAny::class,
             'teacher.staff_type' => EnsureTeacherStaffType::class,
+            'attendance.portal' => EnsureAttendancePortalSession::class,
+            'attendance.portal.restrict' => RestrictAttendancePortalAccess::class,
+            'password.changed' => \App\Http\Middleware\EnsurePasswordIsChanged::class,
         ]);
 
         $middleware->web(append: [

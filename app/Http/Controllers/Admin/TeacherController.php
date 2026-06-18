@@ -7,6 +7,7 @@ use App\Models\Faculty;
 use App\Models\Department;
 use App\Models\Teacher;
 use App\Services\ActivityLogService;
+use App\Services\AdminTeacherManagementService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Hash;
@@ -16,52 +17,17 @@ use Inertia\Inertia;
 use Maatwebsite\Excel\Facades\Excel;
 
 class TeacherController extends Controller
-{   
+{
+    public function __construct(
+        private AdminTeacherManagementService $teacherManagementService
+    ) {}
+
     /**
      * Display a listing of the resource.
      */
     public function index(Request $request)
     {
-        $query = Teacher::with('faculty', 'department');
-        
-        // Search functionality
-        if ($request->has('search') && !empty($request->search)) {
-            $search = $request->search;
-            $query->where(function($q) use ($search) {
-                $q->where('first_name', 'like', "%{$search}%")
-                  ->orWhere('last_name', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%")
-                  ->orWhere('employee_id', 'like', "%{$search}%");
-            });
-        }
-        
-        // Faculty filter
-        if ($request->has('faculty') && !empty($request->faculty) && $request->faculty !== 'all') {
-            $query->where('faculty_id', $request->faculty);
-        }
-        
-        // Department filter
-        if ($request->has('department') && !empty($request->department) && $request->department !== 'all') {
-            $query->where('department_id', $request->department);
-        }
-
-        // Staff type filter
-        if ($request->has('staffType') && in_array($request->staffType, Teacher::STAFF_TYPES, true)) {
-            $query->where('staff_type', $request->staffType);
-        }
-        
-        // Pagination
-        $teachers = $query->paginate(10)->withQueryString();
-        
-        // Get faculties and departments for filters
-        $faculties = Faculty::select('id', 'name')->orderBy('name')->get();
-        $departments = Department::select('id', 'name')->orderBy('name')->get();
-        
-        // Get current filters
-        $filters = $request->only(['search', 'faculty', 'department', 'staffType']);
-        
-        return Inertia::render('admin/teacher/index', 
-            compact('teachers', 'faculties', 'departments', 'filters'));
+        return Inertia::render('admin/teacher/index', $this->teacherManagementService->getIndexPayload($request));
     }
 
     /**
@@ -133,9 +99,17 @@ class TeacherController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(string $id)
+    public function show(Teacher $teacher)
     {
-        //
+        return redirect()->route('admin.teachers.edit', $teacher);
+    }
+
+    public function quickView(Teacher $teacher)
+    {
+        return response()->json([
+            'success' => true,
+            'data' => $this->teacherManagementService->getQuickView($teacher),
+        ]);
     }
 
     /**
@@ -292,35 +266,68 @@ class TeacherController extends Controller
     /**
      * Export teachers to CSV
      */
-    public function export($format = 'excel')
+    public function export(Request $request, $format = 'csv')
     {
-        $fileName = 'teachers_' . now()->format('Ymd_His') . '.csv';
+        $format = strtolower((string) $format);
+        $fileName = 'teachers_' . now()->format('Ymd_His') . ($format === 'excel' ? '.xlsx' : '.csv');
+        $teachers = $this->teacherManagementService->filteredQuery($request)
+            ->with(['faculty', 'department'])
+            ->get();
+
+        $rows = $teachers->map(function (Teacher $teacher) {
+            return [
+                'ID' => $teacher->id,
+                'First Name' => $teacher->first_name,
+                'Last Name' => $teacher->last_name,
+                'Email' => $teacher->email,
+                'Phone' => $teacher->phone ?? '',
+                'Employee ID' => $teacher->employee_id ?? '',
+                'Faculty' => $teacher->faculty->name ?? '',
+                'Department' => $teacher->department->name ?? '',
+                'Title' => $teacher->title ?? '',
+                'Staff Type' => $teacher->staff_type ?? Teacher::STAFF_TYPE_LECTURER,
+                'Face Enrolled' => $teacher->faceEnrollmentStatus(),
+                'Created At' => optional($teacher->created_at)->toDateTimeString(),
+            ];
+        })->all();
+
+        if ($format === 'print') {
+            return view('admin.teachers-print', [
+                'rows' => $rows,
+                'generatedAt' => now()->format('Y-m-d H:i:s'),
+            ]);
+        }
+
+        if ($format === 'pdf') {
+            if (!class_exists(\Barryvdh\DomPDF\Facade\Pdf::class)) {
+                abort(500, 'PDF export requires barryvdh/laravel-dompdf.');
+            }
+
+            $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('admin.teachers-print', [
+                'rows' => $rows,
+                'generatedAt' => now()->format('Y-m-d H:i:s'),
+            ]);
+
+            return $pdf->download(str_replace('.csv', '.pdf', $fileName));
+        }
+
+        if ($format === 'excel') {
+            return Excel::download(new \App\Exports\GenericArrayExport($rows), str_replace('.csv', '.xlsx', $fileName));
+        }
+
         $headers = [
             'Content-Type' => 'text/csv',
             'Content-Disposition' => "attachment; filename=\"{$fileName}\"",
         ];
 
-        $callback = function () {
+        $callback = function () use ($rows) {
             $out = fopen('php://output', 'w');
-            fputcsv($out, ['ID', 'First Name', 'Last Name', 'Email', 'Phone', 'Employee ID', 'Faculty', 'Department', 'Title', 'Staff Type', 'Created At', 'Updated At']);
-            Teacher::with(['faculty', 'department'])->chunk(200, function ($teachers) use ($out) {
-                foreach ($teachers as $t) {
-                    fputcsv($out, [
-                        $t->id,
-                        $t->first_name,
-                        $t->last_name,
-                        $t->email,
-                        $t->phone ?? '',
-                        $t->employee_id ?? '',
-                        $t->faculty->name ?? '',
-                        $t->department->name ?? '',
-                        $t->title ?? '',
-                        $t->staff_type ?? Teacher::STAFF_TYPE_LECTURER,
-                        optional($t->created_at)->toDateTimeString(),
-                        optional($t->updated_at)->toDateTimeString(),
-                    ]);
+            if (!empty($rows)) {
+                fputcsv($out, array_keys($rows[0]));
+                foreach ($rows as $row) {
+                    fputcsv($out, array_values($row));
                 }
-            });
+            }
             fclose($out);
         };
 

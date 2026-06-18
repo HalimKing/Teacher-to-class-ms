@@ -43,6 +43,19 @@ interface TeacherRecord {
     face_verification_status: string;
     face_match_score: number | null;
     attendance_source: string;
+    reschedule_status?: string;
+    is_rescheduled?: boolean;
+    reschedule?: {
+        original_date_display?: string;
+        original_start_time_display?: string;
+        original_end_time_display?: string;
+        original_venue?: string | null;
+        new_date_display?: string;
+        new_start_time_display?: string;
+        new_end_time_display?: string;
+        new_venue?: string | null;
+        summary?: string;
+    } | null;
     created_at: string;
 }
 
@@ -52,6 +65,8 @@ interface FilterOptions {
     departments: Array<{ id: number; name: string; faculty_id: number }>;
     courses: Array<{ id: number; name: string }>;
     attendanceStatuses: string[];
+    attendanceSources: Array<{ value: string; label: string }>;
+    sessionTypes: Array<{ value: string; label: string }>;
 }
 
 interface PageProps {
@@ -70,6 +85,8 @@ export default function TeacherAttendanceReportsIndex({ filterOptions, initialFi
         department_id: 'all',
         course_id: 'all',
         attendance_status: 'all',
+        attendance_source: 'all',
+        session_type: 'all',
         face_verification_status: 'all',
         geolocation_status: 'all',
         check_in_from: '',
@@ -144,6 +161,39 @@ export default function TeacherAttendanceReportsIndex({ filterOptions, initialFi
         { key: 'check_out_time', label: 'Check-out' },
         { key: 'working_hours', label: 'Hours', sortable: false },
         { key: 'attendance_status', label: 'Status', render: (r: TeacherRecord) => <StatusBadge status={r.attendance_status} /> },
+        {
+            key: 'reschedule_status',
+            label: 'Session',
+            sortable: false,
+            render: (r: TeacherRecord) =>
+                r.is_rescheduled || r.reschedule_status === 'Rescheduled' ? (
+                    <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">Rescheduled</span>
+                ) : (
+                    <span className="text-xs text-sidebar-foreground/60">Normal</span>
+                ),
+        },
+        {
+            key: 'reschedule',
+            label: 'Schedule',
+            sortable: false,
+            render: (r: TeacherRecord) =>
+                r.reschedule ? (
+                    <div className="max-w-xs text-xs leading-relaxed text-sidebar-foreground/80">
+                        <p>
+                            <span className="font-medium">Original:</span>{' '}
+                            {r.reschedule.original_date_display}, {r.reschedule.original_start_time_display} –{' '}
+                            {r.reschedule.original_end_time_display}, {r.reschedule.original_venue || '—'}
+                        </p>
+                        <p className="mt-1">
+                            <span className="font-medium">New:</span>{' '}
+                            {r.reschedule.new_date_display}, {r.reschedule.new_start_time_display} –{' '}
+                            {r.reschedule.new_end_time_display}, {r.reschedule.new_venue || '—'}
+                        </p>
+                    </div>
+                ) : (
+                    <span className="text-xs text-sidebar-foreground/40">—</span>
+                ),
+        },
         { key: 'geolocation_status', label: 'Geolocation', sortable: false },
         { key: 'face_verification_status', label: 'Face', sortable: false },
         { key: 'face_match_score', label: 'Score' },
@@ -192,6 +242,8 @@ export default function TeacherAttendanceReportsIndex({ filterOptions, initialFi
                         <ReportFilterField label="Department"><select value={filters.department_id} onChange={(e) => setFilters((p) => ({ ...p, department_id: e.target.value }))} className={filterInputClass}><option value="all">All Departments</option>{filteredDepartments.map((d) => <option key={d.id} value={String(d.id)}>{d.name}</option>)}</select></ReportFilterField>
                         <ReportFilterField label="Course"><select value={filters.course_id} onChange={(e) => setFilters((p) => ({ ...p, course_id: e.target.value }))} className={filterInputClass}><option value="all">All Courses</option>{filterOptions.courses.map((c) => <option key={c.id} value={String(c.id)}>{c.name}</option>)}</select></ReportFilterField>
                         <ReportFilterField label="Attendance Status"><select value={filters.attendance_status} onChange={(e) => setFilters((p) => ({ ...p, attendance_status: e.target.value }))} className={filterInputClass}><option value="all">All Statuses</option>{filterOptions.attendanceStatuses.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}</select></ReportFilterField>
+                        <ReportFilterField label="Attendance Source"><select value={filters.attendance_source} onChange={(e) => setFilters((p) => ({ ...p, attendance_source: e.target.value }))} className={filterInputClass}><option value="all">All Sources</option>{filterOptions.attendanceSources?.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select></ReportFilterField>
+                        <ReportFilterField label="Session Type"><select value={filters.session_type} onChange={(e) => setFilters((p) => ({ ...p, session_type: e.target.value }))} className={filterInputClass}><option value="all">All Sessions</option>{filterOptions.sessionTypes?.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select></ReportFilterField>
                         <ReportFilterField label="Face Verification"><select value={filters.face_verification_status} onChange={(e) => setFilters((p) => ({ ...p, face_verification_status: e.target.value }))} className={filterInputClass}><option value="all">All</option><option value="verified">Verified</option><option value="unverified">Unverified</option></select></ReportFilterField>
                         <ReportFilterField label="Geolocation"><select value={filters.geolocation_status} onChange={(e) => setFilters((p) => ({ ...p, geolocation_status: e.target.value }))} className={filterInputClass}><option value="all">All</option><option value="verified">Verified</option><option value="failed">Failed</option></select></ReportFilterField>
                         <ReportFilterField label="Check-in From"><input type="time" value={filters.check_in_from} onChange={(e) => setFilters((p) => ({ ...p, check_in_from: e.target.value }))} className={filterInputClass} /></ReportFilterField>

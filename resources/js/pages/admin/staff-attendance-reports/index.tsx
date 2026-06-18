@@ -1,4 +1,5 @@
 import AppLayout from '@/layouts/app-layout';
+import { trendChartOptions } from '@/components/reports/shared';
 import { can } from '@/lib/can';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
@@ -48,6 +49,7 @@ interface FilterOptions {
     faculties: Array<{ id: number; name: string }>;
     departments: Array<{ id: number; name: string; faculty_id: number }>;
     attendanceStatuses: string[];
+    attendanceSources: Array<{ value: string; label: string }>;
     arrivalCategories: Array<{ value: string; label: string }>;
 }
 
@@ -79,6 +81,7 @@ interface AttendanceRecord {
     geolocation_status: string;
     face_verification_status: string;
     face_match_score: number | null;
+    attendance_source: string;
     created_at: string;
 }
 
@@ -142,6 +145,8 @@ const statusColors: Record<string, string> = {
     completed: 'bg-green-100 text-green-700',
     late: 'bg-amber-100 text-amber-700',
     early_leave: 'bg-orange-100 text-orange-700',
+    absent: 'bg-red-100 text-red-700',
+    incomplete: 'bg-purple-100 text-purple-700',
 };
 
 export default function StaffAttendanceReportsIndex({ filterOptions, initialFilters }: PageProps) {
@@ -154,6 +159,7 @@ export default function StaffAttendanceReportsIndex({ filterOptions, initialFilt
         faculty_id: 'all',
         department_id: 'all',
         attendance_status: 'all',
+        attendance_source: 'all',
         arrival_category: 'all',
         face_verification_status: 'all',
         geolocation_status: 'all',
@@ -261,6 +267,13 @@ export default function StaffAttendanceReportsIndex({ filterOptions, initialFilt
                 data: trendData.map((item) => item.late),
                 borderColor: 'rgb(245, 158, 11)',
                 backgroundColor: 'rgba(245, 158, 11, 0.2)',
+                tension: 0.3,
+            },
+            {
+                label: 'Absent',
+                data: trendData.map((item) => item.absent ?? 0),
+                borderColor: 'rgb(239, 68, 68)',
+                backgroundColor: 'rgba(239, 68, 68, 0.2)',
                 tension: 0.3,
             },
         ],
@@ -432,6 +445,16 @@ export default function StaffAttendanceReportsIndex({ filterOptions, initialFilt
                                 ))}
                             </select>
                         </FilterField>
+                        <FilterField label="Attendance Source">
+                            <select value={filters.attendance_source} onChange={(e) => setFilters((prev) => ({ ...prev, attendance_source: e.target.value }))} className="filter-input">
+                                <option value="all">All Sources</option>
+                                {filterOptions.attendanceSources?.map((source) => (
+                                    <option key={source.value} value={source.value}>
+                                        {source.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </FilterField>
                         <FilterField label="Arrival Category">
                             <select value={filters.arrival_category} onChange={(e) => setFilters((prev) => ({ ...prev, arrival_category: e.target.value }))} className="filter-input">
                                 <option value="all">All Categories</option>
@@ -530,7 +553,7 @@ export default function StaffAttendanceReportsIndex({ filterOptions, initialFilt
                                 ))}
                             </div>
                             <div className="h-72">
-                                <Line data={attendanceTrendChart} options={chartOptions} />
+                                <Line data={attendanceTrendChart} options={trendChartOptions} />
                             </div>
                         </ChartCard>
                         <ChartCard title="Verification Analytics">
@@ -634,6 +657,7 @@ export default function StaffAttendanceReportsIndex({ filterOptions, initialFilt
                                             ['geolocation_status', 'Geolocation'],
                                             ['face_verification_status', 'Face'],
                                             ['face_match_score', 'Score'],
+                                            ['attendance_source', 'Source'],
                                             ['created_at', 'Created'],
                                         ].map(([key, label]) => (
                                             <th key={key} className="px-4 py-3">
@@ -667,6 +691,7 @@ export default function StaffAttendanceReportsIndex({ filterOptions, initialFilt
                                             <td className="px-4 py-3">{record.geolocation_status}</td>
                                             <td className="px-4 py-3">{record.face_verification_status}</td>
                                             <td className="px-4 py-3">{record.face_match_score ?? '—'}</td>
+                                            <td className="px-4 py-3">{record.attendance_source}</td>
                                             <td className="px-4 py-3">{record.created_at}</td>
                                             <td className="px-4 py-3">
                                                 <Link

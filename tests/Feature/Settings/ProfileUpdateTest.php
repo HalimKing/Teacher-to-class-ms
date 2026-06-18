@@ -83,3 +83,33 @@ test('correct password must be provided to delete account', function () {
 
     expect($user->fresh())->not->toBeNull();
 });
+
+test('staff cannot update their profile', function () {
+    $faculty = \App\Models\Faculty::create(['name' => 'Science Faculty']);
+    $department = \App\Models\Department::create(['name' => 'Math', 'faculty_id' => $faculty->id]);
+
+    $teacher = \App\Models\Teacher::create([
+        'first_name' => 'Jane',
+        'last_name' => 'Doe',
+        'email' => 'jane@example.com',
+        'phone' => '1234567890',
+        'employee_id' => 'STF001',
+        'title' => 'Dr.',
+        'staff_type' => \App\Models\Teacher::STAFF_TYPE_LECTURER,
+        'faculty_id' => $faculty->id,
+        'department_id' => $department->id,
+    ]);
+
+    $this->actingAs($teacher, 'teacher')
+        ->patch('/settings/profile', [
+            'first_name' => 'Changed',
+            'last_name' => 'Name',
+            'email' => 'changed@example.com',
+        ])
+        ->assertForbidden();
+
+    $teacher->refresh();
+
+    expect($teacher->first_name)->toBe('Jane');
+    expect($teacher->email)->toBe('jane@example.com');
+});

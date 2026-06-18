@@ -2,167 +2,135 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\Admin\BulkUserActionRequest;
+use App\Http\Requests\Admin\ResetUserPasswordRequest;
+use App\Http\Requests\Admin\StoreUserRequest;
+use App\Http\Requests\Admin\UpdateUserRequest;
 use App\Models\User;
+use App\Notifications\AdminUserWelcomeNotification;
 use App\Services\ActivityLogService;
+use App\Services\AdminUserManagementService;
+use App\Services\AdminUserPasswordService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
+use Inertia\Response;
+use Maatwebsite\Excel\Facades\Excel;
 use Spatie\Permission\Models\Role;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class UserController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
-     public function index(Request $request)
+    public function __construct(
+        private AdminUserManagementService $userManagementService,
+        private AdminUserPasswordService $userPasswordService,
+    ) {}
+
+    public function index(Request $request): Response
     {
-        // Authorization - check if user can view users
-        // if (!Gate::allows('view-users')) {
-        //     abort(403);
-        // }
+        $this->authorize('viewAny', User::class);
 
-        // Start query
-        $query = User::query()
-        ->with('roles')
-            ->latest()
-            ->select(['id', 'name', 'email', 'staff_id', 'created_at']);
-
-        
-
-        // Apply search filter
-        if ($request->has('search') && $request->search != '') {
-            $search = $request->search;
-            $query->where(function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%")
-                  ->orWhere('staff_id', 'like', "%{$search}%");
-            });
-        }
-
-        // Paginate results
-        $users = $query->paginate(15)
-            ->withQueryString();
-            
-       
-        // dd($users);
-        return Inertia::render('admin/user/index', [
-            'users' => $users,
-            'filters' => $request->only(['search']),
-        ]);
+        return Inertia::render('admin/user/index', $this->userManagementService->getIndexPayload($request));
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
+    public function create(): Response
     {
-        //
+        $this->authorize('create', User::class);
+
         return Inertia::render('admin/user/create', [
-            'roles' => Role::all('name', 'id'),
+            'roles' => Role::query()->orderBy('name')->get(['id', 'name']),
+            'statusOptions' => User::STATUSES,
         ]);
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(Request $request)
+    public function store(StoreUserRequest $request)
     {
-        //
-        // dd($request->all());
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users,email',
-            'staff_id' => 'required|string|max:50|unique:users,staff_id',
-            'roles' => 'required|array',
-            'roles.*' => 'exists:roles,name',
-        ]);
+        $this->authorize('create', User::class);
 
-        // default password
-        $defaultPassword = 'Password123!';
+        $validated = $request->validated();
+        $temporaryPassword = Str::password(16);
 
         $user = User::create([
             'name' => $validated['name'],
             'email' => $validated['email'],
             'staff_id' => $validated['staff_id'],
-            'password' => Hash::make($defaultPassword),
+            'password' => $temporaryPassword,
+            'status' => $validated['status'] ?? User::STATUS_ACTIVE,
+            'must_change_password' => true,
         ]);
 
-       
-        $user->syncRoles($request->roles);
+        $user->syncRoles($validated['roles']);
 
         app(ActivityLogService::class)->logUserManagement(
             'user_created',
             "Created admin user {$user->name} ({$user->email})",
-            ['user_id' => $user->id, 'roles' => $request->roles]
+            ['user_id' => $user->id, 'roles' => $validated['roles']]
         );
 
-        return redirect()->route('admin.user-management.users.index')->with('success', 'User created successfully!');
+        if ($request->boolean('send_welcome_email')) {
+            $user->notify(new AdminUserWelcomeNotification(
+                roles: $validated['roles'],
+                createdByName: $request->user()->name,
+            ));
+        }
+
+        return redirect()
+            ->route('admin.user-management.users.index')
+            ->with([
+                'success' => 'User created successfully. Share the temporary password securely with the user.',
+                'generatedPassword' => $temporaryPassword,
+            ]);
     }
 
-    /**
-     * Display the specified resource.
-     */
-    public function show(string $id)
+    public function edit(User $user): Response
     {
-        //
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(User $user)
-    {
-        //
-        // if (!Gate::allows('update-users')) {
-        //     abort(403);
-        // }
-        // dd($user);
+        $this->authorize('update', $user);
 
         return Inertia::render('admin/user/edit', [
             'user' => $user,
             'userRoles' => $user->roles->pluck('name'),
-            'roles' => Role::all('name', 'id'),
+            'roles' => Role::query()->orderBy('name')->get(['id', 'name']),
+            'statusOptions' => User::STATUSES,
         ]);
-
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, string $id)
+    public function update(UpdateUserRequest $request, User $user)
     {
-        //
-        // dd($request->all());
-        $user = User::findOrFail($id);
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users,email,' . $user->id,
-            'staff_id' => 'required|string|max:50|unique:users,staff_id,' . $user->id,
-            'roles' => 'required|array',
-            'roles.*' => 'exists:roles,name',
+        $this->authorize('update', $user);
+
+        $validated = $request->validated();
+
+        $user->fill([
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'staff_id' => $validated['staff_id'],
+            'status' => $validated['status'] ?? $user->status ?? User::STATUS_ACTIVE,
         ]);
 
-        $user->name = $validated['name'];
-        $user->email = $validated['email'];
-        $user->staff_id = $validated['staff_id'];
-        $user->save();
+        if (($validated['status'] ?? null) === User::STATUS_ACTIVE) {
+            $user->locked_at = null;
+        }
 
-        $user->syncRoles($request->roles);
+        $user->save();
+        $user->syncRoles($validated['roles']);
 
         app(ActivityLogService::class)->logUserManagement(
             'user_updated',
             "Updated admin user {$user->name} ({$user->email})",
-            ['user_id' => $user->id, 'roles' => $request->roles]
+            ['user_id' => $user->id, 'roles' => $validated['roles']]
         );
 
-        return redirect()->route('admin.user-management.users.index')->with('success', 'User updated successfully!');
+        return redirect()
+            ->route('admin.user-management.users.index')
+            ->with('success', 'User updated successfully!');
     }
 
-    /**
-     * Remove the specified resource from storage.
-     */
     public function destroy(User $user)
     {
+        $this->authorize('delete', $user);
+
         $name = $user->name;
         $email = $user->email;
         $userId = $user->id;
@@ -174,7 +142,157 @@ class UserController extends Controller
             ['user_id' => $userId]
         );
 
-        return redirect()->route('admin.user-management.users.index')->with('success', 'User deleted successfully!!!');
+        return redirect()
+            ->route('admin.user-management.users.index')
+            ->with('success', 'User deleted successfully!');
+    }
 
+    public function quickView(User $user): JsonResponse
+    {
+        $this->authorize('view', $user);
+
+        return response()->json([
+            'success' => true,
+            'data' => $this->userManagementService->getQuickView($user),
+        ]);
+    }
+
+    public function resetPassword(ResetUserPasswordRequest $request, User $user): JsonResponse
+    {
+        $this->authorize('resetPassword', $user);
+
+        $result = $this->userPasswordService->reset($request->user(), $user, $request->validated());
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Password reset successfully.',
+            'data' => $result,
+        ]);
+    }
+
+    public function updateStatus(Request $request, User $user): JsonResponse
+    {
+        $this->authorize('update', $user);
+
+        $validated = $request->validate([
+            'status' => ['required', Rule::in(User::STATUSES)],
+        ]);
+
+        $updated = $this->userManagementService->updateStatus($user, $validated['status']);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Account status updated.',
+            'data' => [
+                'id' => $updated->id,
+                'status' => $updated->status,
+            ],
+        ]);
+    }
+
+    public function bulkUpdateStatus(BulkUserActionRequest $request): JsonResponse
+    {
+        $validated = $request->validated();
+
+        if (empty($validated['status'])) {
+            abort(422, 'Status is required for bulk update.');
+        }
+
+        $result = $this->userManagementService->bulkUpdateStatus(
+            $request->user(),
+            $validated['ids'],
+            $validated['status'],
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => "{$result['updated']} user(s) updated.",
+            'data' => $result,
+        ]);
+    }
+
+    public function bulkRequirePasswordChange(BulkUserActionRequest $request): JsonResponse
+    {
+        $result = $this->userManagementService->bulkRequirePasswordChange(
+            $request->user(),
+            $request->validated('ids'),
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => "{$result['updated']} user(s) marked for password change.",
+            'data' => $result,
+        ]);
+    }
+
+    public function bulkDelete(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer', 'exists:users,id'],
+        ]);
+
+        if (!$request->user()?->can('admin.user-management.users.delete')) {
+            abort(403);
+        }
+
+        $result = $this->userManagementService->bulkDelete($request->user(), $validated['ids']);
+
+        return response()->json([
+            'success' => true,
+            'message' => "{$result['deleted']} user(s) deleted.",
+            'data' => $result,
+        ]);
+    }
+
+    public function export(Request $request, string $format = 'csv'): StreamedResponse|\Illuminate\View\View|\Symfony\Component\HttpFoundation\BinaryFileResponse
+    {
+        $this->authorize('export', User::class);
+
+        $format = strtolower($format);
+        $rows = $this->userManagementService->exportRows($request);
+        $fileName = 'admin_users_' . now()->format('Ymd_His');
+
+        if ($format === 'print') {
+            return view('admin.users-print', [
+                'rows' => $rows,
+                'generatedAt' => now()->format('Y-m-d H:i:s'),
+            ]);
+        }
+
+        if ($format === 'pdf') {
+            if (!class_exists(\Barryvdh\DomPDF\Facade\Pdf::class)) {
+                abort(500, 'PDF export requires barryvdh/laravel-dompdf.');
+            }
+
+            $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('admin.users-print', [
+                'rows' => $rows,
+                'generatedAt' => now()->format('Y-m-d H:i:s'),
+            ]);
+
+            return $pdf->download($fileName . '.pdf');
+        }
+
+        if ($format === 'excel') {
+            return Excel::download(new \App\Exports\GenericArrayExport($rows), $fileName . '.xlsx');
+        }
+
+        $headers = [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"{$fileName}.csv\"",
+        ];
+
+        return response()->stream(function () use ($rows) {
+            $handle = fopen('php://output', 'w');
+
+            if (!empty($rows)) {
+                fputcsv($handle, array_keys($rows[0]));
+                foreach ($rows as $row) {
+                    fputcsv($handle, array_values($row));
+                }
+            }
+
+            fclose($handle);
+        }, 200, $headers);
     }
 }

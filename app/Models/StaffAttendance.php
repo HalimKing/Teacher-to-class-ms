@@ -31,6 +31,10 @@ class StaffAttendance extends Model
         'face_verified',
         'face_match_score',
         'face_verified_at',
+        'attendance_source',
+        'auto_generated',
+        'auto_generated_at',
+        'auto_absence_reason',
     ];
 
     protected $casts = [
@@ -40,6 +44,8 @@ class StaffAttendance extends Model
         'face_verified' => 'boolean',
         'face_match_score' => 'float',
         'face_verified_at' => 'datetime',
+        'auto_generated' => 'boolean',
+        'auto_generated_at' => 'datetime',
     ];
 
     public function staff()

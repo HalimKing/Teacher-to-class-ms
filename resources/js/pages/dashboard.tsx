@@ -2,7 +2,6 @@ import ActivityFeed, { type ActivityItem } from '@/components/dashboard/activity
 import InsightsPanel from '@/components/dashboard/insights-panel';
 import { KpiGrid, type KpiCardData } from '@/components/dashboard/kpi-card';
 import QuickActions from '@/components/dashboard/quick-actions';
-import TeachersOverview, { type TeacherOverview } from '@/components/dashboard/teachers-overview';
 import WelcomeHeader from '@/components/dashboard/welcome-header';
 import { chartOptions, ReportChartCard, type ReportAnalytics, type VerificationAnalytics } from '@/components/reports/shared';
 import AppLayout from '@/layouts/app-layout';
@@ -64,7 +63,6 @@ interface DashboardProps {
         absent_today: Array<{ name: string; role: string; department: string }>;
     };
     facultyDistribution: { labels: string[]; data: number[] };
-    teachers: TeacherOverview[];
     initialAttendanceTrend: {
         labels: string[];
         present: number[];
@@ -82,7 +80,6 @@ export default function Dashboard({
     recentActivities,
     insights,
     facultyDistribution,
-    teachers,
     initialAttendanceTrend,
 }: DashboardProps) {
     const [timeFilter, setTimeFilter] = useState('30days');
@@ -326,8 +323,6 @@ export default function Dashboard({
                     <InsightsPanel insights={insights} />
                     <ActivityFeed activities={recentActivities} />
                 </div>
-
-                <TeachersOverview teachers={teachers} />
             </div>
         </AppLayout>
     );

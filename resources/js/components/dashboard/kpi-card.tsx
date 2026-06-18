@@ -11,16 +11,22 @@ export interface KpiCardData {
 }
 
 const groupLabels: Record<string, string> = {
-    users: 'Users',
-    attendance: 'Attendance',
-    verification: 'Verification',
-    system: 'System',
+    overview: 'Teacher Overview',
+    attendance: 'Attendance Metrics',
+    verification: 'Verification Metrics',
+    timetable: 'Timetable Metrics',
+    users: 'Teacher Overview',
+    staff_type: 'Staff Types',
+    system: 'Timetable Metrics',
 };
 
 const accentStyles: Record<string, { icon: string; ring: string }> = {
+    overview: { icon: 'text-blue-600 dark:text-blue-400', ring: 'ring-blue-500/10' },
     users: { icon: 'text-blue-600 dark:text-blue-400', ring: 'ring-blue-500/10' },
+    staff_type: { icon: 'text-indigo-600 dark:text-indigo-400', ring: 'ring-indigo-500/10' },
     attendance: { icon: 'text-emerald-600 dark:text-emerald-400', ring: 'ring-emerald-500/10' },
     verification: { icon: 'text-violet-600 dark:text-violet-400', ring: 'ring-violet-500/10' },
+    timetable: { icon: 'text-amber-600 dark:text-amber-400', ring: 'ring-amber-500/10' },
     system: { icon: 'text-amber-600 dark:text-amber-400', ring: 'ring-amber-500/10' },
 };
 

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin\SchoolManagement;
 
 use App\Http\Controllers\Controller;
+use App\Services\RescheduleNotificationService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use App\Models\RescheduledSession;
@@ -13,6 +14,10 @@ use Illuminate\Validation\ValidationException;
 
 class SchedulesController extends Controller
 {
+    public function __construct(
+        private RescheduleNotificationService $rescheduleNotificationService,
+    ) {}
+
     public function index(Request $request)
     {
         $q = RescheduledSession::with(['timetable.course.program', 'timetable.course.teacher', 'classroom']);
@@ -117,7 +122,7 @@ class SchedulesController extends Controller
                 return redirect()->back()->with('error', $message);
             }
 
-            DB::transaction(function() use ($schedule, $data) {
+            DB::transaction(function () use ($schedule, $data) {
                 // Do NOT modify the main TimeTable. Keep timetable entries unchanged
                 // and record the reschedule approval separately on the RescheduledSession.
                 $schedule->status = 'approved';
@@ -127,7 +132,10 @@ class SchedulesController extends Controller
                 $schedule->save();
             });
 
-            return redirect()->route('admin.school-management.schedules.index')->with('success', 'Reschedule approved. Timetable unchanged.');
+            $schedule->refresh();
+            $this->rescheduleNotificationService->notifyTeacher($schedule, 'approved');
+
+            return redirect()->route('admin.school-management.schedules.index')->with('success', 'Reschedule approved. The lecturer has been notified by email and dashboard alert.');
         } catch (\Throwable $e) {
             \Log::error('Error approving schedule: ' . $e->getMessage(), ['exception' => $e]);
             $message = 'Error approving schedule: ' . $e->getMessage();
@@ -152,7 +160,9 @@ class SchedulesController extends Controller
             $schedule->admin_remarks = $data['admin_remarks'] ?? null;
             $schedule->save();
 
-            return redirect()->route('admin.school-management.schedules.index')->with('success', 'Schedule rejected. Original session remains unchanged.');
+            $this->rescheduleNotificationService->notifyTeacher($schedule, 'rejected');
+
+            return redirect()->route('admin.school-management.schedules.index')->with('success', 'Schedule rejected. The lecturer has been notified by email and dashboard alert.');
         } catch (\Throwable $e) {
             \Log::error('Error rejecting schedule: ' . $e->getMessage(), ['exception' => $e]);
             return redirect()->back()->with('error', 'Error rejecting schedule: ' . $e->getMessage());

@@ -1,56 +1,41 @@
 import AppLayout from '@/layouts/app-layout';
 import FaceCaptureModal from '@/components/face/FaceCaptureModal';
+import { buildFaceVerificationPayload } from '@/lib/teacher-api';
 import { type FaceCaptureResult } from '@/lib/face-recognition';
+import { getBooleanSetting } from '@/lib/system-settings';
 import { type BreadcrumbItem } from '@/types';
 import { Head, usePage } from '@inertiajs/react';
 import { Circle, GoogleMap, LoadScript, Marker } from '@react-google-maps/api';
-import { CalendarCheck, CheckCircle, Loader2, MapPin, RefreshCw, ShieldCheck, UserCheck, XCircle } from 'lucide-react';
+import {
+    CalendarCheck,
+    CheckCircle,
+    Clock,
+    Loader2,
+    LogIn,
+    LogOut,
+    MapPin,
+    ShieldCheck,
+} from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { ToastContainer, toast } from 'react-toastify';
 
 const breadcrumbs: BreadcrumbItem[] = [
-    {
-        title: 'Dashboard',
-        href: '/teacher/dashboard',
-    },
-    {
-        title: 'Staff Attendance',
-        href: '/teacher/staff-attendance',
-    },
+    { title: 'Dashboard', href: '/teacher/dashboard' },
+    { title: 'Staff Attendance', href: '/teacher/staff-attendance' },
 ];
 
-const containerStyle = {
+const mapContainerStyle = {
     width: '100%',
-    height: '360px',
+    height: '280px',
 };
 
-interface StaffMember {
-    name: string;
-    email: string;
-    staff_type: string;
-    faculty?: string | null;
-    department?: string | null;
-}
-
 interface ScheduleTiming {
-    early_checkin_minutes: number;
-    checkout_grace_period_minutes: number;
-    scheduled_start_time?: string | null;
     scheduled_start_time_display?: string | null;
-    allowed_check_in_time?: string | null;
     allowed_check_in_time_display?: string | null;
     can_check_in_now: boolean;
-    minutes_until_check_in_opens?: number | null;
     attendance_opens_message?: string | null;
-    scheduled_end_time?: string | null;
     scheduled_end_time_display?: string | null;
-    checkout_grace_deadline?: string | null;
-    checkout_grace_deadline_display?: string | null;
     can_check_out_now?: boolean;
-    is_within_checkout_grace?: boolean;
-    is_after_checkout_grace?: boolean;
     checkout_opens_message?: string | null;
-    checkout_grace_message?: string | null;
 }
 
 interface StaffSchedule {
@@ -123,30 +108,45 @@ async function requestJson<T>(url: string, options: RequestInit = {}): Promise<T
 
     const payload = await response.json();
     if (!response.ok) {
-        throw new Error(payload.message || 'Request failed. Please try again.');
+        throw new Error(payload.message || 'Something went wrong. Please try again.');
     }
 
     return payload;
 }
 
+function formatTime(time: string) {
+    return new Date(`2000-01-01T${time}`).toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+    });
+}
+
 export default function StaffAttendancePage({
-    staffMember,
-    assignedSchedules = [],
     todaySchedules = [],
-    upcomingSchedules = [],
+    facialRecognitionEnabled: facialRecognitionEnabledProp,
 }: {
-    staffMember: StaffMember;
-    assignedSchedules?: StaffSchedule[];
     todaySchedules?: StaffSchedule[];
-    upcomingSchedules?: StaffSchedule[];
+    facialRecognitionEnabled?: boolean;
 }) {
-    const { system_settings: systemSettings } = usePage().props as any;
+    const { system_settings: systemSettings } = usePage().props as {
+        system_settings?: {
+            attendance?: {
+                gps_enforcement_enabled?: { value?: boolean };
+                facial_recognition_enabled?: { value?: boolean };
+            };
+            map?: {
+                default_campus_lat?: { value?: number };
+                default_campus_lng?: { value?: number };
+            };
+        };
+    };
+
     const [todaySchedulesState, setTodaySchedulesState] = useState<StaffSchedule[]>(todaySchedules);
     const [selectedSchedule, setSelectedSchedule] = useState<StaffSchedule | null>(todaySchedules[0] || null);
     const [userLocation, setUserLocation] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
     const [distance, setDistance] = useState<number | null>(null);
     const [isWithinRange, setIsWithinRange] = useState(false);
-    const [isLoadingLocation, setIsLoadingLocation] = useState(false);
     const [isLoadingApi, setIsLoadingApi] = useState(false);
     const [isLoadingSchedules, setIsLoadingSchedules] = useState(false);
     const [isMapLoaded, setIsMapLoaded] = useState(false);
@@ -154,77 +154,85 @@ export default function StaffAttendancePage({
     const [faceModalOpen, setFaceModalOpen] = useState(false);
     const [pendingAttendanceAction, setPendingAttendanceAction] = useState<'check-in' | 'check-out' | null>(null);
 
-    const gpsEnforcementEnabled = Boolean(systemSettings?.attendance?.gps_enforcement_enabled?.value ?? true);
-    const facialRecognitionEnabled = Boolean(systemSettings?.attendance?.facial_recognition_enabled?.value ?? false);
-    const earlyCheckInMinutes = Number(systemSettings?.attendance?.administrator_early_checkin_minutes?.value ?? 30);
-    const checkoutGracePeriodMinutes = Number(systemSettings?.attendance?.checkout_grace_period_minutes?.value ?? 30);
+    const gpsEnforcementEnabled = getBooleanSetting(systemSettings?.attendance, 'gps_enforcement_enabled', true);
+    const facialRecognitionEnabled =
+        typeof facialRecognitionEnabledProp === 'boolean'
+            ? facialRecognitionEnabledProp
+            : getBooleanSetting(systemSettings?.attendance, 'facial_recognition_enabled');
     const defaultLat = Number(systemSettings?.map?.default_campus_lat?.value ?? import.meta.env.VITE_DEFAULT_CAMPUS_LAT ?? 40.7128);
     const defaultLng = Number(systemSettings?.map?.default_campus_lng?.value ?? import.meta.env.VITE_DEFAULT_CAMPUS_LNG ?? -74.006);
     const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+
     const activeSchedule = useMemo(
         () => todaySchedulesState.find((schedule) => schedule.attendance_status?.status === 'checked_in') || null,
         [todaySchedulesState],
     );
+
     const selectedTiming = selectedSchedule?.timing;
     const canCheckInNow = Boolean(selectedTiming?.can_check_in_now);
-    const checkInBlockedReason = selectedSchedule && !selectedSchedule.is_completed && !activeSchedule && !canCheckInNow
-        ? selectedTiming?.attendance_opens_message || `Attendance opens at ${selectedTiming?.allowed_check_in_time_display || 'your allowed time'}.`
-        : null;
-    const currentArrivalStatus = useMemo(() => {
-        if (!selectedSchedule) {
-            return null;
+    const canCheckOutNow = Boolean(selectedTiming?.can_check_out_now);
+    const todayLabel = new Date().toLocaleDateString(undefined, {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+    });
+
+    const sessionStatus = useMemo(() => {
+        if (activeSchedule) {
+            return {
+                label: 'You are checked in',
+                description: `Started at ${formatTime(activeSchedule.attendance_status?.check_in_time || '')}`,
+                tone: 'active' as const,
+            };
         }
 
-        if (selectedSchedule.attendance_status?.arrival_category === 'early') {
-            return `Checked in ${selectedSchedule.attendance_status.minutes_early ?? 0} minute(s) early`;
+        if (selectedSchedule?.is_completed) {
+            return {
+                label: 'Attendance complete',
+                description: 'You have finished attendance for this shift today.',
+                tone: 'done' as const,
+            };
         }
 
-        if (selectedSchedule.attendance_status?.arrival_category === 'late') {
-            return `Checked in ${selectedSchedule.attendance_status.minutes_late ?? 0} minute(s) late`;
+        if (selectedSchedule && !canCheckInNow) {
+            return {
+                label: 'Not open yet',
+                description:
+                    selectedTiming?.attendance_opens_message ||
+                    `You can check in from ${selectedTiming?.allowed_check_in_time_display || 'your scheduled time'}.`,
+                tone: 'waiting' as const,
+            };
         }
 
-        if (selectedSchedule.attendance_status?.arrival_category === 'on_time') {
-            return 'Checked in on time';
-        }
-
-        if (canCheckInNow && selectedTiming?.scheduled_start_time_display) {
-            const now = new Date();
-            const [hours, minutes] = (selectedTiming.scheduled_start_time || selectedSchedule.start_time).split(':').map(Number);
-            const scheduledStart = new Date(now);
-            scheduledStart.setHours(hours, minutes, 0, 0);
-            const minutesUntilStart = Math.max(0, Math.round((scheduledStart.getTime() - now.getTime()) / 60000));
-
-            if (minutesUntilStart > 0) {
-                return `You are checking in ${minutesUntilStart} minute(s) early`;
-            }
-
-            return 'You can check in now';
-        }
-
-        return checkInBlockedReason;
-    }, [selectedSchedule, canCheckInNow, selectedTiming, checkInBlockedReason]);
+        return {
+            label: 'Ready to check in',
+            description: 'Select your shift below, then tap Check In when you arrive.',
+            tone: 'ready' as const,
+        };
+    }, [activeSchedule, selectedSchedule, canCheckInNow, selectedTiming]);
 
     const canVerifyLocation =
-        selectedSchedule?.coordinates?.lat !== null &&
-        selectedSchedule?.coordinates?.lat !== undefined &&
-        selectedSchedule?.coordinates?.lng !== null &&
-        selectedSchedule?.coordinates?.lng !== undefined &&
+        selectedSchedule?.coordinates?.lat != null &&
+        selectedSchedule?.coordinates?.lng != null &&
         Number(selectedSchedule.radius) > 0;
+
     const selectedScheduleLocation = canVerifyLocation
         ? {
               lat: Number(selectedSchedule?.coordinates.lat),
               lng: Number(selectedSchedule?.coordinates.lng),
           }
         : null;
+
     const mapCenter = userLocation
         ? { lat: userLocation.lat, lng: userLocation.lng }
         : selectedScheduleLocation || { lat: defaultLat, lng: defaultLng };
 
-    const fetchTodaySchedules = async (clearCurrentMessage = true) => {
+    const fetchTodaySchedules = async (clearMessage = true) => {
         setIsLoadingSchedules(true);
-        if (clearCurrentMessage) {
+        if (clearMessage) {
             setMessage(null);
         }
+
         try {
             const response = await requestJson<ApiResponse>('/teacher/staff-attendance/todays-schedules');
             const schedules = response.data || [];
@@ -232,7 +240,10 @@ export default function StaffAttendancePage({
             const checkedIn = schedules.find((schedule) => schedule.attendance_status?.status === 'checked_in');
             setSelectedSchedule(checkedIn || schedules.find((schedule) => !schedule.is_completed) || schedules[0] || null);
         } catch (error) {
-            setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Unable to load today schedules.' });
+            setMessage({
+                type: 'error',
+                text: error instanceof Error ? error.message : 'Unable to load today’s shifts.',
+            });
         } finally {
             setIsLoadingSchedules(false);
         }
@@ -240,13 +251,11 @@ export default function StaffAttendancePage({
 
     const requestCurrentLocation = (): Promise<{ lat: number; lng: number; accuracy: number }> => {
         if (!navigator.geolocation) {
-            const message = 'Geolocation is not supported by your browser.';
-            setMessage({ type: 'error', text: message });
-            return Promise.reject(new Error(message));
+            const errorText = 'Location is not available on this device.';
+            setMessage({ type: 'error', text: errorText });
+            return Promise.reject(new Error(errorText));
         }
 
-        setIsLoadingLocation(true);
-        setMessage(null);
         return new Promise((resolve, reject) => {
             navigator.geolocation.getCurrentPosition(
                 (position) => {
@@ -256,30 +265,20 @@ export default function StaffAttendancePage({
                         accuracy: position.coords.accuracy,
                     };
                     setUserLocation(location);
-                    setIsLoadingLocation(false);
                     resolve(location);
                 },
                 (error) => {
-                    const errorMessage =
+                    const errorText =
                         error.code === error.PERMISSION_DENIED
-                            ? 'Location permission denied. Please enable location access.'
-                            : error.code === error.POSITION_UNAVAILABLE
-                              ? 'Location information unavailable.'
-                              : error.code === error.TIMEOUT
-                                ? 'Location request timed out.'
-                                : 'Unable to retrieve your location.';
+                            ? 'Please allow location access in your browser to mark attendance.'
+                            : 'We could not find your location. Please try again.';
 
-                    setMessage({ type: 'error', text: errorMessage });
-                    setIsLoadingLocation(false);
-                    reject(new Error(errorMessage));
+                    setMessage({ type: 'error', text: errorText });
+                    reject(new Error(errorText));
                 },
                 { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
             );
         });
-    };
-
-    const getCurrentLocation = () => {
-        requestCurrentLocation().catch(() => undefined);
     };
 
     useEffect(() => {
@@ -287,35 +286,14 @@ export default function StaffAttendancePage({
     }, []);
 
     useEffect(() => {
-        const interval = window.setInterval(() => {
-            fetchTodaySchedules(false);
-        }, 60000);
-
+        const interval = window.setInterval(() => fetchTodaySchedules(false), 60000);
         return () => window.clearInterval(interval);
     }, []);
 
     useEffect(() => {
-        if (!message) {
-            return;
-        }
-
-        const options = {
-            position: 'top-right' as const,
-            theme: 'dark' as const,
-            autoClose: 5000,
-        };
-
-        if (message.type === 'success') {
-            toast.success(message.text, options);
-        } else {
-            toast.error(message.text, options);
-        }
-    }, [message?.type, message?.text]);
-
-    useEffect(() => {
         if (!userLocation || !selectedSchedule || !canVerifyLocation) {
             setDistance(null);
-            setIsWithinRange(false);
+            setIsWithinRange(!gpsEnforcementEnabled);
             return;
         }
 
@@ -327,40 +305,18 @@ export default function StaffAttendancePage({
         );
         setDistance(nextDistance);
         setIsWithinRange(nextDistance <= Number(selectedSchedule.radius));
-    }, [userLocation, selectedSchedule, canVerifyLocation]);
-
-    const submitCheckIn = async (checkInData: Record<string, any>) => {
-        const response = await requestJson<ApiResponse>('/teacher/staff-attendance/check-in', {
-            method: 'POST',
-            body: JSON.stringify(checkInData),
-        });
-
-        setMessage({ type: 'success', text: response.message || 'Staff check-in successful.' });
-        await fetchTodaySchedules(false);
-    };
-
-    const submitCheckOut = async (checkOutData: Record<string, any>) => {
-        const response = await requestJson<ApiResponse>('/teacher/staff-attendance/check-out', {
-            method: 'POST',
-            body: JSON.stringify(checkOutData),
-        });
-
-        setMessage({ type: 'success', text: response.message || 'Staff check-out successful.' });
-        await fetchTodaySchedules(false);
-    };
+    }, [userLocation, selectedSchedule, canVerifyLocation, gpsEnforcementEnabled]);
 
     const getVerifiedLocationPayload = async (schedule: StaffSchedule) => {
         const location = await requestCurrentLocation();
         const scheduleCanVerifyLocation =
-            schedule.coordinates?.lat !== null &&
-            schedule.coordinates?.lat !== undefined &&
-            schedule.coordinates?.lng !== null &&
-            schedule.coordinates?.lng !== undefined &&
+            schedule.coordinates?.lat != null &&
+            schedule.coordinates?.lng != null &&
             Number(schedule.radius) > 0;
 
         if (!scheduleCanVerifyLocation) {
             if (gpsEnforcementEnabled) {
-                throw new Error('Cannot continue: no valid class room location is configured for this work period.');
+                throw new Error('This shift does not have a valid work location set up.');
             }
 
             return {
@@ -386,7 +342,7 @@ export default function StaffAttendancePage({
         setIsWithinRange(nextWithinRange);
 
         if (gpsEnforcementEnabled && !nextWithinRange) {
-            throw new Error('Cannot continue: your current location is outside the allowed class room range.');
+            throw new Error('You are too far from your work location. Move closer and try again.');
         }
 
         return {
@@ -400,84 +356,49 @@ export default function StaffAttendancePage({
         };
     };
 
+    const submitCheckIn = async (checkInData: Record<string, unknown>) => {
+        const response = await requestJson<ApiResponse>('/teacher/staff-attendance/check-in', {
+            method: 'POST',
+            body: JSON.stringify(checkInData),
+        });
+
+        setMessage({ type: 'success', text: response.message || 'Check-in recorded successfully.' });
+        await fetchTodaySchedules(false);
+    };
+
+    const submitCheckOut = async (checkOutData: Record<string, unknown>) => {
+        const response = await requestJson<ApiResponse>('/teacher/staff-attendance/check-out', {
+            method: 'POST',
+            body: JSON.stringify(checkOutData),
+        });
+
+        setMessage({ type: 'success', text: response.message || 'Check-out recorded successfully.' });
+        await fetchTodaySchedules(false);
+    };
+
     const handleCheckIn = async () => {
         if (!selectedSchedule) {
-            setMessage({ type: 'error', text: 'Please select a work period first.' });
+            setMessage({ type: 'error', text: 'Please choose a shift first.' });
             return;
         }
 
         setIsLoadingApi(true);
         setMessage(null);
+
         try {
             if (facialRecognitionEnabled) {
                 setPendingAttendanceAction('check-in');
                 setFaceModalOpen(true);
             } else {
                 const locationPayload = await getVerifiedLocationPayload(selectedSchedule);
-                const checkInData = {
-                    timetable_id: selectedSchedule.id,
-                    check_in_time: new Date().toISOString(),
-                    ...locationPayload,
-                };
-                await submitCheckIn(checkInData);
-            }
-        } catch (error) {
-            setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Unable to check in.' });
-        } finally {
-            setIsLoadingApi(false);
-        }
-    };
-
-    const handleFaceVerified = async (result: FaceCaptureResult) => {
-        if (!pendingAttendanceAction || !selectedSchedule) {
-            setMessage({ type: 'error', text: 'No pending staff attendance request found.' });
-            return;
-        }
-
-        setIsLoadingApi(true);
-        setMessage(null);
-        try {
-            const verification = await requestJson<ApiResponse>('/teacher/staff-attendance/verify-face', {
-                method: 'POST',
-                body: JSON.stringify({
-                    timetable_id: selectedSchedule.id,
-                    face_descriptor: result.descriptor,
-                    quality: result.quality,
-                }),
-            });
-
-            if (!verification.success || !verification.verification_token) {
-                throw new Error(verification.message || 'Face verification failed.');
-            }
-
-            const locationPayload = await getVerifiedLocationPayload(selectedSchedule);
-
-            if (pendingAttendanceAction === 'check-in') {
                 await submitCheckIn({
                     timetable_id: selectedSchedule.id,
                     check_in_time: new Date().toISOString(),
                     ...locationPayload,
-                    face_verification_token: verification.verification_token,
-                });
-            } else {
-                if (!activeSchedule?.attendance_status?.id) {
-                    throw new Error('No active staff check-in found.');
-                }
-
-                await submitCheckOut({
-                    attendance_id: activeSchedule.attendance_status.id,
-                    check_out_time: new Date().toISOString(),
-                    ...locationPayload,
-                    face_verification_token: verification.verification_token,
                 });
             }
-
-            setPendingAttendanceAction(null);
-            setFaceModalOpen(false);
         } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Face verification failed. Please try again.';
-            setMessage({ type: 'error', text: errorMessage });
-            throw new Error(errorMessage);
+            setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Check-in failed.' });
         } finally {
             setIsLoadingApi(false);
         }
@@ -485,18 +406,17 @@ export default function StaffAttendancePage({
 
     const handleCheckOut = async () => {
         if (!activeSchedule?.attendance_status?.id) {
-            setMessage({ type: 'error', text: 'No active staff check-in found.' });
+            setMessage({ type: 'error', text: 'You are not checked in yet.' });
             return;
         }
 
         if (selectedSchedule?.id !== activeSchedule.id) {
             setSelectedSchedule(activeSchedule);
-            setMessage({ type: 'error', text: 'Please keep the active checked-in schedule selected before checking out.' });
-            return;
         }
 
         setIsLoadingApi(true);
         setMessage(null);
+
         try {
             if (facialRecognitionEnabled) {
                 setPendingAttendanceAction('check-out');
@@ -510,340 +430,369 @@ export default function StaffAttendancePage({
                 });
             }
         } catch (error) {
-            setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Unable to check out.' });
+            setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Check-out failed.' });
         } finally {
             setIsLoadingApi(false);
         }
     };
 
+    const handleFaceVerified = async (result: FaceCaptureResult) => {
+        if (!pendingAttendanceAction || !selectedSchedule) {
+            setMessage({ type: 'error', text: 'Please try again.' });
+            return;
+        }
+
+        setIsLoadingApi(true);
+        setMessage(null);
+
+        try {
+            const verification = await requestJson<ApiResponse>('/teacher/staff-attendance/verify-face', {
+                method: 'POST',
+                body: JSON.stringify(
+                    buildFaceVerificationPayload(selectedSchedule.id, result.descriptor, result.quality),
+                ),
+            });
+
+            if (!verification.success || !verification.verification_token) {
+                throw new Error(verification.message || 'Face verification failed.');
+            }
+
+            const scheduleForAction = pendingAttendanceAction === 'check-out' && activeSchedule ? activeSchedule : selectedSchedule;
+            const locationPayload = await getVerifiedLocationPayload(scheduleForAction);
+            const facePayload = {
+                face_descriptor: result.descriptor,
+                face_verification_token: verification.verification_token,
+            };
+
+            if (pendingAttendanceAction === 'check-in') {
+                await submitCheckIn({
+                    timetable_id: selectedSchedule.id,
+                    check_in_time: new Date().toISOString(),
+                    ...locationPayload,
+                    ...facePayload,
+                });
+            } else {
+                if (!activeSchedule?.attendance_status?.id) {
+                    throw new Error('You are not checked in yet.');
+                }
+
+                await submitCheckOut({
+                    attendance_id: activeSchedule.attendance_status.id,
+                    check_out_time: new Date().toISOString(),
+                    ...locationPayload,
+                    ...facePayload,
+                });
+            }
+
+            setPendingAttendanceAction(null);
+            setFaceModalOpen(false);
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Face verification failed.';
+            setMessage({ type: 'error', text: errorMessage });
+            throw new Error(errorMessage);
+        } finally {
+            setIsLoadingApi(false);
+        }
+    };
+
+    const showCheckIn =
+        !activeSchedule && selectedSchedule && !selectedSchedule.is_completed && canCheckInNow;
+    const showCheckOut = !!activeSchedule && canCheckOutNow;
+    const showWaitingForCheckout = !!activeSchedule && !canCheckOutNow;
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Staff Attendance" />
 
-            <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto rounded-xl p-4 md:p-6">
-                <div className="rounded-2xl border border-sidebar-border/70 bg-white p-6 shadow-sm dark:border-sidebar-border dark:bg-sidebar-accent">
-                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                        <div>
-                            <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-purple-50 px-3 py-1 text-sm font-medium text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
-                                <ShieldCheck className="h-4 w-4" />
-                                Administrative Staff
-                            </div>
-                            <h1 className="text-2xl font-bold text-sidebar-foreground dark:text-sidebar-foreground">Staff Attendance</h1>
-                            <p className="mt-2 max-w-2xl text-sm text-sidebar-foreground/70 dark:text-sidebar-foreground/70">
-                                This area is reserved for administrator staff attendance. Lecturer class attendance features are hidden for your staff type.
-                            </p>
-                        </div>
-                        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
-                            <UserCheck className="h-7 w-7" />
-                        </div>
+            <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 p-4 md:p-6">
+                <header className="space-y-2">
+                    <div className="inline-flex items-center gap-2 rounded-full bg-violet-100 px-3 py-1 text-sm font-medium text-violet-800 dark:bg-violet-900/30 dark:text-violet-200">
+                        <ShieldCheck className="size-4" />
+                        Staff Attendance
                     </div>
-                </div>
+                    <h1 className="text-2xl font-bold tracking-tight text-sidebar-foreground md:text-3xl">
+                        Mark your attendance
+                    </h1>
+                    <p className="text-sm text-sidebar-foreground/70">{todayLabel}</p>
+                </header>
 
                 {message && (
                     <div
-                        className={`rounded-xl border p-4 text-sm ${
+                        role="alert"
+                        className={`rounded-xl border px-4 py-3 text-sm ${
                             message.type === 'success'
-                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                                : 'border-red-200 bg-red-50 text-red-700'
+                                ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                                : 'border-red-200 bg-red-50 text-red-800'
                         }`}
                     >
                         {message.text}
                     </div>
                 )}
 
-                <div className="grid gap-6 lg:grid-cols-3">
-                    <div className="rounded-xl border border-sidebar-border/70 bg-white p-5 shadow-sm dark:border-sidebar-border dark:bg-sidebar-accent lg:col-span-2">
-                        <h2 className="mb-4 text-lg font-semibold text-sidebar-foreground dark:text-sidebar-foreground">Staff Profile</h2>
-                        <div className="grid gap-4 sm:grid-cols-2">
-                            <InfoItem label="Name" value={staffMember.name} />
-                            <InfoItem label="Email" value={staffMember.email} />
-                            <InfoItem label="Staff Type" value={formatStaffType(staffMember.staff_type)} />
-                            <InfoItem label="Faculty" value={staffMember.faculty || 'Not assigned'} />
-                            <InfoItem label="Department" value={staffMember.department || 'Not assigned'} />
-                        </div>
-                    </div>
-
-                    <div className="rounded-xl border border-sidebar-border/70 bg-white p-5 shadow-sm dark:border-sidebar-border dark:bg-sidebar-accent">
-                        <div className="mb-4 flex items-center gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
-                                <CalendarCheck className="h-5 w-5" />
-                            </div>
-                            <div>
-                                <h2 className="font-semibold text-sidebar-foreground dark:text-sidebar-foreground">Today</h2>
-                                <p className="text-sm text-sidebar-foreground/60 dark:text-sidebar-foreground/60">{todaySchedulesState.length} work period(s)</p>
-                            </div>
-                        </div>
-                        <ScheduleList
-                            schedules={todaySchedulesState}
-                            emptyText={isLoadingSchedules ? 'Loading today schedules...' : 'No work periods scheduled for today.'}
-                            selectedScheduleId={selectedSchedule?.id}
-                            onSelect={setSelectedSchedule}
-                        />
-                    </div>
-                </div>
-
-                <div className="rounded-xl border border-sidebar-border/70 bg-white p-5 shadow-sm dark:border-sidebar-border dark:bg-sidebar-accent">
-                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                        <div>
-                            <h2 className="text-lg font-semibold text-sidebar-foreground dark:text-sidebar-foreground">Mark Staff Attendance</h2>
-                            <p className="mt-1 text-sm text-sidebar-foreground/60 dark:text-sidebar-foreground/60">
-                                Uses your current GPS location and the selected schedule&apos;s assigned class room geofence.
-                            </p>
-                        </div>
-                        <button
-                            type="button"
-                            onClick={getCurrentLocation}
-                            disabled={isLoadingLocation || facialRecognitionEnabled}
-                            className="inline-flex items-center justify-center rounded-lg border border-sidebar-border px-4 py-2 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent disabled:opacity-60"
-                        >
-                            {isLoadingLocation ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                            {facialRecognitionEnabled ? 'Location Captured After Face Verification' : 'Refresh Location'}
-                        </button>
-                    </div>
-
-                    <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                        <LocationStatus
-                            label="Scheduled Start Time"
-                            value={selectedTiming?.scheduled_start_time_display || (selectedSchedule ? formatTime(selectedSchedule.start_time) : 'None')}
-                        />
-                        <LocationStatus
-                            label="Allowed Check-In Time"
-                            value={selectedTiming?.allowed_check_in_time_display || 'Not available'}
-                        />
-                        <LocationStatus label="Early Check-In Window" value={`${earlyCheckInMinutes} minute(s) before start`} />
-                        <LocationStatus
-                            label="Scheduled End Time"
-                            value={selectedTiming?.scheduled_end_time_display || (selectedSchedule ? formatTime(selectedSchedule.end_time) : 'None')}
-                        />
-                        <LocationStatus
-                            label="Check-Out Grace Period"
-                            value={`${checkoutGracePeriodMinutes} minute(s) after end`}
-                        />
-                        <LocationStatus
-                            label="Grace Deadline"
-                            value={selectedTiming?.checkout_grace_deadline_display || 'Not available'}
-                        />
-                        <LocationStatus
-                            label="Attendance Status"
-                            value={currentArrivalStatus || 'Select a work period'}
-                            ok={canCheckInNow || !!selectedSchedule?.attendance_status}
-                        />
-                    </div>
-
-                    {selectedTiming?.checkout_grace_message && activeSchedule && (
-                        <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
-                            {selectedTiming.checkout_grace_message}
-                        </div>
-                    )}
-
-                    {checkInBlockedReason && (
-                        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                            {checkInBlockedReason}
-                            {selectedTiming?.scheduled_start_time_display && (
-                                <span className="block mt-1">
-                                    Your shift starts at {selectedTiming.scheduled_start_time_display}.
-                                </span>
+                <section
+                    className={`rounded-2xl border p-5 shadow-sm ${
+                        sessionStatus.tone === 'active'
+                            ? 'border-blue-200 bg-blue-50 dark:border-blue-900/40 dark:bg-blue-950/20'
+                            : sessionStatus.tone === 'done'
+                              ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/40 dark:bg-emerald-950/20'
+                              : sessionStatus.tone === 'waiting'
+                                ? 'border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/20'
+                                : 'border-sidebar-border/70 bg-white dark:border-sidebar-border dark:bg-sidebar-accent'
+                    }`}
+                >
+                    <div className="flex items-start gap-3">
+                        <div className="rounded-xl bg-white/80 p-2.5 shadow-sm dark:bg-sidebar-accent">
+                            {sessionStatus.tone === 'done' ? (
+                                <CheckCircle className="size-6 text-emerald-600" />
+                            ) : sessionStatus.tone === 'active' ? (
+                                <LogIn className="size-6 text-blue-600" />
+                            ) : (
+                                <Clock className="size-6 text-violet-600" />
                             )}
                         </div>
-                    )}
+                        <div>
+                            <h2 className="text-lg font-semibold text-sidebar-foreground">{sessionStatus.label}</h2>
+                            <p className="mt-1 text-sm text-sidebar-foreground/70">{sessionStatus.description}</p>
+                        </div>
+                    </div>
+                </section>
 
-                    <div className="mt-5 grid gap-4 md:grid-cols-3">
-                        <LocationStatus label="Selected Schedule" value={selectedSchedule ? `${selectedSchedule.classroom || 'Class room'} (${formatTime(selectedSchedule.start_time)} - ${formatTime(selectedSchedule.end_time)})` : 'None'} />
-                        <LocationStatus label="Distance" value={distance === null ? 'Unknown' : `${Math.round(distance)}m from class room`} />
-                        <LocationStatus
-                            label="GPS Status"
-                            value={!gpsEnforcementEnabled ? 'GPS enforcement disabled' : isWithinRange ? 'Within allowed range' : 'Outside allowed range'}
-                            ok={!gpsEnforcementEnabled || isWithinRange}
-                        />
+                <section className="rounded-2xl border border-sidebar-border/70 bg-white p-5 shadow-sm dark:border-sidebar-border dark:bg-sidebar-accent">
+                    <div className="mb-4 flex items-center gap-2">
+                        <CalendarCheck className="size-5 text-violet-600" />
+                        <h2 className="text-lg font-semibold text-sidebar-foreground">Today&apos;s shift</h2>
                     </div>
 
-                    <div className="mt-5 flex flex-wrap gap-3">
+                    {isLoadingSchedules ? (
+                        <div className="flex items-center gap-2 py-8 text-sm text-sidebar-foreground/60">
+                            <Loader2 className="size-4 animate-spin" />
+                            Loading today&apos;s shift...
+                        </div>
+                    ) : todaySchedulesState.length === 0 ? (
+                        <p className="rounded-xl border border-dashed border-sidebar-border/70 px-4 py-8 text-center text-sm text-sidebar-foreground/60">
+                            No shift is scheduled for you today.
+                        </p>
+                    ) : todaySchedulesState.length === 1 ? (
+                        <ShiftCard schedule={todaySchedulesState[0]} selected isCheckedIn={activeSchedule?.id === todaySchedulesState[0].id} />
+                    ) : (
+                        <div className="space-y-3">
+                            <p className="text-sm text-sidebar-foreground/60">Tap the shift you are working now.</p>
+                            {todaySchedulesState.map((schedule) => (
+                                <button
+                                    key={schedule.id}
+                                    type="button"
+                                    onClick={() => setSelectedSchedule(schedule)}
+                                    disabled={!!activeSchedule && activeSchedule.id !== schedule.id}
+                                    className="w-full text-left disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                    <ShiftCard
+                                        schedule={schedule}
+                                        selected={selectedSchedule?.id === schedule.id}
+                                        isCheckedIn={activeSchedule?.id === schedule.id}
+                                    />
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </section>
+
+                {selectedSchedule && (
+                    <section className="rounded-2xl border border-sidebar-border/70 bg-white p-5 shadow-sm dark:border-sidebar-border dark:bg-sidebar-accent">
+                        <h2 className="mb-4 text-lg font-semibold text-sidebar-foreground">Shift details</h2>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            <DetailItem
+                                icon={Clock}
+                                label="Work hours"
+                                value={`${formatTime(selectedSchedule.start_time)} – ${formatTime(selectedSchedule.end_time)}`}
+                            />
+                            <DetailItem
+                                icon={MapPin}
+                                label="Work location"
+                                value={selectedSchedule.classroom || 'Not assigned'}
+                            />
+                            {gpsEnforcementEnabled && canVerifyLocation && (
+                                <DetailItem
+                                    icon={MapPin}
+                                    label="Your location"
+                                    value={
+                                        distance === null
+                                            ? 'Checked when you tap Check In or Check Out'
+                                            : isWithinRange
+                                              ? `You are at the work location (${Math.round(distance)}m away)`
+                                              : `You are too far away (${Math.round(distance)}m)`
+                                    }
+                                    highlight={distance !== null ? isWithinRange : undefined}
+                                />
+                            )}
+                        </div>
+                    </section>
+                )}
+
+                <section className="space-y-3">
+                    {showCheckIn && (
                         <button
                             type="button"
                             onClick={handleCheckIn}
-                            disabled={isLoadingApi || !!activeSchedule || !selectedSchedule || selectedSchedule.is_completed || !canCheckInNow}
-                            className="inline-flex items-center rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={isLoadingApi}
+                            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-6 py-4 text-base font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                            {isLoadingApi ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
-                            {canCheckInNow ? 'Check In' : 'Check-In Not Open'}
+                            {isLoadingApi ? <Loader2 className="size-5 animate-spin" /> : <LogIn className="size-5" />}
+                            Check In
                         </button>
+                    )}
+
+                    {showWaitingForCheckout && (
+                        <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-4 text-center text-sm text-blue-800 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-200">
+                            {selectedTiming?.checkout_opens_message ||
+                                `Check-out opens at ${selectedTiming?.scheduled_end_time_display || formatTime(selectedSchedule?.end_time || '')}.`}
+                        </div>
+                    )}
+
+                    {showCheckOut && (
                         <button
                             type="button"
                             onClick={handleCheckOut}
-                            disabled={isLoadingApi || !activeSchedule}
-                            className="inline-flex items-center rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={isLoadingApi}
+                            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-violet-600 px-6 py-4 text-base font-semibold text-white transition-colors hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                            {isLoadingApi ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <XCircle className="mr-2 h-4 w-4" />}
+                            {isLoadingApi ? <Loader2 className="size-5 animate-spin" /> : <LogOut className="size-5" />}
                             Check Out
                         </button>
-                    </div>
+                    )}
 
-                    <div className="mt-6 overflow-hidden rounded-xl border border-sidebar-border/70">
-                        {apiKey ? (
-                            <LoadScript googleMapsApiKey={apiKey}>
-                                <GoogleMap
-                                    mapContainerStyle={containerStyle}
-                                    center={mapCenter}
-                                    zoom={17}
-                                    onLoad={() => setIsMapLoaded(true)}
-                                    options={{
-                                        streetViewControl: false,
-                                        mapTypeControl: false,
-                                        fullscreenControl: true,
-                                    }}
-                                >
-                                    {isMapLoaded && selectedScheduleLocation && (
-                                        <>
-                                            <Marker
-                                                position={selectedScheduleLocation}
-                                                title={selectedSchedule?.classroom || 'Selected class room'}
-                                            />
-                                            <Circle
-                                                center={selectedScheduleLocation}
-                                                radius={Number(selectedSchedule?.radius || 0)}
-                                                options={{
-                                                    fillColor: isWithinRange ? '#10b981' : '#ef4444',
-                                                    fillOpacity: 0.15,
-                                                    strokeColor: isWithinRange ? '#10b981' : '#ef4444',
-                                                    strokeOpacity: 0.8,
-                                                    strokeWeight: 2,
-                                                }}
-                                            />
-                                        </>
-                                    )}
-                                    {isMapLoaded && userLocation && (
-                                        <Marker
-                                            position={{ lat: userLocation.lat, lng: userLocation.lng }}
-                                            title="Your current location"
-                                            icon={createUserLocationIcon()}
+                    {selectedSchedule?.is_completed && !activeSchedule && (
+                        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-center text-sm font-medium text-emerald-800">
+                            Attendance for this shift is complete. Have a great day.
+                        </div>
+                    )}
+                </section>
+
+                {selectedSchedule && apiKey && (
+                    <section className="overflow-hidden rounded-2xl border border-sidebar-border/70 bg-white shadow-sm dark:border-sidebar-border dark:bg-sidebar-accent">
+                        <div className="border-b border-sidebar-border/50 px-4 py-3">
+                            <p className="text-sm font-medium text-sidebar-foreground">Location map</p>
+                            <p className="text-xs text-sidebar-foreground/60">Blue dot = you · Pin = work location</p>
+                        </div>
+                        <LoadScript googleMapsApiKey={apiKey}>
+                            <GoogleMap
+                                mapContainerStyle={mapContainerStyle}
+                                center={mapCenter}
+                                zoom={17}
+                                onLoad={() => setIsMapLoaded(true)}
+                                options={{
+                                    streetViewControl: false,
+                                    mapTypeControl: false,
+                                    fullscreenControl: true,
+                                }}
+                            >
+                                {isMapLoaded && selectedScheduleLocation && (
+                                    <>
+                                        <Marker position={selectedScheduleLocation} title={selectedSchedule.classroom || 'Work location'} />
+                                        <Circle
+                                            center={selectedScheduleLocation}
+                                            radius={Number(selectedSchedule.radius || 0)}
+                                            options={{
+                                                fillColor: isWithinRange ? '#10b981' : '#ef4444',
+                                                fillOpacity: 0.15,
+                                                strokeColor: isWithinRange ? '#10b981' : '#ef4444',
+                                                strokeOpacity: 0.8,
+                                                strokeWeight: 2,
+                                            }}
                                         />
-                                    )}
-                                </GoogleMap>
-                            </LoadScript>
-                        ) : (
-                            <div className="flex h-[360px] items-center justify-center bg-slate-50 p-6 text-center text-sm text-sidebar-foreground/60">
-                                Google Maps API key is not configured. Location verification still works, but the map cannot be displayed.
-                            </div>
-                        )}
-                    </div>
-                </div>
+                                    </>
+                                )}
+                                {isMapLoaded && userLocation && (
+                                    <Marker
+                                        position={{ lat: userLocation.lat, lng: userLocation.lng }}
+                                        title="Your location"
+                                        icon={createUserLocationIcon()}
+                                    />
+                                )}
+                            </GoogleMap>
+                        </LoadScript>
+                    </section>
+                )}
 
-                <div className="grid gap-6 lg:grid-cols-2">
-                    <SchedulePanel title="Upcoming Schedules" schedules={upcomingSchedules} emptyText="No upcoming work periods." />
-                    <SchedulePanel title="All Assigned Work Schedules" schedules={assignedSchedules} emptyText="No work schedules have been assigned." />
-                </div>
+                <p className="text-center text-xs text-sidebar-foreground/50">
+                    Your location is checked automatically when you check in or check out.
+                    {facialRecognitionEnabled ? ' Face verification may also be required.' : ''}
+                </p>
             </div>
+
             <FaceCaptureModal
                 open={faceModalOpen}
                 onOpenChange={setFaceModalOpen}
-                title="Facial Verification Required"
-                description="Geolocation passed. Please verify your identity with a live face capture before staff attendance is submitted."
-                captureLabel="Verify Face"
+                title="Verify your face"
+                description="Look at the camera to confirm it is you before attendance is saved."
+                captureLabel="Verify and continue"
                 onCapture={handleFaceVerified}
             />
-            <ToastContainer />
         </AppLayout>
     );
 }
 
-function LocationStatus({ label, value, ok }: { label: string; value: string; ok?: boolean }) {
-    return (
-        <div className="rounded-lg border border-sidebar-border/60 p-3 dark:border-sidebar-border">
-            <p className="text-xs font-semibold uppercase tracking-wide text-sidebar-foreground/50 dark:text-sidebar-foreground/50">{label}</p>
-            <p className={`mt-1 flex items-center gap-2 font-medium ${ok === false ? 'text-red-600' : ok === true ? 'text-emerald-600' : 'text-sidebar-foreground dark:text-sidebar-foreground'}`}>
-                {label === 'GPS Status' && <MapPin className="h-4 w-4" />}
-                {value}
-            </p>
-        </div>
-    );
-}
-
-function InfoItem({ label, value }: { label: string; value: string }) {
-    return (
-        <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-sidebar-foreground/50 dark:text-sidebar-foreground/50">{label}</p>
-            <p className="mt-1 font-medium text-sidebar-foreground dark:text-sidebar-foreground">{value}</p>
-        </div>
-    );
-}
-
-function formatStaffType(staffType: string) {
-    return staffType
-        .replace('_', ' ')
-        .split(' ')
-        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(' ');
-}
-
-function SchedulePanel({ title, schedules, emptyText }: { title: string; schedules: StaffSchedule[]; emptyText: string }) {
-    return (
-        <div className="rounded-xl border border-sidebar-border/70 bg-white p-5 shadow-sm dark:border-sidebar-border dark:bg-sidebar-accent">
-            <h2 className="mb-4 text-lg font-semibold text-sidebar-foreground dark:text-sidebar-foreground">{title}</h2>
-            <ScheduleList schedules={schedules} emptyText={emptyText} />
-        </div>
-    );
-}
-
-function ScheduleList({
-    schedules,
-    emptyText,
-    selectedScheduleId,
-    onSelect,
+function ShiftCard({
+    schedule,
+    selected,
+    isCheckedIn,
 }: {
-    schedules: StaffSchedule[];
-    emptyText: string;
-    selectedScheduleId?: number;
-    onSelect?: (schedule: StaffSchedule) => void;
+    schedule: StaffSchedule;
+    selected?: boolean;
+    isCheckedIn?: boolean;
 }) {
-    if (schedules.length === 0) {
-        return <p className="text-sm text-sidebar-foreground/60 dark:text-sidebar-foreground/60">{emptyText}</p>;
-    }
-
     return (
-        <div className="space-y-3">
-            {schedules.map((schedule) => (
-                <button
-                    type="button"
-                    key={schedule.id}
-                    onClick={() => onSelect?.(schedule)}
-                    className={`w-full rounded-lg border p-3 text-left transition-colors dark:border-sidebar-border ${
-                        selectedScheduleId === schedule.id
-                            ? 'border-purple-300 bg-purple-50 dark:bg-purple-900/20'
-                            : 'border-sidebar-border/60 hover:bg-sidebar-accent/40'
-                    }`}
-                >
-                    <div className="flex items-center justify-between gap-3">
-                        <div>
-                            <p className="font-medium text-sidebar-foreground dark:text-sidebar-foreground">{schedule.day}</p>
-                            <p className="text-sm text-sidebar-foreground/60 dark:text-sidebar-foreground/60">{schedule.classroom || 'No class room assigned'}</p>
-                            {schedule.attendance_status && (
-                                <p className="mt-1 text-xs font-medium text-emerald-600">
-                                    In: {formatTime(schedule.attendance_status.check_in_time)} • Out:{' '}
-                                    {schedule.attendance_status.check_out_time ? formatTime(schedule.attendance_status.check_out_time) : '--'}
-                                    {schedule.attendance_status.arrival_category === 'early' && schedule.attendance_status.minutes_early
-                                        ? ` • ${schedule.attendance_status.minutes_early}m early`
-                                        : ''}
-                                </p>
-                            )}
-                            {!schedule.attendance_status && schedule.timing?.attendance_opens_message && (
-                                <p className="mt-1 text-xs text-amber-600">{schedule.timing.attendance_opens_message}</p>
-                            )}
-                        </div>
-                        <div className="text-right text-sm font-medium text-sidebar-foreground/80 dark:text-sidebar-foreground/80">
-                            {formatTime(schedule.start_time)} - {formatTime(schedule.end_time)}
-                            {schedule.is_completed && <p className="text-xs text-emerald-600">Completed</p>}
-                        </div>
-                    </div>
-                </button>
-            ))}
+        <div
+            className={`rounded-xl border p-4 transition-colors ${
+                selected
+                    ? 'border-violet-400 bg-violet-50 ring-1 ring-violet-400 dark:border-violet-700 dark:bg-violet-950/20'
+                    : 'border-sidebar-border/70 bg-slate-50 dark:border-sidebar-border dark:bg-sidebar-accent/50'
+            }`}
+        >
+            <div className="flex items-start justify-between gap-3">
+                <div>
+                    <p className="font-semibold text-sidebar-foreground">{schedule.classroom || 'Work location not set'}</p>
+                    <p className="mt-1 text-sm text-sidebar-foreground/70">
+                        {formatTime(schedule.start_time)} – {formatTime(schedule.end_time)}
+                    </p>
+                </div>
+                {isCheckedIn ? (
+                    <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">Checked in</span>
+                ) : schedule.is_completed ? (
+                    <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">Done</span>
+                ) : selected ? (
+                    <span className="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-semibold text-violet-700">Selected</span>
+                ) : null}
+            </div>
         </div>
     );
 }
 
-function formatTime(time: string) {
-    return new Date(`2000-01-01T${time}`).toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-    });
+function DetailItem({
+    icon: Icon,
+    label,
+    value,
+    highlight,
+}: {
+    icon: typeof Clock;
+    label: string;
+    value: string;
+    highlight?: boolean;
+}) {
+    return (
+        <div className="rounded-xl border border-sidebar-border/50 bg-slate-50 p-4 dark:border-sidebar-border dark:bg-sidebar-accent/40">
+            <div className="flex items-start gap-3">
+                <Icon className={`mt-0.5 size-4 shrink-0 ${highlight === true ? 'text-emerald-600' : highlight === false ? 'text-red-600' : 'text-sidebar-foreground/50'}`} />
+                <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-sidebar-foreground/50">{label}</p>
+                    <p
+                        className={`mt-1 text-sm font-medium ${
+                            highlight === true ? 'text-emerald-700' : highlight === false ? 'text-red-700' : 'text-sidebar-foreground'
+                        }`}
+                    >
+                        {value}
+                    </p>
+                </div>
+            </div>
+        </div>
+    );
 }

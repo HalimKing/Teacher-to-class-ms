@@ -1,416 +1,488 @@
+import { ReportAnalyticsSection } from '@/components/reports/ReportAnalyticsSection';
+import { ReportAttendanceTable } from '@/components/reports/ReportAttendanceTable';
+import { ReportExportButtons } from '@/components/reports/ReportExportButtons';
+import { ReportInsightsPanel, type ReportInsight } from '@/components/reports/ReportInsightsPanel';
+import { ReportErrorState, ReportLoadingState } from '@/components/reports/ReportStates';
+import { ReportKpiSection } from '@/components/reports/ReportSummaryCards';
+import { SessionDetailDrawer } from '@/components/reports/SessionDetailDrawer';
+import {
+    PaginatedRecords,
+    ReportAnalytics,
+    ReportFilterField,
+    StatusBadge,
+    SummaryCard,
+    TableColumn,
+    filterInputClass,
+    reportStyles,
+} from '@/components/reports/shared';
 import AppLayout from '@/layouts/app-layout';
-import { SharedData, type BreadcrumbItem } from '@/types';
-import { Head, usePage } from '@inertiajs/react';
-import { AlertTriangle, Calendar, ChevronDown, Loader2, TrendingDown, TrendingUp, Users } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { type BreadcrumbItem } from '@/types';
+import { Head } from '@inertiajs/react';
+import { ArcElement, BarElement, CategoryScale, Chart as ChartJS, Legend, LinearScale, LineElement, PointElement, Title, Tooltip } from 'chart.js';
+import { ChevronDown, ChevronUp, Search } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Title, Tooltip, Legend);
 
 const breadcrumbs: BreadcrumbItem[] = [
-    {
-        title: 'Dashboard',
-        href: '/dashboard',
-    },
-    {
-        title: 'Reports',
-        href: '/reports',
-    },
+    { title: 'Dashboard', href: '/teacher/dashboard' },
+    { title: 'Attendance Analytics', href: '/teacher/reports' },
 ];
 
-interface ReportData {
-    summaryMetrics: any[];
-    attendanceRatePerClass: any[];
-    classPerformanceSummary: any[];
-    heatmapData: any[][];
-    courses: any[];
-    dateRange: string;
+interface AttendanceRecord {
+    id: number;
+    course: string;
+    classroom?: string | null;
+    course_class: string;
+    date: string;
+    check_in_time: string | null;
+    check_out_time: string | null;
+    working_hours: string | null;
+    attendance_status: string;
+    arrival_category?: string | null;
+    arrival_category_label?: string;
+    minutes_early?: number | null;
+    minutes_late?: number | null;
+    geolocation_status: string;
+    face_verification_status: string;
+    face_match_score: number | null;
+    attendance_source: string;
+    reschedule_status?: string;
+    is_rescheduled?: boolean;
+    reschedule?: {
+        original_date_display?: string;
+        original_start_time_display?: string;
+        original_end_time_display?: string;
+        original_venue?: string | null;
+        new_date_display?: string;
+        new_start_time_display?: string;
+        new_end_time_display?: string;
+        new_venue?: string | null;
+        summary?: string;
+    } | null;
 }
 
-const getHeatmapColor = (intensity: number, isHoliday: boolean) => {
-    if (isHoliday) return 'bg-red-200 dark:bg-red-900/30';
+interface FilterOptions {
+    courses: Array<{ id: number; name: string; code: string }>;
+    attendanceStatuses: string[];
+    arrivalCategories: Array<{ value: string; label: string }>;
+    sessionTypes: Array<{ value: string; label: string }>;
+    daysOfWeek: string[];
+}
 
-    const colors = [
-        'bg-blue-100 dark:bg-blue-900/20',
-        'bg-blue-200 dark:bg-blue-800/40',
-        'bg-blue-400 dark:bg-blue-700/60',
-        'bg-blue-500 dark:bg-blue-600/80',
-        'bg-blue-600 dark:bg-blue-500',
-    ];
-    return colors[intensity] || colors[0];
-};
+interface PageProps {
+    filterOptions: FilterOptions;
+    initialFilters: { start_date: string; end_date: string };
+    teacher: { name: string; employee_id: string };
+}
 
-export default function ReportsPage() {
-    const [dateRange, setDateRange] = useState('');
-    const [selectedCourse, setSelectedCourse] = useState('all');
-    const [reportData, setReportData] = useState<ReportData | null>(null);
-    const [courses, setCourses] = useState<any[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
+const defaultVisibleColumns = [
+    'date',
+    'course',
+    'classroom',
+    'check_in_time',
+    'check_out_time',
+    'working_hours',
+    'attendance_status',
+    'arrival_category_label',
+    'face_verification_status',
+    'geolocation_status',
+];
+
+export default function LecturerAttendanceReportPage({ filterOptions, initialFilters, teacher }: PageProps) {
+    const [filters, setFilters] = useState({
+        start_date: initialFilters.start_date,
+        end_date: initialFilters.end_date,
+        course_id: 'all',
+        attendance_status: 'all',
+        arrival_category: 'all',
+        session_type: 'all',
+        face_verification_status: 'all',
+        geolocation_status: 'all',
+        day_of_week: 'all',
+        month: '',
+        year: '',
+        search: '',
+    });
+    const [sortBy, setSortBy] = useState('date');
+    const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+    const [perPage, setPerPage] = useState(15);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [summaryCards, setSummaryCards] = useState<SummaryCard[]>([]);
+    const [insights, setInsights] = useState<ReportInsight[]>([]);
+    const [analytics, setAnalytics] = useState<ReportAnalytics | null>(null);
+    const [records, setRecords] = useState<PaginatedRecords<AttendanceRecord> | null>(null);
+    const [visibleColumns, setVisibleColumns] = useState<string[]>(defaultVisibleColumns);
+    const [filtersOpen, setFiltersOpen] = useState(true);
+    const [selectedRecordId, setSelectedRecordId] = useState<number | null>(null);
+    const [isDashboardLoading, setIsDashboardLoading] = useState(true);
+    const [isRecordsLoading, setIsRecordsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    const page = usePage<SharedData>();
-    const { auth } = page.props;
+    const buildQueryParams = useCallback(
+        (pageNumber = currentPage) => {
+            const params = new URLSearchParams();
+            Object.entries(filters).forEach(([key, value]) => {
+                if (value && value !== 'all') {
+                    params.append(key, value);
+                }
+            });
+            params.append('sort_by', sortBy);
+            params.append('sort_dir', sortDir);
+            params.append('per_page', String(perPage));
+            params.append('page', String(pageNumber));
+            return params;
+        },
+        [filters, sortBy, sortDir, perPage, currentPage],
+    );
 
-    // Fetch report data
+    const fetchDashboard = useCallback(async () => {
+        setIsDashboardLoading(true);
+        setError(null);
+        try {
+            const params = buildQueryParams(1);
+            params.delete('page');
+            params.delete('per_page');
+            params.delete('sort_by');
+            params.delete('sort_dir');
+
+            const response = await fetch(`/teacher/reports/data?${params}`, {
+                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin',
+            });
+            const payload = await response.json();
+            if (!response.ok || !payload.success) {
+                throw new Error(payload.message || 'Failed to load analytics');
+            }
+
+            setSummaryCards(payload.data.summaryCards ?? []);
+            setAnalytics(payload.data.analytics ?? null);
+            setInsights(payload.data.insights ?? []);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to load analytics');
+        } finally {
+            setIsDashboardLoading(false);
+        }
+    }, [buildQueryParams]);
+
+    const fetchRecords = useCallback(
+        async (pageNumber = 1) => {
+            setIsRecordsLoading(true);
+            try {
+                const response = await fetch(`/teacher/reports/records?${buildQueryParams(pageNumber)}`, {
+                    headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                    credentials: 'same-origin',
+                });
+                const payload = await response.json();
+                if (!response.ok || !payload.success) {
+                    throw new Error(payload.message || 'Failed to load records');
+                }
+                setRecords(payload.data);
+                setCurrentPage(pageNumber);
+            } catch (err) {
+                setError(err instanceof Error ? err.message : 'Failed to load records');
+            } finally {
+                setIsRecordsLoading(false);
+            }
+        },
+        [buildQueryParams],
+    );
+
+    const applyFilters = () => {
+        fetchDashboard();
+        fetchRecords(1);
+    };
+
     useEffect(() => {
-        fetchReportData();
+        fetchDashboard();
+        fetchRecords(1);
     }, []);
 
-    const fetchReportData = async () => {
-        try {
-            setIsLoading(true);
-            setError(null);
+    useEffect(() => {
+        fetchRecords(1);
+    }, [sortBy, sortDir, perPage]);
 
-            const params = new URLSearchParams();
-            if (selectedCourse && selectedCourse !== 'all') {
-                params.append('courseId', selectedCourse);
-            }
-
-            const response = await fetch(`/teacher/reports/data?${params}`);
-
-            if (!response.ok) {
-                throw new Error('Failed to fetch report data');
-            }
-
-            const data = await response.json();
-
-            if (data.success) {
-                setReportData(data.data);
-                setCourses(data.data.courses);
-                setDateRange(data.data.dateRange);
-            } else {
-                throw new Error(data.message || 'Failed to fetch report data');
-            }
-        } catch (err) {
-            console.error('Error fetching report data:', err);
-            setError(err instanceof Error ? err.message : 'An error occurred');
-        } finally {
-            setIsLoading(false);
-        }
+    const handleExport = (format: 'xlsx' | 'csv' | 'pdf' | 'print') => {
+        const params = buildQueryParams(1);
+        params.delete('page');
+        params.set('format', format);
+        window.open(`/teacher/reports/export?${params.toString()}`, '_blank');
     };
 
-    const handleApplyFilters = () => {
-        fetchReportData();
-    };
+    const tableColumns = useMemo<TableColumn<AttendanceRecord>[]>(
+        () => [
+            { key: 'date', label: 'Date' },
+            { key: 'course', label: 'Course', sortable: false },
+            { key: 'classroom', label: 'Class', sortable: false, render: (record) => record.classroom ?? '—' },
+            {
+                key: 'reschedule',
+                label: 'Original Schedule',
+                sortable: false,
+                render: (record) =>
+                    record.reschedule ? (
+                        <span className="text-xs text-sidebar-foreground/80">
+                            {record.reschedule.original_date_display}, {record.reschedule.original_start_time_display} –{' '}
+                            {record.reschedule.original_end_time_display}
+                        </span>
+                    ) : (
+                        '—'
+                    ),
+            },
+            {
+                key: 'reschedule_new',
+                label: 'Rescheduled Schedule',
+                sortable: false,
+                render: (record) =>
+                    record.reschedule ? (
+                        <span className="text-xs text-sidebar-foreground/80">
+                            {record.reschedule.new_date_display}, {record.reschedule.new_start_time_display} –{' '}
+                            {record.reschedule.new_end_time_display}
+                        </span>
+                    ) : (
+                        '—'
+                    ),
+            },
+            { key: 'check_in_time', label: 'Check-In' },
+            { key: 'check_out_time', label: 'Check-Out' },
+            { key: 'working_hours', label: 'Working Hours', sortable: false },
+            {
+                key: 'attendance_status',
+                label: 'Status',
+                render: (record) => <StatusBadge status={record.attendance_status} />,
+            },
+            { key: 'arrival_category_label', label: 'Arrival Status', sortable: false },
+            { key: 'minutes_early', label: 'Min Early', sortable: false },
+            { key: 'minutes_late', label: 'Min Late', sortable: false },
+            { key: 'face_verification_status', label: 'Face', sortable: false },
+            { key: 'geolocation_status', label: 'Geolocation', sortable: false },
+        ],
+        [],
+    );
 
-    if (isLoading) {
+    if (isDashboardLoading && !analytics && !records) {
         return (
             <AppLayout breadcrumbs={breadcrumbs}>
-                <Head title="Attendance Reports" />
-                <div className="flex h-full items-center justify-center">
-                    <div className="text-center">
-                        <Loader2 className="mx-auto mb-4 h-8 w-8 animate-spin text-blue-500" />
-                        <p className="text-sidebar-foreground/60">Loading report data...</p>
-                    </div>
-                </div>
+                <Head title="Attendance Analytics" />
+                <ReportLoadingState message="Loading attendance analytics..." />
             </AppLayout>
         );
     }
 
-    if (error) {
+    if (error && !analytics && !records) {
         return (
             <AppLayout breadcrumbs={breadcrumbs}>
-                <Head title="Attendance Reports" />
-                <div className="flex h-full items-center justify-center">
-                    <div className="text-center">
-                        <AlertTriangle className="mx-auto mb-4 h-8 w-8 text-red-500" />
-                        <p className="text-red-600">{error}</p>
-                        <button onClick={fetchReportData} className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">
-                            Retry
-                        </button>
-                    </div>
-                </div>
+                <Head title="Attendance Analytics" />
+                <ReportErrorState error={error} onRetry={applyFilters} />
             </AppLayout>
         );
-    }
-
-    if (!reportData) {
-        return null;
     }
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="Attendance Reports" />
-
+            <Head title="Attendance Analytics" />
             <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto rounded-xl p-4 md:p-6">
-                {/* Page Header */}
-                <div>
-                    <h1 className="text-2xl font-bold text-sidebar-foreground dark:text-sidebar-foreground">Attendance Reports</h1>
-                    <p className="mt-1 text-sm text-sidebar-foreground/60 dark:text-sidebar-foreground/60">
-                        Comprehensive attendance analytics and insights
-                    </p>
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                        <h1 className="text-2xl font-bold text-sidebar-foreground">Attendance Analytics Center</h1>
+                        <p className="mt-1 text-sm text-sidebar-foreground/60">
+                            Insights, trends, and detailed attendance intelligence for {teacher.name} ({teacher.employee_id})
+                        </p>
+                    </div>
+                    <ReportExportButtons canExport onExport={handleExport} />
                 </div>
 
-                {/* Filters Section */}
-                <div className="rounded-xl border border-sidebar-border/70 bg-white p-4 shadow-sm dark:border-sidebar-border dark:bg-sidebar-accent">
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                        {/* Date Range Filter */}
+                <div className="rounded-xl border border-sidebar-border/70 bg-white shadow-sm dark:border-sidebar-border dark:bg-sidebar-accent">
+                    <button
+                        type="button"
+                        onClick={() => setFiltersOpen((open) => !open)}
+                        className="flex w-full items-center justify-between px-4 py-3 text-left"
+                    >
                         <div>
-                            <label className="mb-2 block text-xs font-semibold tracking-wider text-sidebar-foreground/60 uppercase">Date Range</label>
-                            <div className="relative">
-                                <div className="flex cursor-pointer items-center gap-2 rounded-lg border border-sidebar-border/50 bg-white px-3 py-2 transition-colors hover:border-blue-300 dark:bg-sidebar-accent dark:hover:border-blue-700">
-                                    <Calendar className="h-4 w-4 text-sidebar-foreground/60" />
+                            <h2 className="text-sm font-semibold text-sidebar-foreground">Advanced Filters</h2>
+                            <p className="text-xs text-sidebar-foreground/60">Filter by time, attendance, verification, and session type</p>
+                        </div>
+                        {filtersOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </button>
+
+                    {filtersOpen && (
+                        <div className="grid grid-cols-1 gap-4 border-t border-sidebar-border/50 p-4 md:grid-cols-2 xl:grid-cols-4">
+                            <ReportFilterField label="Start Date">
+                                <input type="date" value={filters.start_date} onChange={(e) => setFilters((prev) => ({ ...prev, start_date: e.target.value }))} className={filterInputClass} />
+                            </ReportFilterField>
+                            <ReportFilterField label="End Date">
+                                <input type="date" value={filters.end_date} onChange={(e) => setFilters((prev) => ({ ...prev, end_date: e.target.value }))} className={filterInputClass} />
+                            </ReportFilterField>
+                            <ReportFilterField label="Month">
+                                <select value={filters.month} onChange={(e) => setFilters((prev) => ({ ...prev, month: e.target.value }))} className={filterInputClass}>
+                                    <option value="">All Months</option>
+                                    {Array.from({ length: 12 }, (_, i) => (
+                                        <option key={i + 1} value={String(i + 1)}>
+                                            {new Date(2000, i, 1).toLocaleString('default', { month: 'long' })}
+                                        </option>
+                                    ))}
+                                </select>
+                            </ReportFilterField>
+                            <ReportFilterField label="Year">
+                                <select value={filters.year} onChange={(e) => setFilters((prev) => ({ ...prev, year: e.target.value }))} className={filterInputClass}>
+                                    <option value="">All Years</option>
+                                    {Array.from({ length: 5 }, (_, i) => {
+                                        const year = new Date().getFullYear() - i;
+                                        return (
+                                            <option key={year} value={String(year)}>
+                                                {year}
+                                            </option>
+                                        );
+                                    })}
+                                </select>
+                            </ReportFilterField>
+                            <ReportFilterField label="Day of Week">
+                                <select value={filters.day_of_week} onChange={(e) => setFilters((prev) => ({ ...prev, day_of_week: e.target.value }))} className={filterInputClass}>
+                                    <option value="all">All Days</option>
+                                    {filterOptions.daysOfWeek.map((day) => (
+                                        <option key={day} value={day}>
+                                            {day}
+                                        </option>
+                                    ))}
+                                </select>
+                            </ReportFilterField>
+                            <ReportFilterField label="Course">
+                                <select value={filters.course_id} onChange={(e) => setFilters((prev) => ({ ...prev, course_id: e.target.value }))} className={filterInputClass}>
+                                    <option value="all">All Courses</option>
+                                    {filterOptions.courses.map((course) => (
+                                        <option key={course.id} value={String(course.id)}>
+                                            {course.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </ReportFilterField>
+                            <ReportFilterField label="Attendance Status">
+                                <select value={filters.attendance_status} onChange={(e) => setFilters((prev) => ({ ...prev, attendance_status: e.target.value }))} className={filterInputClass}>
+                                    <option value="all">All Statuses</option>
+                                    {filterOptions.attendanceStatuses.map((status) => (
+                                        <option key={status} value={status}>
+                                            {status.replace(/_/g, ' ')}
+                                        </option>
+                                    ))}
+                                </select>
+                            </ReportFilterField>
+                            <ReportFilterField label="Arrival Status">
+                                <select value={filters.arrival_category} onChange={(e) => setFilters((prev) => ({ ...prev, arrival_category: e.target.value }))} className={filterInputClass}>
+                                    <option value="all">All Arrivals</option>
+                                    {filterOptions.arrivalCategories.map((item) => (
+                                        <option key={item.value} value={item.value}>
+                                            {item.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </ReportFilterField>
+                            <ReportFilterField label="Session Type">
+                                <select value={filters.session_type} onChange={(e) => setFilters((prev) => ({ ...prev, session_type: e.target.value }))} className={filterInputClass}>
+                                    <option value="all">All Sessions</option>
+                                    {filterOptions.sessionTypes.map((item) => (
+                                        <option key={item.value} value={item.value}>
+                                            {item.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </ReportFilterField>
+                            <ReportFilterField label="Face Verification">
+                                <select value={filters.face_verification_status} onChange={(e) => setFilters((prev) => ({ ...prev, face_verification_status: e.target.value }))} className={filterInputClass}>
+                                    <option value="all">All</option>
+                                    <option value="verified">Verified</option>
+                                    <option value="unverified">Failed / Unverified</option>
+                                </select>
+                            </ReportFilterField>
+                            <ReportFilterField label="Geolocation">
+                                <select value={filters.geolocation_status} onChange={(e) => setFilters((prev) => ({ ...prev, geolocation_status: e.target.value }))} className={filterInputClass}>
+                                    <option value="all">All</option>
+                                    <option value="verified">Verified</option>
+                                    <option value="failed">Failed</option>
+                                </select>
+                            </ReportFilterField>
+                            <ReportFilterField label="Search">
+                                <div className="relative">
+                                    <Search className="pointer-events-none absolute top-2.5 left-3 h-4 w-4 text-sidebar-foreground/40" />
                                     <input
                                         type="text"
-                                        value={dateRange}
-                                        readOnly
-                                        className="flex-1 bg-transparent text-sm text-sidebar-foreground outline-none dark:text-sidebar-foreground"
-                                        placeholder="Select date range"
+                                        placeholder="Course or class..."
+                                        value={filters.search}
+                                        onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
+                                        className={`${filterInputClass} pl-9`}
                                     />
                                 </div>
+                            </ReportFilterField>
+                            <div className="flex items-end">
+                                <button onClick={applyFilters} className="w-full rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800">
+                                    Apply Filters
+                                </button>
                             </div>
                         </div>
+                    )}
+                </div>
 
-                        {/* Class Section Filter */}
+                {isDashboardLoading ? (
+                    <ReportLoadingState message="Refreshing analytics..." />
+                ) : (
+                    <>
+                        <ReportKpiSection cards={summaryCards} />
+                        <ReportInsightsPanel insights={insights} />
+                        {analytics && <ReportAnalyticsSection analytics={analytics} variant="lecturer" />}
+                    </>
+                )}
+
+                <div className="rounded-xl border border-sidebar-border/70 bg-white p-4 shadow-sm dark:border-sidebar-border dark:bg-sidebar-accent">
+                    <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                         <div>
-                            <label className="mb-2 block text-xs font-semibold tracking-wider text-sidebar-foreground/60 uppercase">
-                                Class Section
-                            </label>
-                            <div className="relative">
-                                <div className="flex cursor-pointer items-center gap-2 rounded-lg border border-sidebar-border/50 bg-white px-3 py-2 transition-colors hover:border-blue-300 dark:bg-sidebar-accent dark:hover:border-blue-700">
-                                    <Users className="h-4 w-4 text-sidebar-foreground/60" />
-                                    <select
-                                        value={selectedCourse}
-                                        onChange={(e) => setSelectedCourse(e.target.value)}
-                                        className="flex-1 cursor-pointer bg-transparent text-sm text-sidebar-foreground outline-none dark:text-sidebar-foreground"
+                            <h2 className="text-sm font-semibold text-sidebar-foreground">Column Visibility</h2>
+                            <p className="text-xs text-sidebar-foreground/60">Choose which columns appear in the attendance table</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            {tableColumns.map((column) => {
+                                const active = visibleColumns.includes(column.key);
+                                return (
+                                    <button
+                                        key={column.key}
+                                        type="button"
+                                        onClick={() =>
+                                            setVisibleColumns((prev) =>
+                                                active ? prev.filter((key) => key !== column.key) : [...prev, column.key],
+                                            )
+                                        }
+                                        className={`rounded-full px-3 py-1 text-xs ${active ? 'bg-gray-900 text-white' : 'bg-sidebar-accent text-sidebar-foreground'}`}
                                     >
-                                        <option value="all">All Assigned Classes</option>
-                                        {courses.map((course) => (
-                                            <option key={course.id} value={course.id}>
-                                                {course.name}
-                                            </option>
-                                        ))}
-                                    </select>
-                                    <ChevronDown className="h-4 w-4 text-sidebar-foreground/60" />
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Apply Filters Button */}
-                        <div className="flex items-end">
-                            <button
-                                onClick={handleApplyFilters}
-                                className="w-full rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800 dark:bg-gray-800 dark:hover:bg-gray-700"
-                            >
-                                Apply Filters
-                            </button>
+                                        {column.label}
+                                    </button>
+                                );
+                            })}
                         </div>
                     </div>
                 </div>
 
-                {/* Summary Metrics */}
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    {reportData.summaryMetrics.map((metric, index) => (
-                        <div
-                            key={index}
-                            className="rounded-xl border border-sidebar-border/70 bg-white p-5 shadow-sm dark:border-sidebar-border dark:bg-sidebar-accent"
-                        >
-                            <p className="mb-3 text-xs font-medium text-sidebar-foreground/60 dark:text-sidebar-foreground/60">{metric.title}</p>
-
-                            <div className="flex items-baseline gap-2">
-                                <p className="text-3xl font-bold text-sidebar-foreground dark:text-sidebar-foreground">{metric.value}</p>
-                                {metric.subtitle && (
-                                    <p className="text-lg font-semibold text-sidebar-foreground/60 dark:text-sidebar-foreground/60">
-                                        {metric.subtitle}
-                                    </p>
-                                )}
-                            </div>
-
-                            {metric.badge && (
-                                <div className="mt-2">
-                                    <span className={`inline-block rounded px-2 py-0.5 text-sm font-semibold ${metric.badgeColor}`}>
-                                        {metric.badge}
-                                    </span>
-                                </div>
-                            )}
-
-                            {metric.change && (
-                                <div className="mt-2">
-                                    <span
-                                        className={`text-sm font-medium ${
-                                            metric.changeType === 'positive'
-                                                ? 'text-green-600'
-                                                : metric.changeType === 'negative'
-                                                  ? 'text-red-600'
-                                                  : 'text-sidebar-foreground/60'
-                                        }`}
-                                    >
-                                        {metric.change}
-                                    </span>
-                                </div>
-                            )}
-                        </div>
-                    ))}
-                </div>
-
-                {/* Charts Section */}
-                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                    {/* Attendance Rate per Class */}
-                    <div className="rounded-xl border border-sidebar-border/70 bg-white p-6 shadow-sm dark:border-sidebar-border dark:bg-sidebar-accent">
-                        <div className="mb-6">
-                            <h3 className="text-lg font-semibold text-sidebar-foreground dark:text-sidebar-foreground">Attendance Rate per Class</h3>
-                            <p className="mt-1 text-sm text-sidebar-foreground/60 dark:text-sidebar-foreground/60">
-                                Performance distribution across sections
-                            </p>
-                        </div>
-
-                        {reportData.attendanceRatePerClass.length > 0 ? (
-                            <div className="space-y-4">
-                                {reportData.attendanceRatePerClass.map((item, index) => (
-                                    <div key={index}>
-                                        <div className="mb-2 flex items-center justify-between">
-                                            <span className="text-sm font-medium text-sidebar-foreground dark:text-sidebar-foreground">
-                                                {item.class}
-                                            </span>
-                                            <span className="text-sm font-bold text-sidebar-foreground dark:text-sidebar-foreground">
-                                                {item.rate}%
-                                            </span>
-                                        </div>
-                                        <div className="h-2.5 w-full rounded-full bg-gray-200 dark:bg-gray-700">
-                                            <div
-                                                className={`${item.color} h-2.5 rounded-full transition-all duration-500`}
-                                                style={{ width: `${item.rate}%` }}
-                                            ></div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <p className="text-center text-sidebar-foreground/60">No data available</p>
-                        )}
-                    </div>
-
-                    {/* Monthly Consistency Heatmap */}
-                    <div className="rounded-xl border border-sidebar-border/70 bg-white p-6 shadow-sm dark:border-sidebar-border dark:bg-sidebar-accent">
-                        <div className="mb-6">
-                            <h3 className="text-lg font-semibold text-sidebar-foreground dark:text-sidebar-foreground">
-                                Monthly Consistency Heatmap
-                            </h3>
-                            <p className="mt-1 text-sm text-sidebar-foreground/60 dark:text-sidebar-foreground/60">Daily presence trends</p>
-                        </div>
-
-                        {/* Day labels */}
-                        <div className="mb-2 flex gap-1 pl-0">
-                            {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map((day) => (
-                                <div key={day} className="flex-1 text-center">
-                                    <span className="text-xs font-medium text-sidebar-foreground/50">{day}</span>
-                                </div>
-                            ))}
-                        </div>
-
-                        {/* Heatmap grid */}
-                        <div className="space-y-1">
-                            {reportData.heatmapData.map((week, weekIndex) => (
-                                <div key={weekIndex} className="flex gap-1">
-                                    {week.map((cell, dayIndex) => (
-                                        <div
-                                            key={`${weekIndex}-${dayIndex}`}
-                                            className={`aspect-square flex-1 rounded ${getHeatmapColor(cell.intensity, cell.isHoliday)} cursor-pointer transition-colors hover:ring-2 hover:ring-blue-400`}
-                                            title={`${cell.date}: ${cell.isHoliday ? 'Holiday/No Class' : `${cell.count} records`}`}
-                                        ></div>
-                                    ))}
-                                </div>
-                            ))}
-                        </div>
-
-                        {/* Legend */}
-                        <div className="mt-4 flex items-center justify-between border-t border-sidebar-border/30 pt-4">
-                            <div className="flex items-center gap-2">
-                                <span className="text-xs font-medium text-sidebar-foreground/60">LESS</span>
-                                <div className="flex gap-1">
-                                    <div className="h-4 w-4 rounded bg-blue-100 dark:bg-blue-900/20"></div>
-                                    <div className="h-4 w-4 rounded bg-blue-300 dark:bg-blue-800/40"></div>
-                                    <div className="h-4 w-4 rounded bg-blue-500 dark:bg-blue-600/80"></div>
-                                    <div className="h-4 w-4 rounded bg-blue-600 dark:bg-blue-500"></div>
-                                </div>
-                                <span className="text-xs font-medium text-sidebar-foreground/60">MORE</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <div className="h-4 w-4 rounded bg-red-200 dark:bg-red-900/30"></div>
-                                <span className="text-xs font-medium text-sidebar-foreground/60">HOLIDAY / NO CLASS</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Class Performance Summary Table */}
-                <div className="rounded-xl border border-sidebar-border/70 bg-white p-6 shadow-sm dark:border-sidebar-border dark:bg-sidebar-accent">
-                    <div className="mb-6">
-                        <h3 className="text-lg font-semibold text-sidebar-foreground dark:text-sidebar-foreground">Class Performance Summary</h3>
-                    </div>
-
-                    <div className="overflow-x-auto">
-                        <table className="w-full">
-                            <thead>
-                                <tr className="border-b border-sidebar-border/30">
-                                    <th className="px-4 py-3 text-left text-xs font-semibold tracking-wider text-sidebar-foreground/60 uppercase">
-                                        Class
-                                    </th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold tracking-wider text-sidebar-foreground/60 uppercase">
-                                        Sessions
-                                    </th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold tracking-wider text-sidebar-foreground/60 uppercase">
-                                        Pending
-                                    </th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold tracking-wider text-sidebar-foreground/60 uppercase">
-                                        Rate
-                                    </th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold tracking-wider text-sidebar-foreground/60 uppercase">
-                                        Reliability
-                                    </th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold tracking-wider text-sidebar-foreground/60 uppercase">
-                                        Trend
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {reportData.classPerformanceSummary.length > 0 ? (
-                                    reportData.classPerformanceSummary.map((classData, index) => (
-                                        <tr
-                                            key={index}
-                                            className="border-b border-sidebar-border/20 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-800/50"
-                                        >
-                                            <td className="px-4 py-4">
-                                                <span className="font-medium text-sidebar-foreground dark:text-sidebar-foreground">
-                                                    {classData.class}
-                                                </span>
-                                            </td>
-                                            <td className="px-4 py-4">
-                                                <span className="text-sidebar-foreground/80 dark:text-sidebar-foreground/80">
-                                                    {classData.present}
-                                                </span>
-                                            </td>
-                                            <td className="px-4 py-4">
-                                                <span className="text-sidebar-foreground/80 dark:text-sidebar-foreground/80">{classData.late}</span>
-                                            </td>
-                                            <td className="px-4 py-4">
-                                                <span className="font-semibold text-sidebar-foreground/80 dark:text-sidebar-foreground/80">
-                                                    {classData.attendanceRate}%
-                                                </span>
-                                            </td>
-                                            <td className="px-4 py-4">
-                                                <span
-                                                    className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${classData.reliabilityColor}`}
-                                                >
-                                                    {classData.reliability}
-                                                </span>
-                                            </td>
-                                            <td className="px-4 py-4">
-                                                {classData.trend === 'up' && <TrendingUp className="h-5 w-5 text-green-500" />}
-                                                {classData.trend === 'down' && <TrendingDown className="h-5 w-5 text-red-500" />}
-                                                {classData.trend === 'neutral' && <div className="h-0.5 w-5 bg-orange-500"></div>}
-                                            </td>
-                                        </tr>
-                                    ))
-                                ) : (
-                                    <tr>
-                                        <td colSpan={6} className="py-8 text-center text-sidebar-foreground/60">
-                                            No data available
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
+                <ReportAttendanceTable
+                    title="Attendance History"
+                    records={records}
+                    columns={tableColumns}
+                    visibleColumnKeys={visibleColumns}
+                    sortBy={sortBy}
+                    sortDir={sortDir}
+                    perPage={perPage}
+                    isLoading={isRecordsLoading}
+                    onRowClick={(record) => setSelectedRecordId(record.id)}
+                    onSort={(column) => {
+                        if (sortBy === column) {
+                            setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+                        } else {
+                            setSortBy(column);
+                            setSortDir('desc');
+                        }
+                    }}
+                    onPerPageChange={setPerPage}
+                    onPageChange={fetchRecords}
+                />
             </div>
+
+            <SessionDetailDrawer recordId={selectedRecordId} onClose={() => setSelectedRecordId(null)} />
+            <style>{reportStyles}</style>
         </AppLayout>
     );
 }

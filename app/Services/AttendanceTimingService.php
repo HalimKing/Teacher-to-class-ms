@@ -159,7 +159,7 @@ class AttendanceTimingService
         return [
             'attendance_status' => $status,
             'departure_category' => 'overtime',
-            'minutes_overtime' => $graceDeadline->diffInMinutes($now),
+            'minutes_overtime' => (int) round($graceDeadline->diffInMinutes($now)),
         ];
     }
 
