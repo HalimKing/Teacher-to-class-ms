@@ -61,6 +61,9 @@ SESSION_LIFETIME=120
 CACHE_STORE=database
 QUEUE_CONNECTION=database
 LOG_CHANNEL=single
+
+# Institution timezone (affects attendance windows and daily prune at 02:00)
+APP_TIMEZONE=Africa/Accra
 ```
 
 ### Critical: `APP_URL` must match how users open the site
@@ -99,24 +102,109 @@ chmod -R ug+rwx storage bootstrap/cache
 
 ---
 
-## 5. Cron (scheduler)
+## 5. Cron (scheduler) — required
 
-cPanel → **Cron Jobs** → every minute:
+cPanel does **not** run Laravel schedules automatically. You must add a **Cron Job** that calls `schedule:run` **every minute**. Laravel then runs `attendance:process`, `reminders:process`, etc. on their own intervals.
+
+### Step-by-step in cPanel
+
+1. Log in to **cPanel** → **Cron Jobs** (under *Advanced*).
+2. Under **Add New Cron Job**, set:
+   - **Minute:** `*`
+   - **Hour:** `*`
+   - **Day:** `*`
+   - **Month:** `*`
+   - **Weekday:** `*`
+3. **Command** — use **one** of the options below (replace `USERNAME` and paths):
+
+**Option A — helper script (recommended, writes to a log file):**
 
 ```bash
-cd /home/username/teacher-to-class-ms && /usr/local/bin/php artisan schedule:run >> /dev/null 2>&1
+/bin/bash /home/USERNAME/teacher-to-class-ms/scripts/cpanel-schedule-run.sh
 ```
 
-Use **Setup Cron Job** path from cPanel (PHP binary path varies by host).
+**Option B — direct Artisan call:**
+
+```bash
+/usr/local/bin/php /home/USERNAME/teacher-to-class-ms/artisan schedule:run >> /home/USERNAME/teacher-to-class-ms/storage/logs/scheduler.log 2>&1
+```
+
+**Option C — change directory first:**
+
+```bash
+cd /home/USERNAME/teacher-to-class-ms && /usr/local/bin/php artisan schedule:run >> storage/logs/scheduler.log 2>&1
+```
+
+4. Click **Add New Cron Job**.
+
+### Find your PHP path
+
+The PHP binary path varies by host. In cPanel:
+
+- **MultiPHP Manager** / **Select PHP Version** often shows the path, or
+- SSH: `which php` or `ls /usr/local/bin/php*`
+
+Common paths: `/usr/local/bin/php`, `/opt/cpanel/ea-php83/root/usr/bin/php`
+
+Use PHP **8.3+** for this project.
+
+### Make scripts executable (SSH)
+
+If you use the helper scripts:
+
+```bash
+chmod +x ~/teacher-to-class-ms/scripts/cpanel-schedule-run.sh
+chmod +x ~/teacher-to-class-ms/scripts/cpanel-queue-work.sh
+```
+
+### Verify the scheduler is running
+
+Wait 2–3 minutes after adding the cron, then SSH:
+
+```bash
+cd ~/teacher-to-class-ms
+tail -20 storage/logs/scheduler.log
+php artisan schedule:list
+php artisan attendance:process
+```
+
+You should see new lines in `scheduler.log` every minute and `Attendance processor completed` in `storage/logs/laravel.log` after `attendance:process` runs.
+
+### Common mistakes
+
+| Problem | Fix |
+|---------|-----|
+| Cron never runs | Wrong path to `artisan` or PHP; use full absolute paths |
+| Cron runs but nothing happens | You scheduled `attendance:process` directly every 10 min instead of `schedule:run` every minute — use `schedule:run` only |
+| Silent failures | Do not use `>> /dev/null` until working; log to `storage/logs/scheduler.log` |
+| Wrong timezone | Set `APP_TIMEZONE` in `.env` (e.g. `Africa/Accra`), then `php artisan config:clear` |
+| `storage/logs` not writable | `chmod -R ug+rwx storage` |
 
 ---
 
-## 6. Queue worker (optional)
+## 6. Queue worker (required for email reminders)
 
-Shared hosting often has no long-running workers. Options:
+`reminders:process` dispatches jobs to the queue. On shared hosting, add a **second** cron job (every minute):
 
-- Use `QUEUE_CONNECTION=database` and a cron every minute: `php artisan queue:work --stop-when-empty`
-- Or use an external worker / VPS for production reminders
+```bash
+/bin/bash /home/USERNAME/teacher-to-class-ms/scripts/cpanel-queue-work.sh
+```
+
+Or:
+
+```bash
+cd /home/USERNAME/teacher-to-class-ms && /usr/local/bin/php artisan queue:work --stop-when-empty --sleep=3 --tries=3 --max-time=55 >> storage/logs/queue-worker.log 2>&1
+```
+
+Ensure `.env` has:
+
+```env
+QUEUE_CONNECTION=database
+```
+
+Run migrations so the `jobs` table exists: `php artisan migrate --force`
+
+`attendance:process` does **not** need the queue worker — only the scheduler cron.
 
 ---
 
