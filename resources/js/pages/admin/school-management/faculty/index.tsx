@@ -3,7 +3,8 @@ import { can } from '@/lib/can';
 import { PagePropsWithFlash } from '@/types';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { Edit, Eye, Plus, Search, Trash2, Download, Upload, FileSpreadsheet, FileText, X } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { simpleFilterParamsEqual } from '@/lib/list-filters';
 import { Bounce, ToastContainer, toast } from 'react-toastify';
 
 // Update interface for paginated data
@@ -86,22 +87,34 @@ const TeachersIndexPage = ({ facultiesData, search }: TeachersIndexPageProps) =>
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
+    const skipInitialFilterFetch = useRef(true);
+
     // Handle search with debounce
     useEffect(() => {
         const timeoutId = setTimeout(() => {
-            router.get(
-                route('admin.school-management.faculties.index'),
-                { search: searchTerm || '' }, // Send empty string if search is cleared
-                {
-                    preserveState: true,
-                    replace: true,
-                    preserveScroll: true,
-                },
-            );
-        }, 500); // 500ms debounce
+            const params = { search: searchTerm || '' };
+            const serverParams = { search: search || '' };
+
+            if (skipInitialFilterFetch.current) {
+                skipInitialFilterFetch.current = false;
+                if (simpleFilterParamsEqual(params, serverParams)) {
+                    return;
+                }
+            }
+
+            if (simpleFilterParamsEqual(params, serverParams)) {
+                return;
+            }
+
+            router.get(route('admin.school-management.faculties.index'), params, {
+                preserveState: true,
+                replace: true,
+                preserveScroll: true,
+            });
+        }, 500);
 
         return () => clearTimeout(timeoutId);
-    }, [searchTerm]);
+    }, [searchTerm, search]);
 
     const handleSignOut = () => {
         console.log('User signed out!');

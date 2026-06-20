@@ -12,6 +12,7 @@ import {
 } from '@/components/teachers/types';
 import { KpiGrid } from '@/components/dashboard/kpi-card';
 import AppLayout from '@/layouts/app-layout';
+import { buildListQueryParams, listQueryParamsEqual } from '@/lib/list-filters';
 import { type BreadcrumbItem, type PagePropsWithFlash } from '@/types';
 import { Head, router, usePage } from '@inertiajs/react';
 import { X } from 'lucide-react';
@@ -66,30 +67,23 @@ export default function TeachersIndexPage({
         };
     }, []);
 
-    const queryParams = useMemo(() => {
-        const params: Record<string, string> = {};
-
-        Object.entries(filters).forEach(([key, value]) => {
-            if (value && value !== 'all') {
-                params[key] = value;
-            }
-        });
-
-        params.sort_by = sortBy;
-        params.sort_dir = sortDir;
-        params.per_page = String(perPage);
-
-        return params;
-    }, [filters, sortBy, sortDir, perPage]);
+    const queryParams = useMemo(
+        () =>
+            buildListQueryParams(filters, {
+                sortBy,
+                sortDir,
+                perPage,
+            }),
+        [filters, sortBy, sortDir, perPage],
+    );
 
     const skipInitialFilterFetch = useRef(true);
 
     useEffect(() => {
-        setFilters(initialFilters);
         setSortBy(initialFilters.sort_by ?? 'created_at');
         setSortDir(initialFilters.sort_dir === 'asc' ? 'asc' : 'desc');
         setPerPage(Number(initialFilters.per_page ?? teachers.per_page ?? 15));
-    }, [initialFilters, teachers.per_page]);
+    }, [initialFilters.sort_by, initialFilters.sort_dir, initialFilters.per_page, teachers.per_page]);
 
     useEffect(() => {
         if (skipInitialFilterFetch.current) {
@@ -97,8 +91,26 @@ export default function TeachersIndexPage({
             return;
         }
 
+        const nextParams = buildListQueryParams(filters, {
+            sortBy,
+            sortDir,
+            perPage,
+            page: 1,
+        });
+
+        const currentParams = buildListQueryParams(initialFilters, {
+            sortBy: initialFilters.sort_by ?? 'created_at',
+            sortDir: initialFilters.sort_dir === 'asc' ? 'asc' : 'desc',
+            perPage: Number(initialFilters.per_page ?? teachers.per_page ?? 15),
+            page: 1,
+        });
+
+        if (listQueryParamsEqual(nextParams, currentParams)) {
+            return;
+        }
+
         const timeoutId = setTimeout(() => {
-            router.get(route('admin.teachers.index'), { ...queryParams, page: 1 }, {
+            router.get(route('admin.teachers.index'), nextParams, {
                 preserveState: true,
                 replace: true,
                 only: ['teachers', 'summaryCards', 'filters'],

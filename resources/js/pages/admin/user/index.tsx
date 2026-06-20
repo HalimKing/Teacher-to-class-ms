@@ -12,6 +12,7 @@ import {
 } from '@/components/users/types';
 import { KpiGrid } from '@/components/dashboard/kpi-card';
 import AppLayout from '@/layouts/app-layout';
+import { buildListQueryParams, listQueryParamsEqual } from '@/lib/list-filters';
 import { type BreadcrumbItem, type PagePropsWithFlash } from '@/types';
 import { Head, router, usePage } from '@inertiajs/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -65,30 +66,23 @@ export default function UsersIndexPage({
         };
     }, []);
 
-    const queryParams = useMemo(() => {
-        const params: Record<string, string> = {};
-
-        Object.entries(filters).forEach(([key, value]) => {
-            if (value && value !== 'all') {
-                params[key] = value;
-            }
-        });
-
-        params.sort_by = sortBy;
-        params.sort_dir = sortDir;
-        params.per_page = String(perPage);
-
-        return params;
-    }, [filters, sortBy, sortDir, perPage]);
+    const queryParams = useMemo(
+        () =>
+            buildListQueryParams(filters, {
+                sortBy,
+                sortDir,
+                perPage,
+            }),
+        [filters, sortBy, sortDir, perPage],
+    );
 
     const skipInitialFilterFetch = useRef(true);
 
     useEffect(() => {
-        setFilters(initialFilters);
         setSortBy(initialFilters.sort_by ?? 'created_at');
         setSortDir(initialFilters.sort_dir === 'asc' ? 'asc' : 'desc');
         setPerPage(Number(initialFilters.per_page ?? users.per_page ?? 15));
-    }, [initialFilters, users.per_page]);
+    }, [initialFilters.sort_by, initialFilters.sort_dir, initialFilters.per_page, users.per_page]);
 
     useEffect(() => {
         if (skipInitialFilterFetch.current) {
@@ -96,8 +90,26 @@ export default function UsersIndexPage({
             return;
         }
 
+        const nextParams = buildListQueryParams(filters, {
+            sortBy,
+            sortDir,
+            perPage,
+            page: 1,
+        });
+
+        const currentParams = buildListQueryParams(initialFilters, {
+            sortBy: initialFilters.sort_by ?? 'created_at',
+            sortDir: initialFilters.sort_dir === 'asc' ? 'asc' : 'desc',
+            perPage: Number(initialFilters.per_page ?? users.per_page ?? 15),
+            page: 1,
+        });
+
+        if (listQueryParamsEqual(nextParams, currentParams)) {
+            return;
+        }
+
         const timeoutId = setTimeout(() => {
-            router.get(route('admin.user-management.users.index'), { ...queryParams, page: 1 }, {
+            router.get(route('admin.user-management.users.index'), nextParams, {
                 preserveState: true,
                 replace: true,
                 only: ['users', 'summaryCards', 'filters'],

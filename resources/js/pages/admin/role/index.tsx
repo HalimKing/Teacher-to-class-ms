@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { 
   Search,
   Plus,
@@ -46,26 +46,39 @@ interface RolesIndexPageProps {
 
 const RolesIndexPage = ({ roles, filters: initialFilters }: RolesIndexPageProps) => {
   const [searchTerm, setSearchTerm] = useState(initialFilters.search || '');
+  const skipInitialFilterFetch = useRef(true);
   const { flash } = usePage().props as PagePropsWithFlash;
   
   // Debounce search
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      const newFilters: any = {};
+      const newFilters: Record<string, string> = {};
       
       if (searchTerm) newFilters.search = searchTerm;
-      
-      // Only update if filters changed
-      if (JSON.stringify(newFilters) !== JSON.stringify(initialFilters)) {
-        router.get(route('admin.user-management.roles.index'), newFilters, {
-          preserveState: true,
-          replace: true,
-        });
+
+      const serverFilters: Record<string, string | undefined> = {
+        search: initialFilters.search,
+      };
+
+      if (skipInitialFilterFetch.current) {
+        skipInitialFilterFetch.current = false;
+        if ((newFilters.search || '') === (serverFilters.search || '')) {
+          return;
+        }
       }
+
+      if ((newFilters.search || '') === (serverFilters.search || '')) {
+        return;
+      }
+
+      router.get(route('admin.user-management.roles.index'), newFilters, {
+        preserveState: true,
+        replace: true,
+      });
     }, 500);
     
     return () => clearTimeout(timeoutId);
-  }, [searchTerm]);
+  }, [searchTerm, initialFilters.search]);
 
   useEffect(() => {
     if (flash?.success) {

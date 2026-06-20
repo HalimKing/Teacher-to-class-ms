@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { 
   Eye,
   Search,
@@ -18,6 +18,7 @@ import { Head, Link, usePage, router } from '@inertiajs/react';
 import { PagePropsWithFlash } from '@/types';
 import { ToastContainer, toast, Bounce } from 'react-toastify';
 import { can } from '@/lib/can';
+import { simpleFilterParamsEqual } from '@/lib/list-filters';
 
 // Update interfaces
 interface Department {
@@ -121,24 +122,41 @@ const DepartmentIndexPage = ({ departmentData, facultyOptions, search, faculty }
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  const skipInitialFilterFetch = useRef(true);
+
   // Handle search and filter with debounce
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      router.get(route('admin.school-management.departments.index'), 
-        { 
-          search: searchTerm || '',
-          faculty: facultyFilter || ''
-        },
-        {
-          preserveState: true,
-          replace: true,
-          preserveScroll: true,
+      const params = {
+        search: searchTerm || '',
+        faculty: facultyFilter || '',
+      };
+
+      const serverParams = {
+        search: search || '',
+        faculty: faculty || '',
+      };
+
+      if (skipInitialFilterFetch.current) {
+        skipInitialFilterFetch.current = false;
+        if (simpleFilterParamsEqual(params, serverParams)) {
+          return;
         }
-      );
-    }, 500); // 500ms debounce
+      }
+
+      if (simpleFilterParamsEqual(params, serverParams)) {
+        return;
+      }
+
+      router.get(route('admin.school-management.departments.index'), params, {
+        preserveState: true,
+        replace: true,
+        preserveScroll: true,
+      });
+    }, 500);
 
     return () => clearTimeout(timeoutId);
-  }, [searchTerm, facultyFilter]);
+  }, [searchTerm, facultyFilter, search, faculty]);
 
   const handleSignOut = () => {
     console.log("User signed out!");

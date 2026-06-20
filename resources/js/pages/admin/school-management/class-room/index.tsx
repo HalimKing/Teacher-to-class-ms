@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { 
   Search,
   Plus,
@@ -20,6 +20,7 @@ import { useForm } from '@inertiajs/react';
 import { PagePropsWithFlash } from '@/types';
 import { ToastContainer, toast, Bounce } from 'react-toastify';
 import { can } from '@/lib/can';
+import { simpleFilterParamsEqual } from '@/lib/list-filters';
 
 // Update interface for paginated data
 interface ClassRoom {
@@ -92,21 +93,34 @@ const ClassRoomIndexPage = ({ classRoomData, search }: TeachersIndexPageProps) =
     }
   },[flash]);
 
+  const skipInitialFilterFetch = useRef(true);
+
   // Handle search with debounce
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      router.get(route('admin.school-management.class-rooms.index'), 
-        { search: searchTerm || '' }, // Send empty string if search is cleared
-        {
-          preserveState: true,
-          replace: true,
-          preserveScroll: true,
+      const params = { search: searchTerm || '' };
+      const serverParams = { search: search || '' };
+
+      if (skipInitialFilterFetch.current) {
+        skipInitialFilterFetch.current = false;
+        if (simpleFilterParamsEqual(params, serverParams)) {
+          return;
         }
-      );
-    }, 500); // 500ms debounce
+      }
+
+      if (simpleFilterParamsEqual(params, serverParams)) {
+        return;
+      }
+
+      router.get(route('admin.school-management.class-rooms.index'), params, {
+        preserveState: true,
+        replace: true,
+        preserveScroll: true,
+      });
+    }, 500);
 
     return () => clearTimeout(timeoutId);
-  }, [searchTerm]);
+  }, [searchTerm, search]);
 
   
   const class_rooms: PaginatedClassRooms = classRoomData;

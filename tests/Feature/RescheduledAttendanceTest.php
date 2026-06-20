@@ -275,3 +275,53 @@ it('marks auto-absent sessions as missed and blocks attendance actions', functio
             'state' => 'missed',
         ]);
 });
+
+it('allows a lecturer to reschedule when assigned on the timetable even if course teacher differs', function () {
+    $otherTeacher = Teacher::create([
+        'first_name' => 'Other',
+        'last_name' => 'Lecturer',
+        'email' => 'other-lecturer-' . uniqid() . '@example.com',
+        'phone' => '1234567891',
+        'faculty_id' => $this->faculty->id,
+        'department_id' => $this->department->id,
+        'employee_id' => 'EMPOTHER' . uniqid(),
+        'title' => 'Dr.',
+        'staff_type' => Teacher::STAFF_TYPE_LECTURER,
+    ]);
+
+    $this->course->update(['teacher_id' => $otherTeacher->id]);
+
+    $originalDate = Carbon::now()->addDays(3);
+    $newDate = Carbon::now()->addDays(5);
+    $start = '08:00:00';
+    $end = '10:00:00';
+
+    $timetable = TimeTable::create([
+        'academic_year_id' => $this->academicYear->id,
+        'course_id' => $this->course->id,
+        'class_room_id' => $this->originalClassroom->id,
+        'teacher_id' => $this->teacher->id,
+        'staff_type' => Teacher::STAFF_TYPE_LECTURER,
+        'day' => $originalDate->format('l'),
+        'day_of_week' => $originalDate->format('l'),
+        'start_time' => $start,
+        'end_time' => $end,
+    ]);
+
+    $this->actingAs($this->teacher, 'teacher')
+        ->post(route('teacher.reschedules.store'), [
+            'timetable_id' => $timetable->id,
+            'classroom_id' => $this->newClassroom->id,
+            'original_date' => $originalDate->toDateString(),
+            'original_start_time' => $start,
+            'original_end_time' => $end,
+            'new_date' => $newDate->toDateString(),
+            'new_start_time' => '14:00:00',
+            'new_end_time' => '16:00:00',
+            'reason' => 'Department meeting',
+        ])
+        ->assertRedirect(route('teacher.timetable'))
+        ->assertSessionHas('success');
+
+    expect(RescheduledSession::query()->where('timetable_id', $timetable->id)->exists())->toBeTrue();
+});

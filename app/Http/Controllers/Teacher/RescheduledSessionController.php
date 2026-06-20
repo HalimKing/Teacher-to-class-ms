@@ -14,7 +14,7 @@ class RescheduledSessionController extends Controller
 {
     public function index()
     {
-        $teacherId = auth()->id();
+        $teacherId = auth('teacher')->id();
         $reschedules = RescheduledSession::where('teacher_id', $teacherId)->orderBy('created_at', 'desc')->get();
         return inertia('teacher/reschedules/index', [
             'reschedules' => $reschedules,
@@ -23,6 +23,8 @@ class RescheduledSessionController extends Controller
 
     public function store(Request $request)
     {
+        $teacherId = auth('teacher')->id();
+
         $data = $request->validate([
             'timetable_id' => 'required|integer|exists:time_tables,id',
             'classroom_id' => 'required|integer|exists:class_rooms,id',
@@ -38,8 +40,7 @@ class RescheduledSessionController extends Controller
 
         $timetable = TimeTable::with('course')->findOrFail($data['timetable_id']);
 
-        // Ensure teacher owns the timetable (Course.owner holds teacher assignment)
-        if (!$timetable->course || ($timetable->course->teacher_id ?? null) !== auth()->id()) {
+        if (!$this->teacherOwnsTimetable($timetable, $teacherId)) {
             abort(403, 'You may only reschedule your own sessions.');
         }
 
@@ -58,7 +59,7 @@ class RescheduledSessionController extends Controller
         $newStart = $data['new_start_time'];
         $newEnd = $data['new_end_time'];
 
-        $conflict = TimeTable::where('teacher_id', auth()->id())
+        $conflict = TimeTable::where('teacher_id', $teacherId)
             ->where('day', $newDay)
             ->where(function($q) use ($newStart, $newEnd) {
                 $q->whereBetween('start_time', [$newStart, $newEnd])
@@ -88,7 +89,7 @@ class RescheduledSessionController extends Controller
         }
 
         // conflict checks with existing reschedules
-        $otherRes = RescheduledSession::where('teacher_id', auth()->id())
+        $otherRes = RescheduledSession::where('teacher_id', $teacherId)
             ->whereIn('status', ['pending','approved'])
             ->where('new_date', $data['new_date'])
             ->where(function($q) use ($newStart, $newEnd) {
@@ -106,7 +107,7 @@ class RescheduledSessionController extends Controller
         $res = RescheduledSession::create([
             'timetable_id' => $data['timetable_id'],
             'classroom_id' => $data['classroom_id'] ?? null,
-            'teacher_id' => auth()->id(),
+            'teacher_id' => $teacherId,
             'original_date' => $data['original_date'],
             'original_start_time' => $data['original_start_time'],
             'original_end_time' => $data['original_end_time'],
@@ -118,8 +119,19 @@ class RescheduledSessionController extends Controller
             'status' => 'pending',
         ]);
 
-        Log::info('[Reschedule] created', ['id' => $res->id, 'teacher' => auth()->id(), 'timetable' => $data['timetable_id']]);
+        Log::info('[Reschedule] created', ['id' => $res->id, 'teacher' => $teacherId, 'timetable' => $data['timetable_id']]);
 
         return redirect()->route('teacher.timetable')->with('success', 'Reschedule request submitted.');
+    }
+
+    private function teacherOwnsTimetable(TimeTable $timetable, int $teacherId): bool
+    {
+        if ((int) $timetable->teacher_id === $teacherId) {
+            return true;
+        }
+
+        $courseTeacherId = $timetable->course?->teacher_id;
+
+        return $courseTeacherId !== null && (int) $courseTeacherId === $teacherId;
     }
 }
