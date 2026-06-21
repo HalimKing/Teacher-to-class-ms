@@ -325,3 +325,416 @@ it('allows a lecturer to reschedule when assigned on the timetable even if cours
 
     expect(RescheduledSession::query()->where('timetable_id', $timetable->id)->exists())->toBeTrue();
 });
+
+it('shows rescheduled session as active on the new date for cross-day reschedules', function () {
+    $sunday = Carbon::parse('next Sunday')->startOfDay();
+    $monday = $sunday->copy()->addDay();
+
+    Carbon::setTestNow($monday->copy()->setTime(14, 0));
+
+    $timetable = TimeTable::create([
+        'academic_year_id' => $this->academicYear->id,
+        'course_id' => $this->course->id,
+        'class_room_id' => $this->originalClassroom->id,
+        'teacher_id' => $this->teacher->id,
+        'staff_type' => Teacher::STAFF_TYPE_LECTURER,
+        'day' => 'Sunday',
+        'day_of_week' => 'Sunday',
+        'start_time' => '08:00:00',
+        'end_time' => '10:00:00',
+    ]);
+
+    RescheduledSession::create([
+        'timetable_id' => $timetable->id,
+        'teacher_id' => $this->teacher->id,
+        'classroom_id' => $this->newClassroom->id,
+        'original_date' => $sunday->toDateString(),
+        'original_start_time' => '08:00:00',
+        'original_end_time' => '10:00:00',
+        'new_date' => $monday->toDateString(),
+        'new_start_time' => '14:30:00',
+        'new_end_time' => '17:30:00',
+        'status' => RescheduledSession::STATUS_APPROVED,
+    ]);
+
+    $response = $this->actingAs($this->teacher, 'teacher')
+        ->getJson('/teacher/attendance/todays-classes');
+
+    $response->assertOk();
+
+    $session = collect($response->json('data'))
+        ->firstWhere('timetable_id', $timetable->id);
+
+    expect($session)->not->toBeNull()
+        ->and($session['attendance_state'])->toBe('rescheduled_active')
+        ->and($session['can_take_attendance'])->toBeTrue()
+        ->and($session['start_time'])->toBe('14:30:00')
+        ->and($session['end_time'])->toBe('17:30:00')
+        ->and($session['building'])->toBe('Hall 4');
+
+    Carbon::setTestNow();
+});
+
+it('allows check-in on the rescheduled date for cross-day reschedules', function () {
+    $sunday = Carbon::parse('next Sunday')->startOfDay();
+    $monday = $sunday->copy()->addDay();
+
+    Carbon::setTestNow($monday->copy()->setTime(14, 35));
+
+    $timetable = TimeTable::create([
+        'academic_year_id' => $this->academicYear->id,
+        'course_id' => $this->course->id,
+        'class_room_id' => $this->originalClassroom->id,
+        'teacher_id' => $this->teacher->id,
+        'staff_type' => Teacher::STAFF_TYPE_LECTURER,
+        'day' => 'Sunday',
+        'day_of_week' => 'Sunday',
+        'start_time' => '08:00:00',
+        'end_time' => '10:00:00',
+    ]);
+
+    $reschedule = RescheduledSession::create([
+        'timetable_id' => $timetable->id,
+        'teacher_id' => $this->teacher->id,
+        'classroom_id' => $this->newClassroom->id,
+        'original_date' => $sunday->toDateString(),
+        'original_start_time' => '08:00:00',
+        'original_end_time' => '10:00:00',
+        'new_date' => $monday->toDateString(),
+        'new_start_time' => '14:30:00',
+        'new_end_time' => '17:30:00',
+        'status' => RescheduledSession::STATUS_APPROVED,
+    ]);
+
+    $this->actingAs($this->teacher, 'teacher')
+        ->postJson('/teacher/attendance/check-in', [
+            'coordinates' => ['latitude' => 1.2345, 'longitude' => 2.3456, 'accuracy' => 5],
+            'course_id' => $this->course->id,
+            'course_name' => $this->course->name,
+            'class_room' => $this->newClassroom->name,
+            'timetable_id' => $timetable->id,
+            'check_in_time' => $monday->copy()->setTime(14, 35)->toDateTimeString(),
+            'distance' => 10,
+            'within_range' => true,
+        ])
+        ->assertOk()
+        ->assertJson(['success' => true]);
+
+    $this->assertDatabaseHas('teacher_attendances', [
+        'teacher_id' => $this->teacher->id,
+        'timetable_id' => $timetable->id,
+        'rescheduled_session_id' => $reschedule->id,
+    ]);
+
+    expect(\App\Models\TeacherAttendance::query()
+        ->where('teacher_id', $this->teacher->id)
+        ->where('timetable_id', $timetable->id)
+        ->whereDate('date', $monday->toDateString())
+        ->exists())->toBeTrue();
+
+    Carbon::setTestNow();
+});
+
+it('activates same-day reschedules once the rescheduled attendance window opens', function () {
+    $today = Carbon::parse('2026-06-20'); // Saturday
+    Carbon::setTestNow($today->copy()->setTime(15, 45));
+
+    $timetable = TimeTable::create([
+        'academic_year_id' => $this->academicYear->id,
+        'course_id' => $this->course->id,
+        'class_room_id' => $this->originalClassroom->id,
+        'teacher_id' => $this->teacher->id,
+        'staff_type' => Teacher::STAFF_TYPE_LECTURER,
+        'day' => 'Saturday',
+        'day_of_week' => 'Saturday',
+        'start_time' => '15:20:00',
+        'end_time' => '15:38:00',
+    ]);
+
+    RescheduledSession::create([
+        'timetable_id' => $timetable->id,
+        'teacher_id' => $this->teacher->id,
+        'classroom_id' => $this->originalClassroom->id,
+        'original_date' => $today->toDateString(),
+        'original_start_time' => '15:20:00',
+        'original_end_time' => '15:38:00',
+        'new_date' => $today->toDateString(),
+        'new_start_time' => '15:50:00',
+        'new_end_time' => '16:00:00',
+        'status' => RescheduledSession::STATUS_APPROVED,
+    ]);
+
+    $response = $this->actingAs($this->teacher, 'teacher')
+        ->getJson('/teacher/attendance/todays-classes');
+
+    $response->assertOk();
+
+    $session = collect($response->json('data'))
+        ->firstWhere('timetable_id', $timetable->id);
+
+    expect($session)->not->toBeNull()
+        ->and($session['attendance_state'])->toBe('rescheduled_active')
+        ->and($session['can_take_attendance'])->toBeTrue()
+        ->and($session['start_time'])->toBe('15:50:00')
+        ->and($session['end_time'])->toBe('16:00:00');
+
+    Carbon::setTestNow();
+});
+
+it('keeps same-day reschedules blocked before the rescheduled attendance window opens', function () {
+    $today = Carbon::parse('2026-06-20'); // Saturday
+    Carbon::setTestNow($today->copy()->setTime(15, 10));
+
+    $timetable = TimeTable::create([
+        'academic_year_id' => $this->academicYear->id,
+        'course_id' => $this->course->id,
+        'class_room_id' => $this->originalClassroom->id,
+        'teacher_id' => $this->teacher->id,
+        'staff_type' => Teacher::STAFF_TYPE_LECTURER,
+        'day' => 'Saturday',
+        'day_of_week' => 'Saturday',
+        'start_time' => '15:20:00',
+        'end_time' => '15:38:00',
+    ]);
+
+    RescheduledSession::create([
+        'timetable_id' => $timetable->id,
+        'teacher_id' => $this->teacher->id,
+        'classroom_id' => $this->originalClassroom->id,
+        'original_date' => $today->toDateString(),
+        'original_start_time' => '15:20:00',
+        'original_end_time' => '15:38:00',
+        'new_date' => $today->toDateString(),
+        'new_start_time' => '15:50:00',
+        'new_end_time' => '16:00:00',
+        'status' => RescheduledSession::STATUS_APPROVED,
+    ]);
+
+    $response = $this->actingAs($this->teacher, 'teacher')
+        ->getJson('/teacher/attendance/todays-classes');
+
+    $response->assertOk();
+
+    $session = collect($response->json('data'))
+        ->firstWhere('timetable_id', $timetable->id);
+
+    expect($session)->not->toBeNull()
+        ->and($session['attendance_state'])->toBe('rescheduled_away')
+        ->and($session['can_take_attendance'])->toBeFalse();
+
+    Carbon::setTestNow();
+});
+
+it('marks rescheduled sessions as missed when auto-absent was recorded without rescheduled_session_id', function () {
+    $today = Carbon::parse('2026-06-20');
+    Carbon::setTestNow($today->copy()->setTime(16, 10));
+
+    $timetable = TimeTable::create([
+        'academic_year_id' => $this->academicYear->id,
+        'course_id' => $this->course->id,
+        'class_room_id' => $this->originalClassroom->id,
+        'teacher_id' => $this->teacher->id,
+        'staff_type' => Teacher::STAFF_TYPE_LECTURER,
+        'day' => 'Saturday',
+        'day_of_week' => 'Saturday',
+        'start_time' => '15:20:00',
+        'end_time' => '15:38:00',
+    ]);
+
+    RescheduledSession::create([
+        'timetable_id' => $timetable->id,
+        'teacher_id' => $this->teacher->id,
+        'classroom_id' => $this->originalClassroom->id,
+        'original_date' => $today->toDateString(),
+        'original_start_time' => '15:20:00',
+        'original_end_time' => '15:38:00',
+        'new_date' => $today->toDateString(),
+        'new_start_time' => '15:50:00',
+        'new_end_time' => '16:00:00',
+        'status' => RescheduledSession::STATUS_APPROVED,
+    ]);
+
+    \App\Models\TeacherAttendance::create([
+        'teacher_id' => $this->teacher->id,
+        'timetable_id' => $timetable->id,
+        'course_id' => $this->course->id,
+        'classroom_id' => $this->originalClassroom->id,
+        'academic_year_id' => $this->academicYear->id,
+        'date' => $today->toDateString(),
+        'status' => 'absent',
+        'attendance_source' => 'system',
+        'auto_generated' => true,
+        'auto_generated_at' => $today->copy()->setTime(16, 5),
+        'auto_absence_reason' => 'session_expired',
+        'rescheduled_session_id' => null,
+    ]);
+
+    $response = $this->actingAs($this->teacher, 'teacher')
+        ->getJson('/teacher/attendance/todays-classes');
+
+    $response->assertOk();
+
+    $session = collect($response->json('data'))
+        ->firstWhere('timetable_id', $timetable->id);
+
+    expect($session)->not->toBeNull()
+        ->and($session['is_missed'])->toBeTrue()
+        ->and($session['can_take_attendance'])->toBeFalse()
+        ->and($session['attendance_state'])->toBe('missed');
+
+    $this->actingAs($this->teacher, 'teacher')
+        ->postJson('/teacher/attendance/check-in', [
+            'coordinates' => ['latitude' => 1.2345, 'longitude' => 2.3456, 'accuracy' => 5],
+            'course_id' => $this->course->id,
+            'course_name' => $this->course->name,
+            'class_room' => $this->originalClassroom->name,
+            'timetable_id' => $timetable->id,
+            'check_in_time' => $today->copy()->setTime(16, 10)->toDateTimeString(),
+            'distance' => 10,
+            'within_range' => true,
+        ])
+        ->assertStatus(422)
+        ->assertJson([
+            'success' => false,
+            'state' => 'missed',
+        ]);
+
+    Carbon::setTestNow();
+});
+
+it('allows check-in to a fresh session when another session was auto-marked absent the same day', function () {
+    $today = Carbon::parse('2026-06-20');
+    Carbon::setTestNow($today->copy()->setTime(17, 40));
+
+    $missedTimetable = TimeTable::create([
+        'academic_year_id' => $this->academicYear->id,
+        'course_id' => $this->course->id,
+        'class_room_id' => $this->originalClassroom->id,
+        'teacher_id' => $this->teacher->id,
+        'staff_type' => Teacher::STAFF_TYPE_LECTURER,
+        'day' => 'Saturday',
+        'day_of_week' => 'Saturday',
+        'start_time' => '15:20:00',
+        'end_time' => '15:38:00',
+    ]);
+
+    $freshCourse = Course::create([
+        'course_code' => 'ECO-102',
+        'name' => 'Economics II',
+        'program_id' => $this->program->id,
+        'teacher_id' => $this->teacher->id,
+        'student_size' => 25,
+    ]);
+
+    $freshTimetable = TimeTable::create([
+        'academic_year_id' => $this->academicYear->id,
+        'course_id' => $freshCourse->id,
+        'class_room_id' => $this->newClassroom->id,
+        'teacher_id' => $this->teacher->id,
+        'staff_type' => Teacher::STAFF_TYPE_LECTURER,
+        'day' => 'Saturday',
+        'day_of_week' => 'Saturday',
+        'start_time' => '17:30:00',
+        'end_time' => '18:30:00',
+    ]);
+
+    \App\Models\TeacherAttendance::create([
+        'teacher_id' => $this->teacher->id,
+        'timetable_id' => $missedTimetable->id,
+        'course_id' => $this->course->id,
+        'classroom_id' => $this->originalClassroom->id,
+        'academic_year_id' => $this->academicYear->id,
+        'date' => $today->toDateString(),
+        'status' => 'absent',
+        'attendance_source' => 'system',
+        'auto_generated' => true,
+        'auto_generated_at' => $today->copy()->setTime(16, 5),
+        'auto_absence_reason' => 'session_expired',
+    ]);
+
+    $this->actingAs($this->teacher, 'teacher')
+        ->postJson('/teacher/attendance/check-in', [
+            'coordinates' => ['latitude' => 1.2345, 'longitude' => 2.3456, 'accuracy' => 5],
+            'course_id' => $freshCourse->id,
+            'course_name' => $freshCourse->name,
+            'class_room' => $this->newClassroom->name,
+            'timetable_id' => $freshTimetable->id,
+            'check_in_time' => $today->copy()->setTime(17, 40)->toDateTimeString(),
+            'distance' => 10,
+            'within_range' => true,
+        ])
+        ->assertOk()
+        ->assertJson(['success' => true]);
+
+    $this->assertDatabaseHas('teacher_attendances', [
+        'teacher_id' => $this->teacher->id,
+        'timetable_id' => $freshTimetable->id,
+        'status' => 'pending',
+    ]);
+
+    Carbon::setTestNow();
+});
+
+it('allows check-out for an open rescheduled session check-in on the same day', function () {
+    $today = Carbon::parse('2026-06-20');
+    Carbon::setTestNow($today->copy()->setTime(15, 55));
+
+    $timetable = TimeTable::create([
+        'academic_year_id' => $this->academicYear->id,
+        'course_id' => $this->course->id,
+        'class_room_id' => $this->originalClassroom->id,
+        'teacher_id' => $this->teacher->id,
+        'staff_type' => Teacher::STAFF_TYPE_LECTURER,
+        'day' => 'Saturday',
+        'day_of_week' => 'Saturday',
+        'start_time' => '15:20:00',
+        'end_time' => '15:38:00',
+    ]);
+
+    $reschedule = RescheduledSession::create([
+        'timetable_id' => $timetable->id,
+        'teacher_id' => $this->teacher->id,
+        'classroom_id' => $this->originalClassroom->id,
+        'original_date' => $today->toDateString(),
+        'original_start_time' => '15:20:00',
+        'original_end_time' => '15:38:00',
+        'new_date' => $today->toDateString(),
+        'new_start_time' => '15:50:00',
+        'new_end_time' => '16:00:00',
+        'status' => RescheduledSession::STATUS_APPROVED,
+    ]);
+
+    $attendance = \App\Models\TeacherAttendance::create([
+        'teacher_id' => $this->teacher->id,
+        'timetable_id' => $timetable->id,
+        'rescheduled_session_id' => $reschedule->id,
+        'course_id' => $this->course->id,
+        'classroom_id' => $this->originalClassroom->id,
+        'academic_year_id' => $this->academicYear->id,
+        'date' => $today->toDateString(),
+        'check_in_time' => '15:52:00',
+        'check_in_latitude' => 1.2345,
+        'check_in_longitude' => 2.3456,
+        'check_in_distance' => 10,
+        'check_in_within_range' => true,
+        'status' => 'pending',
+    ]);
+
+    $this->actingAs($this->teacher, 'teacher')
+        ->postJson('/teacher/attendance/check-out', [
+            'attendance_id' => $attendance->id,
+            'check_out_time' => $today->copy()->setTime(15, 55)->toDateTimeString(),
+            'coordinates' => ['latitude' => 1.2345, 'longitude' => 2.3456, 'accuracy' => 5],
+            'distance' => 5,
+            'within_range' => true,
+        ])
+        ->assertOk()
+        ->assertJson([
+            'success' => true,
+            'departure' => ['category' => 'early_leave'],
+        ]);
+
+    expect($attendance->fresh()->check_out_time)->not->toBeNull();
+
+    Carbon::setTestNow();
+});

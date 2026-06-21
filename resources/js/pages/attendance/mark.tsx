@@ -13,9 +13,12 @@ interface SessionTiming {
     can_check_out_now?: boolean;
     attendance_opens_message?: string | null;
     checkout_opens_message?: string | null;
+    checkout_grace_deadline_display?: string | null;
     allowed_check_in_time_display?: string | null;
     scheduled_start_time_display?: string | null;
     scheduled_end_time_display?: string | null;
+    is_within_checkout_grace?: boolean;
+    is_after_checkout_grace?: boolean;
 }
 
 interface PortalSession {
@@ -32,6 +35,7 @@ interface PortalSession {
     coordinates?: { lat: number | null; lng: number | null };
     radius?: number;
     is_completed?: boolean;
+    is_missed?: boolean;
     can_take_attendance?: boolean;
     attendance_blocked_message?: string | null;
     attendance_state?: string;
@@ -143,9 +147,34 @@ export default function AttendancePortalMarkPage({
     );
 
     const activeSession = useMemo(
-        () => sessions.find((session) => session.attendance_status?.status === 'checked_in') || null,
+        () =>
+            sessions.find(
+                (session) =>
+                    session.attendance_status?.check_in_time &&
+                    !session.attendance_status?.check_out_time &&
+                    session.attendance_status?.status === 'checked_in',
+            ) || null,
         [sessions],
     );
+
+    const isSessionMissed = (session: PortalSession | null) =>
+        Boolean(
+            session?.is_missed ||
+                session?.attendance_state === 'missed' ||
+                session?.attendance_status?.status === 'absent',
+        );
+
+    const isBeforeSessionEnd = (session: PortalSession | null) => {
+        if (!session) {
+            return false;
+        }
+
+        const now = new Date();
+        const currentMinutes = now.getHours() * 60 + now.getMinutes();
+        const [hours, minutes] = session.end_time.split(':').map(Number);
+
+        return currentMinutes < hours * 60 + minutes;
+    };
 
     const normalizeSessions = (items: PortalSession[]): PortalSession[] =>
         items.map((item) => {
@@ -173,8 +202,18 @@ export default function AttendancePortalMarkPage({
             const response = await requestJson<ApiResponse>(endpoints.list);
             const normalized = normalizeSessions(response.data || []);
             setSessions(normalized);
-            const checkedIn = normalized.find((session) => session.attendance_status?.status === 'checked_in');
-            setSelected(checkedIn || normalized.find((session) => !session.is_completed) || normalized[0] || null);
+            const checkedIn = normalized.find(
+                (session) =>
+                    session.attendance_status?.check_in_time &&
+                    !session.attendance_status?.check_out_time &&
+                    session.attendance_status?.status === 'checked_in',
+            );
+            setSelected(
+                checkedIn ||
+                    normalized.find((session) => !session.is_completed && !isSessionMissed(session) && session.can_take_attendance !== false) ||
+                    normalized[0] ||
+                    null,
+            );
         } catch (error) {
             setMessage({
                 type: 'error',
@@ -259,10 +298,14 @@ export default function AttendancePortalMarkPage({
             setMessage({ type: 'error', text: 'Please choose a session first.' });
             return;
         }
-        if (selected.can_take_attendance === false) {
+        if (selected.can_take_attendance === false || isSessionMissed(selected)) {
             setMessage({
                 type: 'error',
-                text: selected.attendance_blocked_message || 'Attendance is not available for this session.',
+                text:
+                    selected.attendance_blocked_message ||
+                    (isSessionMissed(selected)
+                        ? 'This session was marked as missed. Attendance is no longer available.'
+                        : 'Attendance is not available for this session.'),
             });
             return;
         }
@@ -397,10 +440,32 @@ export default function AttendancePortalMarkPage({
         !activeSession &&
         selected &&
         !selected.is_completed &&
+        !isSessionMissed(selected) &&
         selected.can_take_attendance !== false &&
-        Boolean(selected.timing?.can_check_in_now);
+        Boolean(selected.timing?.can_check_in_now) &&
+        !(selected.timing?.is_after_checkout_grace && !selected.attendance_status);
 
-    const canCheckOut = !!activeSession && Boolean(activeSession.timing?.can_check_out_now);
+    const canCheckOut =
+        !!activeSession &&
+        !activeSession.is_completed &&
+        !isSessionMissed(activeSession) &&
+        !!activeSession.attendance_status?.id;
+
+    const checkOutLabel = (() => {
+        if (!activeSession) {
+            return 'Check Out';
+        }
+
+        if (activeSession.timing?.is_after_checkout_grace) {
+            return 'Check Out (Overtime)';
+        }
+
+        if (isBeforeSessionEnd(activeSession)) {
+            return 'Check Out (Early Leave)';
+        }
+
+        return 'Check Out';
+    })();
 
     return (
         <AttendancePortalLayout>
@@ -478,6 +543,18 @@ export default function AttendancePortalMarkPage({
                     <RescheduleSessionBanner reschedule={selected.reschedule} variant="active" compact />
                 )}
 
+                {isSessionMissed(selected) && (
+                    <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                        <div className="flex gap-2">
+                            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                            <p>
+                                {selected?.attendance_blocked_message ||
+                                    'This session was marked as missed. Attendance is no longer available.'}
+                            </p>
+                        </div>
+                    </div>
+                )}
+
                 {selected?.attendance_state === 'rescheduled_away' && !selected.reschedule && (
                     <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                         <div className="flex gap-2">
@@ -513,10 +590,19 @@ export default function AttendancePortalMarkPage({
                         </button>
                     )}
 
-                    {activeSession && !canCheckOut && (
-                        <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-center text-sm text-blue-800">
-                            {activeSession.timing?.checkout_opens_message ||
-                                `Check-out opens at ${formatTime(activeSession.end_time)}.`}
+                    {activeSession && canCheckOut && isBeforeSessionEnd(activeSession) && (
+                        <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-center text-sm text-sky-800">
+                            You can check out anytime. Early departure will be recorded as early leave.
+                        </div>
+                    )}
+
+                    {activeSession && canCheckOut && activeSession.timing?.is_after_checkout_grace && (
+                        <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-center text-sm text-orange-800">
+                            Check-out will be recorded as overtime
+                            {activeSession.timing.checkout_grace_deadline_display
+                                ? ` (grace ended at ${activeSession.timing.checkout_grace_deadline_display})`
+                                : ''}
+                            .
                         </div>
                     )}
 
@@ -528,7 +614,7 @@ export default function AttendancePortalMarkPage({
                             className="flex w-full items-center justify-center gap-2 rounded-2xl bg-violet-600 px-6 py-4 text-lg font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
                         >
                             {submitting ? <Loader2 className="size-5 animate-spin" /> : <LogOut className="size-5" />}
-                            Check Out
+                            {checkOutLabel}
                         </button>
                     )}
 
@@ -582,6 +668,8 @@ function SessionCard({
                     <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">Checked in</span>
                 ) : session.is_completed ? (
                     <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">Done</span>
+                ) : session.is_missed || session.attendance_state === 'missed' ? (
+                    <span className="rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-700">Missed</span>
                 ) : session.attendance_state === 'rescheduled_away' ? (
                     <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Rescheduled</span>
                 ) : null}

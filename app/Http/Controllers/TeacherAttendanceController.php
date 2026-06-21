@@ -143,9 +143,10 @@ class TeacherAttendanceController extends Controller
         }
 
         // Check if user already has an active check-in for today
-        $existingActiveAttendance = TeacherAttendance::where('teacher_id', auth('teacher')->id())
-            ->where('date', Carbon::now()->format('Y-m-d'))
-            ->whereNull('check_out_time')
+        $existingActiveAttendance = TeacherAttendance::query()
+            ->where('teacher_id', auth('teacher')->id())
+            ->whereDate('date', $now)
+            ->activeCheckIn()
             ->first();
 
         if ($existingActiveAttendance) {
@@ -354,10 +355,10 @@ class TeacherAttendanceController extends Controller
         }
 
         $now = Carbon::now();
-        $attendanceContext = $this->rescheduledAttendance->resolveAttendanceContext(
+        $attendanceContext = $this->rescheduledAttendance->resolveAttendanceContextForRecord(
             $timetable,
-            Carbon::parse($attendance->date),
-            $attendance->rescheduledSession,
+            $attendance,
+            $now,
         );
 
         if (!$attendanceContext['can_take_attendance']) {
@@ -376,13 +377,6 @@ class TeacherAttendanceController extends Controller
         }
 
         $scheduledEnd = $this->timingService->parseScheduleTime((string) $attendanceContext['effective_end_time'], $now);
-
-        if (!$this->timingService->canCheckOutAfterEnd($now, $scheduledEnd)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Class is still ongoing. Check-out opens at ' . $scheduledEnd->format('h:i A') . '.',
-            ], 400);
-        }
 
         $teacher = auth('teacher')->user();
         if ($facialRecognition->isEnabled()) {
@@ -480,6 +474,7 @@ class TeacherAttendanceController extends Controller
         return response()->json([
             'success' => true,
             'message' => match ($checkOutOutcome['departure_category']) {
+                'early_leave' => 'Check-out recorded as early leave.',
                 'overtime' => 'Check-out recorded as overtime (' . $checkOutOutcome['minutes_overtime'] . ' minute(s) after grace period).',
                 default => 'Check-out successful.',
             },

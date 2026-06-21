@@ -146,9 +146,10 @@ class StaffAttendanceController extends Controller
             ]);
         }
 
-        $activeAttendance = StaffAttendance::where('staff_id', $staff->id)
+        $activeAttendance = StaffAttendance::query()
+            ->where('staff_id', $staff->id)
             ->whereDate('date', $today)
-            ->whereNull('check_out_time')
+            ->activeCheckIn()
             ->first();
 
         if ($activeAttendance) {

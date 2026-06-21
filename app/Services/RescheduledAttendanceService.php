@@ -8,6 +8,7 @@ use App\Models\TeacherAttendance;
 use App\Models\TimeTable;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 
 class RescheduledAttendanceService
 {
@@ -112,11 +113,37 @@ class RescheduledAttendanceService
      */
     public function resolveAttendanceContext(TimeTable $timetable, Carbon $date, ?RescheduledSession $reschedule = null): array
     {
+        $date = $this->normalizeEvaluationTime($date);
         $reschedule ??= $this->findApprovedReschedule((int) $timetable->id, $date);
         $dateString = $date->toDateString();
+        $originalDateString = $reschedule
+            ? $this->effectiveOriginalDate($reschedule, $timetable)
+            : null;
 
-        if ($reschedule && $this->effectiveOriginalDate($reschedule, $timetable) === $dateString) {
-            return [
+        if ($reschedule && $this->matchesDate($reschedule->new_date, $dateString)) {
+            $isCrossDay = $originalDateString !== $dateString;
+            $isSameDayActive = !$isCrossDay && $this->isRescheduledSessionVisible($reschedule, $date);
+
+            if ($isCrossDay || $isSameDayActive) {
+                $context = [
+                    'state' => self::STATE_RESCHEDULED_ACTIVE,
+                    'can_take_attendance' => true,
+                    'attendance_blocked_message' => null,
+                    'rescheduled_session_id' => $reschedule->id,
+                    'effective_start_time' => (string) $reschedule->new_start_time,
+                    'effective_end_time' => (string) $reschedule->new_end_time,
+                    'effective_classroom' => $reschedule->classroom ?? $timetable->classRoom,
+                    'reschedule' => $this->formatReschedulePayload($timetable, $reschedule),
+                ];
+
+                $this->logAttendanceContextDecision($timetable, $date, $reschedule, $context, 'new_date_active');
+
+                return $context;
+            }
+        }
+
+        if ($reschedule && $originalDateString === $dateString) {
+            $context = [
                 'state' => self::STATE_RESCHEDULED_AWAY,
                 'can_take_attendance' => false,
                 'attendance_blocked_message' => 'Attendance is unavailable because this session has been rescheduled.',
@@ -126,9 +153,49 @@ class RescheduledAttendanceService
                 'effective_classroom' => $timetable->classRoom,
                 'reschedule' => $this->formatReschedulePayload($timetable, $reschedule),
             ];
+
+            $this->logAttendanceContextDecision($timetable, $date, $reschedule, $context, 'original_date_away');
+
+            return $context;
         }
 
-        if ($reschedule && $this->matchesDate($reschedule->new_date, $dateString)) {
+        $context = [
+            'state' => self::STATE_NORMAL,
+            'can_take_attendance' => true,
+            'attendance_blocked_message' => null,
+            'rescheduled_session_id' => null,
+            'effective_start_time' => (string) $timetable->start_time,
+            'effective_end_time' => (string) $timetable->end_time,
+            'effective_classroom' => $timetable->classRoom,
+            'reschedule' => null,
+        ];
+
+        if ($reschedule) {
+            $this->logAttendanceContextDecision($timetable, $date, $reschedule, $context, 'no_matching_date');
+        }
+
+        return $context;
+    }
+
+    /**
+     * Resolve attendance context for an existing open attendance record (e.g. check-out).
+     *
+     * @return array<string, mixed>
+     */
+    public function resolveAttendanceContextForRecord(
+        TimeTable $timetable,
+        TeacherAttendance $attendance,
+        Carbon $reference,
+    ): array {
+        $reschedule = $attendance->rescheduled_session_id
+            ? ($attendance->relationLoaded('rescheduledSession')
+                ? $attendance->rescheduledSession
+                : RescheduledSession::query()
+                    ->with(['timetable.course', 'timetable.classRoom', 'classroom', 'approver:id,name'])
+                    ->find($attendance->rescheduled_session_id))
+            : null;
+
+        if ($attendance->check_in_time && !$this->isMissedAttendance($attendance) && $reschedule) {
             return [
                 'state' => self::STATE_RESCHEDULED_ACTIVE,
                 'can_take_attendance' => true,
@@ -141,16 +208,12 @@ class RescheduledAttendanceService
             ];
         }
 
-        return [
-            'state' => self::STATE_NORMAL,
-            'can_take_attendance' => true,
-            'attendance_blocked_message' => null,
-            'rescheduled_session_id' => null,
-            'effective_start_time' => (string) $timetable->start_time,
-            'effective_end_time' => (string) $timetable->end_time,
-            'effective_classroom' => $timetable->classRoom,
-            'reschedule' => null,
-        ];
+        $attendanceDate = Carbon::parse($attendance->date);
+        $evaluationDate = $attendanceDate->toDateString() === $reference->toDateString()
+            ? $reference
+            : $attendanceDate->copy()->endOfDay();
+
+        return $this->resolveAttendanceContext($timetable, $evaluationDate, $reschedule);
     }
 
     public function assertAttendanceAllowed(TimeTable $timetable, Carbon $date): ?array
@@ -170,22 +233,42 @@ class RescheduledAttendanceService
 
     public function assertSessionAttendanceAllowed(TimeTable $timetable, Carbon $date, ?int $rescheduledSessionId = null): ?array
     {
-        if ($blocked = $this->assertAttendanceAllowed($timetable, $date)) {
-            return $blocked;
+        $context = $this->resolveAttendanceContext($timetable, $date);
+
+        if (!$context['can_take_attendance']) {
+            return [
+                'success' => false,
+                'message' => $context['attendance_blocked_message'],
+                'state' => $context['state'],
+            ];
         }
 
-        $attendance = TeacherAttendance::query()
-            ->where('teacher_id', $timetable->teacher_id)
-            ->where('timetable_id', $timetable->id)
-            ->whereDate('date', $date->toDateString())
-            ->when(
-                $rescheduledSessionId,
-                fn ($query) => $query->where('rescheduled_session_id', $rescheduledSessionId),
-                fn ($query) => $query->whereNull('rescheduled_session_id'),
-            )
-            ->first();
+        $sessionRescheduleId = $rescheduledSessionId ?? $context['rescheduled_session_id'];
+        $attendance = $this->findAttendanceForSession(
+            collect(),
+            (int) $timetable->teacher_id,
+            (int) $timetable->id,
+            $date->toDateString(),
+            $sessionRescheduleId,
+        );
 
         if ($this->isMissedAttendance($attendance)) {
+            return [
+                'success' => false,
+                'message' => 'This session was marked as missed. Attendance is no longer available.',
+                'state' => 'missed',
+            ];
+        }
+
+        $isRescheduledAway = $context['state'] === self::STATE_RESCHEDULED_AWAY;
+        $timing = $this->timingService->buildScheduleTiming(
+            $isRescheduledAway ? (string) $timetable->start_time : $context['effective_start_time'],
+            $isRescheduledAway ? (string) $timetable->end_time : $context['effective_end_time'],
+            $date,
+            AttendanceTimingService::ROLE_TEACHER
+        );
+
+        if (!$attendance && ($timing['is_after_checkout_grace'] ?? false)) {
             return [
                 'success' => false,
                 'message' => 'This session was marked as missed. Attendance is no longer available.',
@@ -214,7 +297,9 @@ class RescheduledAttendanceService
         $attendanceDate = $date->toDateString();
         $timetableIds = [];
 
-        foreach (TimeTable::todaysLectures() as $lecture) {
+        $todaysLectures = $this->lecturesForTeacherOnDate($teacherId, $date);
+
+        foreach ($todaysLectures as $lecture) {
             $timetableIds[] = $lecture->id;
         }
 
@@ -230,9 +315,9 @@ class RescheduledAttendanceService
             ->when(!empty($timetableIds), fn ($query) => $query->whereIn('timetable_id', array_unique($timetableIds)))
             ->get();
 
-        foreach (TimeTable::todaysLectures() as $lecture) {
+        foreach ($todaysLectures as $lecture) {
             $processedTimetableIds[] = $lecture->id;
-            $reschedule = $movedAway->get($lecture->id) ?? $activeToday->get($lecture->id);
+            $reschedule = $activeToday->get($lecture->id) ?? $movedAway->get($lecture->id);
             $classes[] = $this->buildClassPayload($lecture, $date, $teacherId, $reschedule, $attendances);
         }
 
@@ -306,6 +391,25 @@ class RescheduledAttendanceService
             $attendanceBlockedMessage = 'This session was marked as missed. Attendance is no longer available.';
         }
 
+        $timing = $this->timingService->buildScheduleTiming(
+            $isRescheduledAway ? (string) $lecture->start_time : $attendanceContext['effective_start_time'],
+            $isRescheduledAway ? (string) $lecture->end_time : $attendanceContext['effective_end_time'],
+            $date,
+            AttendanceTimingService::ROLE_TEACHER
+        );
+
+        if (
+            !$attendance
+            && !$isMissed
+            && !$isRescheduledAway
+            && $attendanceContext['can_take_attendance']
+            && ($timing['is_after_checkout_grace'] ?? false)
+        ) {
+            $isMissed = true;
+            $canTakeAttendance = false;
+            $attendanceBlockedMessage = 'This session was marked as missed. Attendance is no longer available.';
+        }
+
         return [
             'timetable_id' => $lecture->id,
             'id' => $lecture->course->id,
@@ -333,13 +437,19 @@ class RescheduledAttendanceService
             'attendance_blocked_message' => $attendanceBlockedMessage,
             'rescheduled_session_id' => $attendanceContext['rescheduled_session_id'],
             'reschedule' => $attendanceContext['reschedule'],
-            'timing' => $this->timingService->buildScheduleTiming(
-                $isRescheduledAway ? (string) $lecture->start_time : $attendanceContext['effective_start_time'],
-                $isRescheduledAway ? (string) $lecture->end_time : $attendanceContext['effective_end_time'],
-                $date,
-                AttendanceTimingService::ROLE_TEACHER
-            ),
+            'timing' => $timing,
         ];
+    }
+
+    public function resolveActiveRescheduleForDate(TimeTable $timetable, Carbon $date): ?RescheduledSession
+    {
+        $context = $this->resolveAttendanceContext($timetable, $date);
+
+        if ($context['state'] !== self::STATE_RESCHEDULED_ACTIVE || empty($context['rescheduled_session_id'])) {
+            return null;
+        }
+
+        return RescheduledSession::query()->find($context['rescheduled_session_id']);
     }
 
     /**
@@ -372,20 +482,52 @@ class RescheduledAttendanceService
         string $date,
         ?int $rescheduledSessionId,
     ): ?TeacherAttendance {
+        $candidates = $this->attendanceCandidatesForSession($attendances, $teacherId, $timetableId, $date);
+
+        if ($rescheduledSessionId) {
+            $matched = $candidates->first(
+                fn (TeacherAttendance $attendance) => (int) $attendance->rescheduled_session_id === $rescheduledSessionId
+            );
+
+            if ($matched) {
+                return $matched;
+            }
+
+            $orphanAbsents = $candidates->filter(
+                fn (TeacherAttendance $attendance) => $this->isMissedAttendance($attendance)
+                    && empty($attendance->rescheduled_session_id)
+            );
+
+            if ($orphanAbsents->count() === 1) {
+                return $orphanAbsents->first();
+            }
+
+            return null;
+        }
+
+        return $candidates->first(
+            fn (TeacherAttendance $attendance) => empty($attendance->rescheduled_session_id)
+        );
+    }
+
+    /**
+     * @return Collection<int, TeacherAttendance>
+     */
+    private function attendanceCandidatesForSession(
+        Collection $attendances,
+        int $teacherId,
+        int $timetableId,
+        string $date,
+    ): Collection {
         if ($attendances->isEmpty()) {
             return TeacherAttendance::query()
                 ->where('teacher_id', $teacherId)
                 ->where('timetable_id', $timetableId)
                 ->whereDate('date', $date)
-                ->when(
-                    $rescheduledSessionId,
-                    fn ($query) => $query->where('rescheduled_session_id', $rescheduledSessionId),
-                    fn ($query) => $query->whereNull('rescheduled_session_id'),
-                )
-                ->first();
+                ->get();
         }
 
-        return $attendances->first(function (TeacherAttendance $attendance) use ($teacherId, $timetableId, $date, $rescheduledSessionId) {
+        return $attendances->filter(function (TeacherAttendance $attendance) use ($teacherId, $timetableId, $date) {
             if ((int) $attendance->teacher_id !== $teacherId) {
                 return false;
             }
@@ -394,12 +536,8 @@ class RescheduledAttendanceService
                 return false;
             }
 
-            if (Carbon::parse($attendance->date)->toDateString() !== $date) {
-                return false;
-            }
-
-            return (int) ($attendance->rescheduled_session_id ?? 0) === (int) ($rescheduledSessionId ?? 0);
-        });
+            return Carbon::parse($attendance->date)->toDateString() === $date;
+        })->values();
     }
 
     /**
@@ -484,7 +622,71 @@ class RescheduledAttendanceService
     {
         $reschedule = $this->findApprovedReschedule((int) $schedule->id, $date);
 
-        return $reschedule !== null && $this->effectiveOriginalDate($reschedule, $schedule) === $date->toDateString();
+        if (!$reschedule) {
+            return false;
+        }
+
+        return $this->resolveAttendanceContext($schedule, $date, $reschedule)['state'] === self::STATE_RESCHEDULED_AWAY;
+    }
+
+    /**
+     * @return Collection<int, TimeTable>
+     */
+    private function lecturesForTeacherOnDate(int $teacherId, Carbon $date): Collection
+    {
+        return TimeTable::query()
+            ->with(['course', 'classRoom'])
+            ->where('staff_type', \App\Models\Teacher::STAFF_TYPE_LECTURER)
+            ->where('teacher_id', $teacherId)
+            ->where('day_of_week', $date->format('l'))
+            ->orderBy('start_time')
+            ->get();
+    }
+
+    private function isRescheduledSessionVisible(RescheduledSession $reschedule, Carbon $date): bool
+    {
+        $newStart = $this->timingService->parseScheduleTime((string) $reschedule->new_start_time, $date);
+        $allowedCheckIn = $this->timingService->getAllowedCheckInTime($newStart, AttendanceTimingService::ROLE_TEACHER);
+
+        return $date->greaterThanOrEqualTo($allowedCheckIn);
+    }
+
+    private function normalizeEvaluationTime(Carbon $date): Carbon
+    {
+        if ($date->toDateString() === now()->toDateString() && $date->format('H:i:s') === '00:00:00') {
+            return now();
+        }
+
+        return $date;
+    }
+
+    /**
+     * @param  array<string, mixed>  $context
+     */
+    private function logAttendanceContextDecision(
+        TimeTable $timetable,
+        Carbon $date,
+        RescheduledSession $reschedule,
+        array $context,
+        string $reason,
+    ): void {
+        Log::debug('reschedule_attendance.context', [
+            'reason' => $reason,
+            'now' => $date->toDateTimeString(),
+            'timetable_id' => $timetable->id,
+            'teacher_id' => $timetable->teacher_id,
+            'original_date' => $this->effectiveOriginalDate($reschedule, $timetable),
+            'original_start_time' => $reschedule->original_start_time,
+            'original_end_time' => $reschedule->original_end_time,
+            'new_date' => Carbon::parse($reschedule->new_date)->toDateString(),
+            'new_start_time' => $reschedule->new_start_time,
+            'new_end_time' => $reschedule->new_end_time,
+            'effective_start_time' => $context['effective_start_time'] ?? null,
+            'effective_end_time' => $context['effective_end_time'] ?? null,
+            'state' => $context['state'] ?? null,
+            'can_take_attendance' => $context['can_take_attendance'] ?? null,
+            'excluded' => ($context['state'] ?? null) === self::STATE_RESCHEDULED_AWAY,
+        ]);
     }
 
     private function effectiveOriginalDate(RescheduledSession $reschedule, TimeTable $timetable): string

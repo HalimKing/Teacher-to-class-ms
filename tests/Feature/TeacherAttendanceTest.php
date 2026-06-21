@@ -6,12 +6,26 @@ use App\Models\Course;
 use App\Models\Program;
 use App\Models\Department;
 use App\Models\Faculty;
+use App\Models\SystemSetting;
 use App\Models\Teacher;
 use App\Models\TimeTable;
 use App\Models\TeacherAttendance;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
 
 beforeEach(function () {
+    Cache::forget('system_settings');
+
+    SystemSetting::query()->updateOrCreate(
+        ['key' => 'facial_recognition_enabled'],
+        [
+            'value' => '0',
+            'group' => 'attendance',
+            'type' => 'boolean',
+            'description' => 'Facial recognition disabled for tests',
+        ],
+    );
+
     // Create minimal domain data
     $this->faculty = Faculty::create(['name' => 'Test Faculty']);
     $this->department = Department::create(['name' => 'Test Dept', 'faculty_id' => $this->faculty->id]);
@@ -137,4 +151,51 @@ it('allows a teacher to check out successfully after class end', function () {
         'id' => $attendance->id,
         'check_out_within_range' => true,
     ]);
+});
+
+it('allows a teacher to check out before class end time', function () {
+    $start = Carbon::now()->subMinutes(30)->format('H:i:s');
+    $end = Carbon::now()->addMinutes(60)->format('H:i:s');
+
+    $timetable = TimeTable::create([
+        'academic_year_id' => $this->academicYear->id,
+        'course_id' => $this->course->id,
+        'class_room_id' => $this->classroom->id,
+        'teacher_id' => $this->teacher->id,
+        'day' => Carbon::now()->format('l'),
+        'day_of_week' => Carbon::now()->format('l'),
+        'start_time' => $start,
+        'end_time' => $end,
+    ]);
+
+    $attendance = TeacherAttendance::create([
+        'classroom_id' => $this->classroom->id,
+        'teacher_id' => $this->teacher->id,
+        'course_id' => $this->course->id,
+        'timetable_id' => $timetable->id,
+        'academic_year_id' => $this->academicYear->id,
+        'date' => Carbon::now()->format('Y-m-d'),
+        'check_in_time' => Carbon::now()->subMinutes(10)->format('H:i:s'),
+        'check_in_latitude' => 1.2345,
+        'check_in_longitude' => 2.3456,
+        'check_in_distance' => 10,
+        'check_in_within_range' => true,
+        'status' => 'pending',
+    ]);
+
+    $this->actingAs($this->teacher, 'teacher')
+        ->postJson('/teacher/attendance/check-out', [
+            'attendance_id' => $attendance->id,
+            'check_out_time' => Carbon::now()->toDateTimeString(),
+            'coordinates' => ['latitude' => 1.2345, 'longitude' => 2.3456, 'accuracy' => 5],
+            'distance' => 5,
+            'within_range' => true,
+        ])
+        ->assertOk()
+        ->assertJson([
+            'success' => true,
+            'departure' => ['category' => 'early_leave'],
+        ]);
+
+    expect($attendance->fresh()->departure_category)->toBe('early_leave');
 });

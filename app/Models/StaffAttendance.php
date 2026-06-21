@@ -67,4 +67,12 @@ class StaffAttendance extends Model
     {
         return $this->belongsTo(AcademicYear::class);
     }
+
+    public function scopeActiveCheckIn($query)
+    {
+        return $query
+            ->whereNotNull('check_in_time')
+            ->whereNull('check_out_time')
+            ->whereNotIn('attendance_status', ['absent']);
+    }
 }

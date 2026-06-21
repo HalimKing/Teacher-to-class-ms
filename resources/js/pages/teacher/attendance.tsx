@@ -776,14 +776,6 @@ export default function AttendancePage() {
             return;
         }
 
-        if (!timeValidation.isCheckoutOpen) {
-            setApiError(
-                selectedClass?.timing?.checkout_opens_message ||
-                    'Check-out is only allowed after class ends. Please wait until the class is over.',
-            );
-            return;
-        }
-
         setIsLoadingApi(true);
         setApiError(null);
         setApiSuccess(null);
@@ -903,8 +895,10 @@ export default function AttendancePage() {
         !selectedClass ||
         selectedClass.is_completed ||
         selectedClass.is_missed ||
+        selectedClass.attendance_status?.status === 'absent' ||
         selectedClass.can_take_attendance === false ||
-        !timeValidation.canCheckInNow;
+        !timeValidation.canCheckInNow ||
+        (!selectedClass.attendance_status && (selectedClass.timing?.is_after_checkout_grace ?? false));
 
     const isCheckOutDisabled =
         currentStatus !== 'checked_in' ||
@@ -912,12 +906,17 @@ export default function AttendancePage() {
         !isSelectedClassCheckedIn ||
         selectedClass?.is_completed ||
         selectedClass?.is_missed ||
-        selectedClass?.can_take_attendance === false ||
-        !timeValidation.isCheckoutOpen;
+        selectedClass?.can_take_attendance === false;
 
     const getCheckInButtonText = () => {
         if (isLoadingApi && currentStatus === 'not_checked_in') return 'Processing...';
-        if (selectedClass?.is_missed) return 'Missed';
+        if (selectedClass?.is_missed || selectedClass?.attendance_status?.status === 'absent') return 'Missed';
+        if (
+            !selectedClass?.attendance_status &&
+            (selectedClass?.timing?.is_after_checkout_grace || timeValidation.isAfterCheckoutDeadline)
+        ) {
+            return 'Missed';
+        }
         if (selectedClass?.can_take_attendance === false) return 'Rescheduled';
         if (selectedClass?.is_completed) return 'Completed';
         if (!timeValidation.canCheckInNow) return 'Check-In Not Open';
@@ -929,9 +928,8 @@ export default function AttendancePage() {
         if (selectedClass?.is_missed) return 'Missed';
         if (selectedClass?.can_take_attendance === false) return 'Rescheduled';
         if (selectedClass?.is_completed) return 'Completed';
-        if (!timeValidation.isCheckoutOpen) return 'Wait for End';
         if (timeValidation.isAfterCheckoutDeadline) return 'Check Out (Overtime)';
-        if (timeValidation.isCheckoutAllowed) return 'Check Out';
+        if (!timeValidation.isAfterEnd) return 'Check Out (Early Leave)';
         return 'Check Out';
     };
 
@@ -1400,6 +1398,20 @@ export default function AttendancePage() {
                                                             <p className="text-sm font-medium text-green-700">Class is currently in session</p>
                                                             <p className="text-xs text-green-600">
                                                                 Check-in available until {to12Hour(selectedClass.end_time)}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {currentStatus === 'checked_in' && isSelectedClassCheckedIn && !timeValidation.isAfterEnd && (
+                                                <div className="rounded-lg border border-sky-200 bg-sky-50 p-3">
+                                                    <div className="flex items-center gap-2">
+                                                        <CheckCircle size={16} className="text-sky-600" />
+                                                        <div>
+                                                            <p className="text-sm font-medium text-sky-700">You can check out anytime</p>
+                                                            <p className="text-xs text-sky-600">
+                                                                Class ends at {selectedClass.timing?.scheduled_end_time_display || to12Hour(selectedClass.end_time)}. Early departure will be recorded as early leave.
                                                             </p>
                                                         </div>
                                                     </div>

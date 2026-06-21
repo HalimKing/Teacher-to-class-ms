@@ -107,6 +107,7 @@ class AttendanceProcessorService
                         $now,
                         $stats['teachers'],
                         $teacherAttendances,
+                        $this->rescheduledAttendance->resolveActiveRescheduleForDate($schedule, $now),
                     );
                 }
             });
