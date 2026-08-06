@@ -305,8 +305,8 @@ const TimeTablesIndexPage = ({
       href: '/admin/dashboard',
     },
     {
-      title: 'Time Tables',
-      href: '/admin/school-management/time-tables',
+      title: 'Assigned Schedules',
+      href: '/admin/academics/time-tables',
     }
   ];
 
@@ -328,7 +328,7 @@ const TimeTablesIndexPage = ({
 
   return (
     <AppLayout breadcrumbs={breadcrumbs}>
-      <Head title="Time Tables" />
+      <Head title="Assigned Schedules" />
       <div className="min-h-screen bg-slate-50 flex">
         {/* Main Content Area */}
         <div className="flex-1 min-w-0 flex flex-col">
@@ -336,7 +336,7 @@ const TimeTablesIndexPage = ({
           <div className="p-4 sm:p-6 lg:p-8 flex-1 overflow-auto">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
               <div>
-                <h2 className="text-3xl font-extrabold text-slate-900 mb-2">Time Tables</h2>
+                <h2 className="text-3xl font-extrabold text-slate-900 mb-2">Assigned Schedules</h2>
                 <p className="text-slate-600">Manage class schedules and time slots</p>
               </div>
               <div className="flex space-x-3 mt-4 sm:mt-0">
@@ -388,7 +388,7 @@ const TimeTablesIndexPage = ({
                   className="flex items-center justify-center px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-700 hover:from-indigo-700 hover:to-purple-800 text-white font-semibold rounded-xl transition-all duration-200 shadow-md hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-500/50"
                 >
                   <Plus className="w-5 h-5 mr-2" />
-                  Add Time Slot
+                  Create Schedule
                 </Link>
                 )}
               </div>
@@ -804,11 +804,11 @@ const TimeTablesIndexPage = ({
               {sortedDays.length === 0 && (
                 <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-12 text-center">
                   <Calendar className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                  <h3 className="text-xl font-semibold text-slate-700 mb-2">No Time Tables Found</h3>
+                  <h3 className="text-xl font-semibold text-slate-700 mb-2">No Assigned Schedules Found</h3>
                   <p className="text-slate-500 mb-6">
                     {activeFilterCount > 0 
-                      ? "No time slots match your current filters. Try adjusting your filter criteria."
-                      : "No time slots have been created yet. Add your first time slot to get started."
+                      ? "No schedules match your current filters. Try adjusting your filter criteria."
+                      : "No schedules have been created yet. Create your first schedule to get started."
                     }
                   </p>
                   <div className="flex flex-col sm:flex-row gap-3 justify-center">
@@ -826,7 +826,7 @@ const TimeTablesIndexPage = ({
                       className="inline-flex items-center justify-center px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl transition-colors"
                     >
                       <Plus className="w-5 h-5 mr-2" />
-                      Add Time Slot
+                      Create Schedule
                     </Link>
                     )}
                   </div>

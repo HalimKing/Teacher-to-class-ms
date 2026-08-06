@@ -1,4 +1,3 @@
-import { KpiCard, type KpiCardData } from '@/components/dashboard/kpi-card';
 import { ReportFilterField, StatusBadge, filterInputClass } from '@/components/reports/shared';
 import { Button } from '@/components/ui/button';
 import {
@@ -115,7 +114,6 @@ export default function SystemLogsIndex({ filterOptions, initialFilters, logRete
         page: 1,
     });
 
-    const [summaryCards, setSummaryCards] = useState<KpiCardData[]>([]);
     const [securityHighlights, setSecurityHighlights] = useState<ActivityLogRecord[]>([]);
     const [records, setRecords] = useState<PaginatedRecords | null>(null);
     const [loading, setLoading] = useState(true);
@@ -155,16 +153,6 @@ export default function SystemLogsIndex({ filterOptions, initialFilters, logRete
         try {
             const response = await axios.get(route('admin.system-logs.data'), { params: filters });
             const payload = response.data.data;
-            setSummaryCards(
-                payload.summaryCards.map((card: { title: string; value: string; icon: string }) => ({
-                    title: card.title,
-                    value: card.value,
-                    change: '',
-                    changeType: 'neutral' as const,
-                    icon: card.icon,
-                    group: 'system',
-                })),
-            );
             setSecurityHighlights(payload.securityHighlights ?? []);
             setRecords(payload.records);
         } catch {
@@ -339,12 +327,6 @@ export default function SystemLogsIndex({ filterOptions, initialFilters, logRete
                             </Button>
                         )}
                     </div>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-                    {summaryCards.map((card) => (
-                        <KpiCard key={card.title} card={card} />
-                    ))}
                 </div>
 
                 <section className="rounded-xl border border-red-200/60 bg-red-50/40 p-5 dark:border-red-900/40 dark:bg-red-950/20">

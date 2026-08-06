@@ -24,7 +24,7 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarEleme
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Dashboard', href: '/admin/dashboard' },
-    { title: 'Teacher Attendance Report', href: '/admin/attendance' },
+    { title: 'Teaching Staff Report', href: '/admin/attendance' },
 ];
 
 interface TeacherRecord {
@@ -156,7 +156,7 @@ export default function TeacherAttendanceReportsIndex({ filterOptions, initialFi
     };
 
     const tableColumns = useMemo(() => [
-        { key: 'teacher_name', label: 'Teacher Name' },
+        { key: 'teacher_name', label: 'Staff Name' },
         { key: 'staff_id', label: 'Staff ID', sortable: false },
         { key: 'department', label: 'Department', sortable: false },
         { key: 'course_class', label: 'Course/Venue', sortable: false },
@@ -214,8 +214,8 @@ export default function TeacherAttendanceReportsIndex({ filterOptions, initialFi
     if (isLoading && !records) {
         return (
             <AppLayout breadcrumbs={breadcrumbs}>
-                <Head title="Teacher Attendance Report" />
-                <ReportLoadingState message="Loading teacher attendance reports..." />
+                <Head title="Teaching Staff Report" />
+                <ReportLoadingState message="Loading teaching staff attendance reports..." />
             </AppLayout>
         );
     }
@@ -223,7 +223,7 @@ export default function TeacherAttendanceReportsIndex({ filterOptions, initialFi
     if (error && !records) {
         return (
             <AppLayout breadcrumbs={breadcrumbs}>
-                <Head title="Teacher Attendance Report" />
+                <Head title="Teaching Staff Report" />
                 <ReportErrorState error={error} onRetry={() => fetchReportData(1)} />
             </AppLayout>
         );
@@ -231,11 +231,11 @@ export default function TeacherAttendanceReportsIndex({ filterOptions, initialFi
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="Teacher Attendance Report" />
+            <Head title="Teaching Staff Report" />
             <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto rounded-xl p-4 md:p-6">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div>
-                        <h1 className="text-2xl font-bold text-sidebar-foreground">Teacher Attendance Report</h1>
+                        <h1 className="text-2xl font-bold text-sidebar-foreground">Teaching Staff Report</h1>
                         <p className="mt-1 text-sm text-sidebar-foreground/60">Comprehensive lecturer attendance analytics, verification metrics, and exportable records.</p>
                     </div>
                     <ReportExportButtons canExport={canExport} onExport={handleExport} />
@@ -247,7 +247,7 @@ export default function TeacherAttendanceReportsIndex({ filterOptions, initialFi
                         <ReportFilterField label="End Date"><input type="date" value={filters.end_date} onChange={(e) => setFilters((p) => ({ ...p, end_date: e.target.value }))} className={filterInputClass} /></ReportFilterField>
                         <ReportFilterField label="Month"><select value={filters.month} onChange={(e) => setFilters((p) => ({ ...p, month: e.target.value }))} className={filterInputClass}><option value="">All Months</option>{Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={String(i + 1)}>{new Date(2000, i, 1).toLocaleString('default', { month: 'long' })}</option>)}</select></ReportFilterField>
                         <ReportFilterField label="Year"><select value={filters.year} onChange={(e) => setFilters((p) => ({ ...p, year: e.target.value }))} className={filterInputClass}><option value="">All Years</option>{Array.from({ length: 5 }, (_, i) => { const y = new Date().getFullYear() - i; return <option key={y} value={String(y)}>{y}</option>; })}</select></ReportFilterField>
-                        <ReportFilterField label="Teacher"><select value={filters.teacher_id} onChange={(e) => setFilters((p) => ({ ...p, teacher_id: e.target.value }))} className={filterInputClass}><option value="all">All Teachers</option>{filterOptions.teachers.map((t) => <option key={t.id} value={String(t.id)}>{t.name} ({t.employee_id})</option>)}</select></ReportFilterField>
+                        <ReportFilterField label="Teaching Staff"><select value={filters.teacher_id} onChange={(e) => setFilters((p) => ({ ...p, teacher_id: e.target.value }))} className={filterInputClass}><option value="all">All Teaching Staff</option>{filterOptions.teachers.map((t) => <option key={t.id} value={String(t.id)}>{t.name} ({t.employee_id})</option>)}</select></ReportFilterField>
                         <ReportFilterField label="Faculty"><select value={filters.faculty_id} onChange={(e) => setFilters((p) => ({ ...p, faculty_id: e.target.value, department_id: 'all' }))} className={filterInputClass}><option value="all">All Faculties</option>{filterOptions.faculties.map((f) => <option key={f.id} value={String(f.id)}>{f.name}</option>)}</select></ReportFilterField>
                         <ReportFilterField label="Department"><select value={filters.department_id} onChange={(e) => setFilters((p) => ({ ...p, department_id: e.target.value }))} className={filterInputClass}><option value="all">All Departments</option>{filteredDepartments.map((d) => <option key={d.id} value={String(d.id)}>{d.name}</option>)}</select></ReportFilterField>
                         <ReportFilterField label="Course"><select value={filters.course_id} onChange={(e) => setFilters((p) => ({ ...p, course_id: e.target.value }))} className={filterInputClass}><option value="all">All Courses</option>{filterOptions.courses.map((c) => <option key={c.id} value={String(c.id)}>{c.name}</option>)}</select></ReportFilterField>

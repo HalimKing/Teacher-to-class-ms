@@ -57,13 +57,13 @@ export default function TeacherBulkActionsBar({
                             variant="outline"
                             size="sm"
                             onClick={() =>
-                                toast.info('Assign timetables from Academics → Timetables for the selected staff members.', {
+                                toast.info('Assign schedules from Schedules → Assigned Schedules for the selected staff members.', {
                                     theme: 'dark',
                                 })
                             }
                         >
                             <UserCheck className="size-4" />
-                            Assign Timetables
+                            Assign Schedules
                         </Button>
                         <Button type="button" variant="outline" size="sm" onClick={onFaceEnrollmentReminder}>
                             <ShieldCheck className="size-4" />

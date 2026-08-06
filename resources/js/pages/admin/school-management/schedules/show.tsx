@@ -15,7 +15,7 @@ export default function AdminSchedulesShow() {
     }, [flash?.error, flash?.success]);
 
     return (
-        <AppLayout breadcrumbs={[{ title: 'Academics', href: '/admin/academics/time-tables' }, { title: 'Schedules', href: '/admin/school-management/schedules' }, { title: 'Review', href: '#' }]}>
+        <AppLayout breadcrumbs={[{ title: 'Schedules', href: '/admin/academics/time-tables' }, { title: 'Rescheduled Sessions', href: '/admin/school-management/schedules' }, { title: 'Review', href: '#' }]}>
             <Head title="Schedule Review" />
 
             <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto rounded-xl p-4 md:p-6">

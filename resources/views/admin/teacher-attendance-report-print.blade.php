@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Teacher Attendance Report</title>
+    <title>Teaching Staff Report</title>
     <style>
         body { font-family: Arial, sans-serif; font-size: 12px; color: #111; margin: 24px; }
         h1 { font-size: 20px; margin-bottom: 4px; }
@@ -17,7 +17,7 @@
     <div class="no-print" style="margin-bottom: 16px;">
         <button onclick="window.print()">Print Report</button>
     </div>
-    <h1>Teacher Attendance Report</h1>
+    <h1>Teaching Staff Report</h1>
     <div class="meta">Generated at: {{ $generatedAt }}</div>
     <table>
         <thead>

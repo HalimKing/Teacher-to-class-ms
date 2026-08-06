@@ -234,7 +234,7 @@ const EditTimeTablePage = ({
       href: '/admin/dashboard',
     },
     {
-      title: 'Time Tables',
+      title: 'Assigned Schedules',
       href: '/admin/academics/time-tables',
     },
     {
@@ -285,7 +285,7 @@ const EditTimeTablePage = ({
               className="inline-flex items-center text-slate-600 hover:text-slate-900 mb-6"
             >
               <ArrowLeft className="w-5 h-5 mr-2" />
-              Back to Time Tables
+              Back to Assigned Schedules
             </Link>
             <h1 className="text-3xl font-extrabold text-slate-900">Edit Time Slot</h1>
             <p className="text-slate-600 mt-2">Update the schedule details</p>

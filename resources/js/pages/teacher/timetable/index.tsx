@@ -204,10 +204,6 @@ export default function TeacherTimeTableIndex() {
         return grouped;
     }, [filteredSessions]);
 
-    const totalSessions = timeTables.length;
-    const totalCourses = new Set(timeTables.map((t) => t.course?.name).filter(Boolean)).size;
-    const totalMinutes = timeTables.reduce((sum, t) => sum + sessionDurationMinutes(t.start_time, t.end_time), 0);
-    const totalHours = (totalMinutes / 60).toFixed(1);
     const pendingReschedules = reschedules.filter((r) => r.status === 'pending').length;
 
     const filteredReschedules = useMemo(() => {
@@ -248,20 +244,6 @@ export default function TeacherTimeTableIndex() {
     const exportCsvUrl = route('teacher.timetable.export') + '?format=csv';
     const printUrl = route('teacher.timetable.print') + '?format=print';
 
-    const kpiCards = [
-        { title: 'Weekly Sessions', value: String(totalSessions), icon: Calendar, tone: 'blue' },
-        { title: 'Courses', value: String(totalCourses), icon: BookOpen, tone: 'green' },
-        { title: 'Teaching Hours', value: `${totalHours}h`, icon: Clock, tone: 'amber' },
-        { title: 'Pending Requests', value: String(pendingReschedules), icon: CalendarClock, tone: 'purple' },
-    ];
-
-    const toneClasses: Record<string, string> = {
-        blue: 'bg-blue-50 text-blue-600 dark:bg-blue-950/40',
-        green: 'bg-green-50 text-green-600 dark:bg-green-950/40',
-        amber: 'bg-amber-50 text-amber-600 dark:bg-amber-950/40',
-        purple: 'bg-purple-50 text-purple-600 dark:bg-purple-950/40',
-    };
-
     return (
         <AppLayout breadcrumbs={[{ title: 'My Timetable', href: '/teacher/timetable' }]}>
             <Head title="My Timetable" />
@@ -294,29 +276,6 @@ export default function TeacherTimeTableIndex() {
                             Print
                         </a>
                     </div>
-                </div>
-
-                {/* KPI cards */}
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                    {kpiCards.map((card) => {
-                        const Icon = card.icon;
-                        return (
-                            <div
-                                key={card.title}
-                                className="rounded-xl border border-sidebar-border/70 bg-white p-5 shadow-sm transition-shadow hover:shadow-md dark:border-sidebar-border dark:bg-sidebar-accent"
-                            >
-                                <div className="flex items-start justify-between">
-                                    <div>
-                                        <p className="text-xs font-semibold tracking-wider text-sidebar-foreground/60 uppercase">{card.title}</p>
-                                        <p className="mt-2 text-3xl font-bold tabular-nums text-sidebar-foreground">{card.value}</p>
-                                    </div>
-                                    <div className={`rounded-xl p-3 ${toneClasses[card.tone]}`}>
-                                        <Icon className="h-5 w-5" />
-                                    </div>
-                                </div>
-                            </div>
-                        );
-                    })}
                 </div>
 
                 {/* Main tabs */}

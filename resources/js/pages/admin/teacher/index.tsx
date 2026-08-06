@@ -10,7 +10,6 @@ import {
     type TeacherQuickViewData,
     type TeachersIndexPageProps,
 } from '@/components/teachers/types';
-import { KpiGrid } from '@/components/dashboard/kpi-card';
 import AppLayout from '@/layouts/app-layout';
 import { buildListQueryParams, listQueryParamsEqual } from '@/lib/list-filters';
 import { type BreadcrumbItem, type PagePropsWithFlash } from '@/types';
@@ -25,7 +24,6 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 export default function TeachersIndexPage({
-    summaryCards,
     teachers,
     faculties,
     departments,
@@ -113,7 +111,7 @@ export default function TeachersIndexPage({
             router.get(route('admin.teachers.index'), nextParams, {
                 preserveState: true,
                 replace: true,
-                only: ['teachers', 'summaryCards', 'filters'],
+                only: ['teachers', 'filters'],
             });
         }, 400);
 
@@ -300,8 +298,6 @@ export default function TeachersIndexPage({
                     bulkMode={bulkMode}
                     refreshing={refreshing}
                 />
-
-                <KpiGrid cards={summaryCards} />
 
                 <TeacherFiltersPanel
                     filters={filters}

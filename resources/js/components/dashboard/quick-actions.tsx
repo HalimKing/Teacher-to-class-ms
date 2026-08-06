@@ -21,8 +21,8 @@ interface QuickAction {
 
 const actions: QuickAction[] = [
     {
-        title: 'Teacher Attendance',
-        description: 'View lecturer attendance records and analytics.',
+        title: 'Teaching Staff',
+        description: 'View teaching staff attendance records and analytics.',
         href: '/admin/attendance',
         icon: ClipboardList,
         permission: 'admin.attendance.view',
@@ -45,7 +45,7 @@ const actions: QuickAction[] = [
         accent: 'bg-violet-50 text-violet-600 dark:bg-violet-950/40 dark:text-violet-400',
     },
     {
-        title: 'Manage Timetables',
+        title: 'Assigned Schedules',
         description: 'Configure class and work schedules.',
         href: '/admin/academics/time-tables',
         icon: Calendar,
@@ -53,8 +53,8 @@ const actions: QuickAction[] = [
         accent: 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400',
     },
     {
-        title: 'Staff Attendance Reports',
-        description: 'Track administrator attendance and verification.',
+        title: 'Non-Teaching Staff',
+        description: 'Track non-teaching staff attendance and verification.',
         href: '/admin/settings-reports/staff-attendance-reports',
         icon: BarChart3,
         permission: 'admin.staff-attendance.view',

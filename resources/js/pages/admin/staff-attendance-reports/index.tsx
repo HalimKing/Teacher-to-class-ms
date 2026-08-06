@@ -41,7 +41,7 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarEleme
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Dashboard', href: '/admin/dashboard' },
-    { title: 'Administrator Attendance Reports', href: '/admin/settings-reports/staff-attendance-reports' },
+    { title: 'Non-Teaching Staff Reports', href: '/admin/settings-reports/staff-attendance-reports' },
 ];
 
 interface FilterOptions {
@@ -320,11 +320,11 @@ export default function StaffAttendanceReportsIndex({ filterOptions, initialFilt
     if (isLoading && !records) {
         return (
             <AppLayout breadcrumbs={breadcrumbs}>
-                <Head title="Administrator Attendance Reports" />
+                <Head title="Non-Teaching Staff Reports" />
                 <div className="flex h-full items-center justify-center p-8">
                     <div className="text-center">
                         <Loader2 className="mx-auto mb-4 h-8 w-8 animate-spin text-blue-500" />
-                        <p className="text-sidebar-foreground/60">Loading administrator attendance reports...</p>
+                        <p className="text-sidebar-foreground/60">Loading non-teaching staff attendance reports...</p>
                     </div>
                 </div>
             </AppLayout>
@@ -334,7 +334,7 @@ export default function StaffAttendanceReportsIndex({ filterOptions, initialFilt
     if (error && !records) {
         return (
             <AppLayout breadcrumbs={breadcrumbs}>
-                <Head title="Administrator Attendance Reports" />
+                <Head title="Non-Teaching Staff Reports" />
                 <div className="flex h-full items-center justify-center p-8">
                     <div className="text-center">
                         <AlertTriangle className="mx-auto mb-4 h-8 w-8 text-red-500" />
@@ -350,14 +350,14 @@ export default function StaffAttendanceReportsIndex({ filterOptions, initialFilt
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="Administrator Attendance Reports" />
+            <Head title="Non-Teaching Staff Reports" />
 
             <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto rounded-xl p-4 md:p-6">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div>
-                        <h1 className="text-2xl font-bold text-sidebar-foreground">Administrator Attendance Reports</h1>
+                        <h1 className="text-2xl font-bold text-sidebar-foreground">Non-Teaching Staff Reports</h1>
                         <p className="mt-1 text-sm text-sidebar-foreground/60">
-                            Comprehensive attendance analytics, verification metrics, and exportable records for administrators.
+                            Comprehensive attendance analytics, verification metrics, and exportable records for non-teaching staff.
                         </p>
                     </div>
                     {canExport && (
@@ -409,9 +409,9 @@ export default function StaffAttendanceReportsIndex({ filterOptions, initialFilt
                                 })}
                             </select>
                         </FilterField>
-                        <FilterField label="Administrator">
+                        <FilterField label="Non-Teaching Staff">
                             <select value={filters.staff_id} onChange={(e) => setFilters((prev) => ({ ...prev, staff_id: e.target.value }))} className="filter-input">
-                                <option value="all">All Administrators</option>
+                                <option value="all">All Non-Teaching Staff</option>
                                 {filterOptions.administrators.map((admin) => (
                                     <option key={admin.id} value={String(admin.id)}>
                                         {admin.name} ({admin.employee_id})
@@ -661,7 +661,7 @@ export default function StaffAttendanceReportsIndex({ filterOptions, initialFilt
                                 <thead className="bg-sidebar-accent/50 text-left text-xs uppercase tracking-wider text-sidebar-foreground/60">
                                     <tr>
                                         {[
-                                            ['administrator_name', 'Administrator'],
+                                            ['administrator_name', 'Staff Name'],
                                             ['staff_id', 'Staff ID'],
                                             ['department', 'Department'],
                                             ['date', 'Date'],

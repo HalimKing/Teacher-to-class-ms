@@ -137,18 +137,18 @@ const mainNavItems: NavItem[] = [
         ]
     },
     {
-        title: 'Academics',
+        title: 'Schedules',
         href: '/admin/academics',
         icon: Book,
         permission: 'admin.academics.view',
         subItems: [
             {
-                title: 'Time Table',
+                title: 'Assigned Schedules',
                 href: '/admin/academics/time-tables',
                 permission: 'admin.academics.time-tables.view',
             },
             {
-                title: 'Add Time Table',
+                title: 'Create Schedule',
                 href: '/admin/academics/time-tables/create',
                 permission: 'admin.academics.time-tables.create',
             },
@@ -159,7 +159,7 @@ const mainNavItems: NavItem[] = [
             }
             ,
             {
-                title: 'Schedules',
+                title: 'Rescheduled Sessions',
                 href: '/admin/school-management/schedules',
                 permission: 'admin.schedules.view',
             },
@@ -205,12 +205,12 @@ const mainNavItems: NavItem[] = [
         permission: 'admin.attendance.view',
         subItems: [
             {
-                title: 'Teacher Attendance',
+                title: 'Teaching Staff',
                 href: '/admin/attendance',
                 permission: 'admin.attendance.view',
             },
             {
-                title: 'Administrator Attendance',
+                title: 'Non-Teaching Staff',
                 href: '/admin/settings-reports/staff-attendance-reports',
                 permission: 'admin.staff-attendance.view',
             },

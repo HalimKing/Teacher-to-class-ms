@@ -152,7 +152,7 @@ class TeacherAttendanceAnalysisController extends Controller
                 'icon' => 'Calendar',
             ],
             [
-                'title' => 'Active Teachers',
+                'title' => 'Active Teaching Staff',
                 'value' => $uniqueTeachers,
                 'subtitle' => 'Teaching',
                 'change' => '',
@@ -162,7 +162,7 @@ class TeacherAttendanceAnalysisController extends Controller
             [
                 'title' => 'Avg Attendance',
                 'value' => round($records->groupBy('teacher_id')->map(fn($g) => ($g->where('status', 'present')->count() / $g->count()) * 100)->avg(), 1) . '%',
-                'subtitle' => 'Per teacher',
+                'subtitle' => 'Per staff member',
                 'change' => '',
                 'changeType' => 'neutral',
                 'icon' => 'BarChart3',

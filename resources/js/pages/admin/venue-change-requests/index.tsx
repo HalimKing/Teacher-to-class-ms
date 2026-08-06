@@ -34,7 +34,7 @@ const statusBadge = (status: string) => {
     return 'bg-rose-100 text-rose-800';
 };
 
-export default function VenueChangeRequestIndex({ requests, filters, statusCounts }: PageProps) {
+export default function VenueChangeRequestIndex({ requests, filters }: PageProps) {
     const { flash } = usePage().props as PageProps;
     const [search, setSearch] = useState(filters.search || '');
     const [status, setStatus] = useState(filters.status || '');
@@ -52,7 +52,7 @@ export default function VenueChangeRequestIndex({ requests, filters, statusCount
                         <h1 className="text-2xl font-bold text-slate-900">Venue Change Requests</h1>
                         <p className="mt-1 text-sm text-slate-500">
                             Review administrator-submitted requests. Approved requests become Venue Change Authorizations.
-                            Direct authorizations remain available under Academics → Venue Change Authorizations.
+                            Direct authorizations remain available under Schedules → Venue Change Authorizations.
                         </p>
                     </div>
                     <Link
@@ -65,21 +65,6 @@ export default function VenueChangeRequestIndex({ requests, filters, statusCount
 
                 {flash?.success && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{flash.success}</div>}
                 {flash?.error && <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{flash.error}</div>}
-
-                <div className="grid gap-3 sm:grid-cols-3">
-                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Pending approval</p>
-                        <p className="mt-1 text-2xl font-bold text-amber-900">{statusCounts.pending}</p>
-                    </div>
-                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Approved authorizations</p>
-                        <p className="mt-1 text-2xl font-bold text-emerald-900">{statusCounts.approved}</p>
-                    </div>
-                    <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-rose-700">Rejected requests</p>
-                        <p className="mt-1 text-2xl font-bold text-rose-900">{statusCounts.rejected}</p>
-                    </div>
-                </div>
 
                 <div className="flex flex-wrap gap-3 rounded-xl border border-slate-200 bg-white p-4">
                     <input

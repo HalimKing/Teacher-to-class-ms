@@ -84,7 +84,7 @@ const statusColors: Record<string, string> = {
 export default function StaffAttendanceReportShow({ staff, initialFilters }: PageProps) {
     const breadcrumbs: BreadcrumbItem[] = [
         { title: 'Dashboard', href: '/admin/dashboard' },
-        { title: 'Administrator Attendance Reports', href: '/admin/settings-reports/staff-attendance-reports' },
+        { title: 'Non-Teaching Staff Reports', href: '/admin/settings-reports/staff-attendance-reports' },
         { title: staff.name, href: `/admin/settings-reports/staff-attendance-reports/${staff.id}` },
     ];
 
@@ -156,7 +156,7 @@ export default function StaffAttendanceReportShow({ staff, initialFilters }: Pag
                             <ArrowLeft className="h-4 w-4" /> Back to reports
                         </Link>
                         <h1 className="text-2xl font-bold text-sidebar-foreground">{staff.name}</h1>
-                        <p className="mt-1 text-sm text-sidebar-foreground/60">Individual administrator attendance report</p>
+                        <p className="mt-1 text-sm text-sidebar-foreground/60">Individual non-teaching staff attendance report</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
                         <input type="date" value={filters.start_date} onChange={(e) => setFilters((prev) => ({ ...prev, start_date: e.target.value }))} className="rounded-lg border border-sidebar-border/50 px-3 py-2 text-sm" />

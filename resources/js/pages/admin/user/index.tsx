@@ -10,7 +10,6 @@ import {
     type UserQuickViewData,
     type UsersIndexPageProps,
 } from '@/components/users/types';
-import { KpiGrid } from '@/components/dashboard/kpi-card';
 import AppLayout from '@/layouts/app-layout';
 import { apiJsonRequest } from '@/lib/http';
 import { buildListQueryParams, listQueryParamsEqual } from '@/lib/list-filters';
@@ -25,7 +24,6 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 export default function UsersIndexPage({
-    summaryCards,
     users,
     roles,
     filters: initialFilters,
@@ -113,7 +111,7 @@ export default function UsersIndexPage({
             router.get(route('admin.user-management.users.index'), nextParams, {
                 preserveState: true,
                 replace: true,
-                only: ['users', 'summaryCards', 'filters'],
+                only: ['users', 'filters'],
             });
         }, 400);
 
@@ -149,7 +147,7 @@ export default function UsersIndexPage({
         router.get(route('admin.user-management.users.index'), queryParams, {
             preserveState: true,
             replace: true,
-            only: ['users', 'summaryCards', 'filters'],
+                only: ['users', 'filters'],
         });
     };
 
@@ -198,7 +196,7 @@ export default function UsersIndexPage({
             });
             toast.success(result.message, { theme: 'dark' });
             setSelectedIds([]);
-            router.reload({ only: ['users', 'summaryCards'] });
+            router.reload({ only: ['users'] });
         } catch (error) {
             toast.error(error instanceof Error ? error.message : 'Bulk update failed.', { theme: 'dark' });
         }
@@ -211,7 +209,7 @@ export default function UsersIndexPage({
             });
             toast.success(result.message, { theme: 'dark' });
             setSelectedIds([]);
-            router.reload({ only: ['users', 'summaryCards'] });
+            router.reload({ only: ['users'] });
         } catch (error) {
             toast.error(error instanceof Error ? error.message : 'Bulk action failed.', { theme: 'dark' });
         }
@@ -228,7 +226,7 @@ export default function UsersIndexPage({
             });
             toast.success(result.message, { theme: 'dark' });
             setSelectedIds([]);
-            router.reload({ only: ['users', 'summaryCards'] });
+            router.reload({ only: ['users'] });
         } catch (error) {
             toast.error(error instanceof Error ? error.message : 'Bulk delete failed.', { theme: 'dark' });
         }
@@ -290,7 +288,7 @@ export default function UsersIndexPage({
             });
 
             toast.success(result.message || 'Password reset successfully.', { theme: 'dark' });
-            router.reload({ only: ['users', 'summaryCards'] });
+            router.reload({ only: ['users'] });
 
             return { temporary_password: result.data?.temporary_password ?? null };
         } catch (error) {
@@ -314,8 +312,6 @@ export default function UsersIndexPage({
                     bulkMode={bulkMode}
                     refreshing={refreshing}
                 />
-
-                <KpiGrid cards={summaryCards} />
 
                 <UserBulkActionsBar
                     selectedCount={selectedIds.length}

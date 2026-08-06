@@ -5,7 +5,6 @@ import {
   Edit,
   Trash2,
   MapPin,
-  Target,
   CheckCircle,
   XCircle,
   Download,
@@ -374,63 +373,6 @@ const ClassRoomIndexPage = ({ classRoomData, search }: TeachersIndexPageProps) =
                         </div>
                       </form>
                     </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-              <div className="bg-white rounded-xl p-6 shadow-md border border-slate-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-slate-500">Total Venues</p>
-                    <p className="text-3xl font-bold text-slate-900">{class_rooms.total}</p>
-                  </div>
-                  <div className="p-3 bg-indigo-50 rounded-lg">
-                    <Target className="w-6 h-6 text-indigo-600" />
-                  </div>
-                </div>
-              </div>
-              <div className="bg-white rounded-xl p-6 shadow-md border border-slate-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-slate-500">Active Venues</p>
-                    <p className="text-3xl font-bold text-slate-900">
-                      {class_rooms.data.filter(cr => cr.is_active).length}
-                    </p>
-                  </div>
-                  <div className="p-3 bg-green-50 rounded-lg">
-                    <CheckCircle className="w-6 h-6 text-green-600" />
-                  </div>
-                </div>
-              </div>
-              <div className="bg-white rounded-xl p-6 shadow-md border border-slate-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-slate-500">With Location Data</p>
-                    <p className="text-3xl font-bold text-slate-900">
-                      {class_rooms.data.filter(cr => cr.latitude && cr.longitude).length}
-                    </p>
-                  </div>
-                  <div className="p-3 bg-blue-50 rounded-lg">
-                    <MapPin className="w-6 h-6 text-blue-600" />
-                  </div>
-                </div>
-              </div>
-              <div className="bg-white rounded-xl p-6 shadow-md border border-slate-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-slate-500">Avg. Capacity</p>
-                    <p className="text-3xl font-bold text-slate-900">
-                      {class_rooms.data.length > 0 
-                        ? Math.round(class_rooms.data.reduce((acc, cr) => acc + cr.capacity, 0) / class_rooms.data.length)
-                        : 0
-                      }
-                    </p>
-                  </div>
-                  <div className="p-3 bg-purple-50 rounded-lg">
-                    <span className="text-2xl font-bold text-purple-600">👥</span>
                   </div>
                 </div>
               </div>

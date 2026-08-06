@@ -274,18 +274,18 @@ const CreateTimeTablePage = ({ academicYear, courses, classRooms, teachers, staf
             href: '/admin/dashboard',
         },
         {
-            title: 'Time Tables',
+            title: 'Assigned Schedules',
             href: '/admin/academics/time-tables',
         },
         {
-            title: 'Create Time Slot',
+            title: 'Create Schedule',
             href: '/admin/academics/time-tables/create',
         },
     ];
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="Create Time Slot" />
+            <Head title="Create Schedule" />
             <div className="min-h-screen bg-slate-50 py-8">
                 <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
                     <div className="mb-8">
@@ -294,10 +294,10 @@ const CreateTimeTablePage = ({ academicYear, courses, classRooms, teachers, staf
                             className="mb-6 inline-flex items-center text-slate-600 hover:text-slate-900"
                         >
                             <ArrowLeft className="mr-2 h-5 w-5" />
-                            Back to Time Tables
+                            Back to Assigned Schedules
                         </Link>
-                        <h1 className="text-3xl font-extrabold text-slate-900">Create New Time Slot</h1>
-                        <p className="mt-2 text-slate-600">Add a new schedule to the time table</p>
+                        <h1 className="text-3xl font-extrabold text-slate-900">Create Schedule</h1>
+                        <p className="mt-2 text-slate-600">Add a new schedule assignment</p>
                     </div>
 
                     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg">

@@ -74,13 +74,13 @@ export default function AdminSchedulesIndex() {
     }, [flash?.success, flash?.error]);
 
     return (
-        <AppLayout breadcrumbs={[{ title: 'Academics', href: '/admin/academics/time-tables' }, { title: 'Schedules', href: '/admin/school-management/schedules' }]}>
-            <Head title="Schedules" />
+        <AppLayout breadcrumbs={[{ title: 'Schedules', href: '/admin/academics/time-tables' }, { title: 'Rescheduled Sessions', href: '/admin/school-management/schedules' }]}>
+            <Head title="Rescheduled Sessions" />
 
             <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto rounded-xl p-4 md:p-6">
                 <div className="flex items-center justify-between">
                     <div>
-                        <h1 className="text-2xl font-bold">Schedules</h1>
+                        <h1 className="text-2xl font-bold">Rescheduled Sessions</h1>
                         <p className="mt-1 text-sm text-sidebar-foreground/60">Manage lecture reschedule requests</p>
                     </div>
                 </div>

@@ -29,14 +29,9 @@ import {
 } from '@mui/material';
 import axios from 'axios';
 import { 
-    BarChart3, 
-    PieChart, 
-    TrendingUp, 
-    Users, 
-    Calendar, 
     BookOpen, 
-    GraduationCap, 
     School,
+    Calendar,
     ChevronDown,
     ChevronUp,
     FilterX,
@@ -67,16 +62,6 @@ interface TeacherAttendanceRecordsAdminProps {
     academicYears: Array<{ id: number; name: string }>;
 }
 
-interface Analytics {
-    totalRecords: number;
-    completedCount: number;
-    lateCount: number;
-    absentCount: number;
-    completionRate: number;
-    lateRate: number;
-    absentRate: number;
-}
-
 export default function TeacherAttendanceRecordsAdmin({
     faculties,
     departments,
@@ -102,15 +87,6 @@ export default function TeacherAttendanceRecordsAdmin({
     const [filterApplied, setFilterApplied] = useState(false);
     const [showMobileFilters, setShowMobileFilters] = useState(false);
     const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
-    const [analytics, setAnalytics] = useState<Analytics>({
-        totalRecords: 0,
-        completedCount: 0,
-        lateCount: 0,
-        absentCount: 0,
-        completionRate: 0,
-        lateRate: 0,
-        absentRate: 0,
-    });
 
     // Check if any filter has a value
     const hasActiveFilters = Object.values(filters).some(value => value !== '');
@@ -137,35 +113,12 @@ export default function TeacherAttendanceRecordsAdmin({
         };
     };
 
-    // Calculate analytics from records
-    const calculateAnalytics = (data: AttendanceRecord[]) => {
+    // Log filter analytics when records load
+    const logRecordsFiltered = (data: AttendanceRecord[]) => {
         const total = data.length;
-        if (total === 0) {
-            setAnalytics({
-                totalRecords: 0,
-                completedCount: 0,
-                lateCount: 0,
-                absentCount: 0,
-                completionRate: 0,
-                lateRate: 0,
-                absentRate: 0,
-            });
-            return;
-        }
-
         const completed = data.filter((r) => r.status === 'completed').length;
         const late = data.filter((r) => r.status === 'late').length;
         const absent = data.filter((r) => r.status === 'absent').length;
-
-        setAnalytics({
-            totalRecords: total,
-            completedCount: completed,
-            lateCount: late,
-            absentCount: absent,
-            completionRate: Math.round((completed / total) * 100),
-            lateRate: Math.round((late / total) * 100),
-            absentRate: Math.round((absent / total) * 100),
-        });
 
         logAnalyticsEvent('records_filtered', {
             total,
@@ -199,7 +152,7 @@ export default function TeacherAttendanceRecordsAdmin({
             const { data } = await axios.post('/admin/attendance/filter', filters);
             const recordsData = data.records.data || [];
             setRecords(recordsData);
-            calculateAnalytics(recordsData);
+            logRecordsFiltered(recordsData);
             logAnalyticsEvent('filter_applied', { filters });
         } catch (error) {
             console.error('Error fetching attendance records:', error);
@@ -251,95 +204,6 @@ export default function TeacherAttendanceRecordsAdmin({
             return newSet;
         });
     };
-
-    // Analytics Card Component - Responsive
-    const AnalyticsCard = ({
-        title,
-        value,
-        icon: Icon,
-        color,
-        subtext,
-    }: {
-        title: string;
-        value: number | string;
-        icon: React.ElementType;
-        color: string;
-        subtext?: string;
-    }) => (
-        <Card
-            sx={{
-                borderLeft: { xs: 'none', sm: `4px solid ${color}` },
-                borderTop: { xs: `4px solid ${color}`, sm: 'none' },
-                height: '100%',
-                transition: 'transform 0.2s, box-shadow 0.2s',
-                '&:hover': {
-                    transform: { xs: 'none', md: 'translateY(-2px)' },
-                    boxShadow: { md: theme.shadows[4] },
-                },
-            }}
-        >
-            <CardContent sx={{ p: { xs: 1.5, sm: 2, md: 2.5 } }}>
-                <Box sx={{ 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
-                    alignItems: 'flex-start',
-                    flexDirection: { xs: 'row', sm: 'column', md: 'row' },
-                    gap: { xs: 1, sm: 1.5, md: 2 }
-                }}>
-                    <Box sx={{ width: '100%' }}>
-                        <Typography 
-                            color="text.secondary" 
-                            gutterBottom 
-                            variant={isMobile ? 'caption' : 'body2'}
-                            sx={{ 
-                                fontSize: { xs: '0.7rem', sm: '0.75rem', md: '0.875rem' },
-                                fontWeight: 500
-                            }}
-                        >
-                            {title}
-                        </Typography>
-                        <Typography 
-                            variant={isMobile ? 'h6' : 'h5'} 
-                            component="div" 
-                            sx={{ 
-                                fontWeight: 600,
-                                fontSize: { xs: '1.1rem', sm: '1.25rem', md: '1.5rem' }
-                            }}
-                        >
-                            {value}
-                        </Typography>
-                        {subtext && (
-                            <Typography 
-                                variant="caption" 
-                                color="text.secondary" 
-                                sx={{ 
-                                    mt: 0.5, 
-                                    display: 'block',
-                                    fontSize: { xs: '0.6rem', sm: '0.7rem', md: '0.75rem' }
-                                }}
-                            >
-                                {subtext}
-                            </Typography>
-                        )}
-                    </Box>
-                    <Box
-                        sx={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            width: { xs: 32, sm: 40, md: 48 },
-                            height: { xs: 32, sm: 40, md: 48 },
-                            borderRadius: 2,
-                            bgcolor: alpha(color, 0.08),
-                            flexShrink: 0,
-                        }}
-                    >
-                        <Icon size={isMobile ? 18 : 24} color={color} />
-                    </Box>
-                </Box>
-            </CardContent>
-        </Card>
-    );
 
     // Mobile Filter Summary Component
     const FilterSummary = () => {
@@ -524,7 +388,7 @@ export default function TeacherAttendanceRecordsAdmin({
             >
                 {filterApplied
                     ? 'No attendance records match your selected filters. Try adjusting your criteria.'
-                    : 'Apply filters to view teacher attendance records and analytics.'}
+                    : 'Apply filters to view teaching staff attendance records and analytics.'}
             </Typography>
             {hasActiveFilters && filterApplied && (
                 <Button 
@@ -540,7 +404,7 @@ export default function TeacherAttendanceRecordsAdmin({
     );
 
     return (
-        <AppLayout breadcrumbs={[{ title: 'Teacher Attendance', href: '/admin/attendance' }]}>
+        <AppLayout breadcrumbs={[{ title: 'Teaching Staff', href: '/admin/attendance' }]}>
             <Box sx={{ 
                 p: { xs: 1.5, sm: 2, md: 3 }, 
                 maxWidth: '1400px', 
@@ -563,7 +427,7 @@ export default function TeacherAttendanceRecordsAdmin({
                             fontSize: { xs: '1.5rem', sm: '1.75rem', md: '2rem' }
                         }}
                     >
-                        Teacher Attendance
+                        Teaching Staff
                     </Typography>
                     {records.length > 0 && (
                         <Typography 
@@ -603,52 +467,6 @@ export default function TeacherAttendanceRecordsAdmin({
                             </span>
                         </Button>
                     </Box>
-                )}
-
-                {/* Analytics Section - Responsive Grid */}
-                {records.length > 0 && (
-                    <Grid 
-                        container 
-                        spacing={{ xs: 1.5, sm: 2, md: 3 }} 
-                        sx={{ mb: { xs: 2, sm: 3, md: 4 } }}
-                    >
-                        <Grid item xs={6} sm={6} md={3}>
-                            <AnalyticsCard 
-                                title="Total Records" 
-                                value={analytics.totalRecords} 
-                                icon={BarChart3} 
-                                color="#3b82f6" 
-                                
-                            />
-                        </Grid>
-                        <Grid item xs={6} sm={6} md={3}>
-                            <AnalyticsCard
-                                title="Completed"
-                                value={analytics.completedCount}
-                                icon={TrendingUp}
-                                color="#10b981"
-                                subtext={`${analytics.completionRate}%`}
-                            />
-                        </Grid>
-                        <Grid item xs={6} sm={6} md={3}>
-                            <AnalyticsCard
-                                title="Late"
-                                value={analytics.lateCount}
-                                icon={Users}
-                                color="#f59e0b"
-                                subtext={`${analytics.lateRate}%`}
-                            />
-                        </Grid>
-                        <Grid item xs={6} sm={6} md={3}>
-                            <AnalyticsCard
-                                title="Absent"
-                                value={analytics.absentCount}
-                                icon={PieChart}
-                                color="#ef4444"
-                                subtext={`${analytics.absentRate}%`}
-                            />
-                        </Grid>
-                    </Grid>
                 )}
 
                 {/* Filter Summary for Mobile */}

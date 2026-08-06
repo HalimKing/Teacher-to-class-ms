@@ -62,7 +62,7 @@ interface PageProps {
 export default function TeacherAttendanceReportShow({ teacher, initialFilters }: PageProps) {
     const breadcrumbs: BreadcrumbItem[] = [
         { title: 'Dashboard', href: '/admin/dashboard' },
-        { title: 'Teacher Attendance Report', href: '/admin/attendance' },
+        { title: 'Teaching Staff Report', href: '/admin/attendance' },
         { title: teacher.name, href: `/admin/attendance/${teacher.id}` },
     ];
 
@@ -93,7 +93,7 @@ export default function TeacherAttendanceReportShow({ teacher, initialFilters }:
         return (
             <AppLayout breadcrumbs={breadcrumbs}>
                 <Head title={`${teacher.name} - Attendance Report`} />
-                <ReportLoadingState message="Loading teacher attendance report..." />
+                <ReportLoadingState message="Loading teaching staff attendance report..." />
             </AppLayout>
         );
     }
@@ -124,7 +124,7 @@ export default function TeacherAttendanceReportShow({ teacher, initialFilters }:
                     <div>
                         <Link href="/admin/attendance" className="mb-3 inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"><ArrowLeft className="h-4 w-4" /> Back to reports</Link>
                         <h1 className="text-2xl font-bold text-sidebar-foreground">{teacher.name}</h1>
-                        <p className="mt-1 text-sm text-sidebar-foreground/60">Individual teacher attendance report</p>
+                        <p className="mt-1 text-sm text-sidebar-foreground/60">Individual teaching staff attendance report</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
                         <input type="date" value={filters.start_date} onChange={(e) => setFilters((p) => ({ ...p, start_date: e.target.value }))} className="rounded-lg border border-sidebar-border/50 px-3 py-2 text-sm" />
@@ -137,7 +137,7 @@ export default function TeacherAttendanceReportShow({ teacher, initialFilters }:
                     <div className="rounded-xl border border-sidebar-border/70 bg-white p-4 shadow-sm dark:border-sidebar-border dark:bg-sidebar-accent lg:col-span-1">
                         <div className="mb-4 flex items-center gap-3">
                             <div className="rounded-full bg-blue-50 p-3 text-blue-600"><User className="h-5 w-5" /></div>
-                            <div><h2 className="font-semibold text-sidebar-foreground">Teacher Profile</h2><p className="text-sm text-sidebar-foreground/60">{teacher.employee_id}</p></div>
+                            <div><h2 className="font-semibold text-sidebar-foreground">Staff Profile</h2><p className="text-sm text-sidebar-foreground/60">{teacher.employee_id}</p></div>
                         </div>
                         <dl className="space-y-3 text-sm">
                             <InfoRow label="Email" value={teacher.email} />

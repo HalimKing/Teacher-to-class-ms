@@ -10,7 +10,7 @@ const breadcrumbs: BreadcrumbItem[] = [
         href: '/admin/dashboard',
     },
     {
-        title: 'Teacher Analysis',
+        title: 'Teaching Staff Analysis',
         href: '/admin/settings-reports/attendance-analysis',
     },
 ];
@@ -197,7 +197,7 @@ export default function TeacherAttendanceAnalysisPage() {
 
         // Prepare CSV headers
         const headers = [
-            'Teacher Name',
+            'Staff Name',
             'Course',
             'Faculty',
             'Department',
@@ -253,7 +253,7 @@ export default function TeacherAttendanceAnalysisPage() {
     if (isLoading) {
         return (
             <AppLayout breadcrumbs={breadcrumbs}>
-                <Head title="Teacher Attendance Analysis" />
+                <Head title="Teaching Staff Analysis" />
                 <div className="flex h-full items-center justify-center">
                     <div className="text-center">
                         <Loader2 className="mx-auto mb-4 h-8 w-8 animate-spin text-blue-500" />
@@ -267,7 +267,7 @@ export default function TeacherAttendanceAnalysisPage() {
     if (error) {
         return (
             <AppLayout breadcrumbs={breadcrumbs}>
-                <Head title="Teacher Attendance Analysis" />
+                <Head title="Teaching Staff Analysis" />
                 <div className="flex h-full items-center justify-center">
                     <div className="text-center">
                         <AlertTriangle className="mx-auto mb-4 h-8 w-8 text-red-500" />
@@ -287,14 +287,14 @@ export default function TeacherAttendanceAnalysisPage() {
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="Teacher Attendance Analysis" />
+            <Head title="Teaching Staff Analysis" />
 
             <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto rounded-xl p-4 md:p-6">
                 {/* Page Header */}
                 <div>
-                    <h1 className="text-2xl font-bold text-sidebar-foreground dark:text-sidebar-foreground">Teacher Attendance Analysis</h1>
+                    <h1 className="text-2xl font-bold text-sidebar-foreground dark:text-sidebar-foreground">Teaching Staff Analysis</h1>
                     <p className="mt-1 text-sm text-sidebar-foreground/60 dark:text-sidebar-foreground/60">
-                        Comprehensive teacher attendance metrics and insights
+                        Comprehensive teaching staff attendance metrics and insights
                     </p>
                 </div>
 
@@ -405,16 +405,16 @@ export default function TeacherAttendanceAnalysisPage() {
                             </div>
                         </div>
 
-                        {/* Teacher Filter */}
+                        {/* Teaching Staff Filter */}
                         <div>
-                            <label className="mb-2 block text-xs font-semibold tracking-wider text-sidebar-foreground/60 uppercase">Teacher</label>
+                            <label className="mb-2 block text-xs font-semibold tracking-wider text-sidebar-foreground/60 uppercase">Teaching Staff</label>
                             <div className="relative">
                                 <select
                                     value={selectedTeacher}
                                     onChange={(e) => setSelectedTeacher(e.target.value)}
                                     className="w-full rounded-lg border border-sidebar-border/50 bg-white px-3 py-2 text-sm text-sidebar-foreground transition-colors hover:border-blue-300 dark:bg-sidebar-accent dark:text-sidebar-foreground dark:hover:border-blue-700"
                                 >
-                                    <option value="all">All Teachers</option>
+                                    <option value="all">All Teaching Staff</option>
                                     {teachers.map((teacher) => (
                                         <option key={teacher.id} value={teacher.id}>
                                             {teacher.name}
@@ -550,12 +550,12 @@ export default function TeacherAttendanceAnalysisPage() {
                     </div>
                 </div>
 
-                {/* Teacher Performance Table */}
+                {/* Teaching Staff Performance Table */}
                 <div className="rounded-xl border border-sidebar-border/70 bg-white shadow-sm dark:border-sidebar-border dark:bg-sidebar-accent">
                     <div className="border-b border-sidebar-border/30 p-6 dark:border-sidebar-border/50">
                         <div className="flex items-start justify-between">
                             <div>
-                                <h3 className="text-lg font-semibold text-sidebar-foreground dark:text-sidebar-foreground">Teacher Performance</h3>
+                                <h3 className="text-lg font-semibold text-sidebar-foreground dark:text-sidebar-foreground">Teaching Staff Performance</h3>
                                 <p className="mt-1 text-sm text-sidebar-foreground/60 dark:text-sidebar-foreground/60">
                                     Detailed attendance metrics per teacher
                                 </p>
@@ -575,7 +575,7 @@ export default function TeacherAttendanceAnalysisPage() {
                             <thead>
                                 <tr className="border-b border-sidebar-border/30 dark:border-sidebar-border/50">
                                     <th className="px-6 py-4 text-left text-xs font-semibold tracking-wider text-sidebar-foreground/60 uppercase">
-                                        Teacher Name
+                                        Staff Name
                                     </th>
                                     <th className="px-6 py-4 text-left text-xs font-semibold tracking-wider text-sidebar-foreground/60 uppercase">
                                         Course

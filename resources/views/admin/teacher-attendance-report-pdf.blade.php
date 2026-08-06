@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Teacher Attendance Report</title>
+    <title>Teaching Staff Report</title>
     <style>
         body { font-family: DejaVu Sans, sans-serif; font-size: 9px; color: #111; }
         h1 { font-size: 16px; margin-bottom: 4px; }
@@ -13,7 +13,7 @@
     </style>
 </head>
 <body>
-    <h1>Teacher Attendance Report</h1>
+    <h1>Teaching Staff Report</h1>
     <div class="meta">Generated at: {{ $generatedAt }}</div>
     <table>
         <thead>

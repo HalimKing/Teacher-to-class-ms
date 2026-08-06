@@ -2,8 +2,6 @@ import AppLayout from '@/layouts/app-layout';
 import { SharedData, type BreadcrumbItem } from '@/types';
 import { Head, usePage } from '@inertiajs/react';
 import {
-    AlertCircle,
-    Calendar,
     Check,
     ChevronDown,
     Clock,
@@ -14,12 +12,9 @@ import {
     Loader2,
     Printer,
     Search,
-    TrendingDown,
-    TrendingUp,
-    Users,
     X,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -58,13 +53,6 @@ interface AttendanceRecord {
     } | null;
 }
 
-interface SummaryStats {
-    totalSessions: number;
-    averageAttendance: number;
-    totalStudents: number;
-    absentRate: number;
-}
-
 interface PaginationInfo {
     total: number;
     per_page: number;
@@ -84,19 +72,12 @@ interface ApiResponse {
     success: boolean;
     data: AttendanceRecord[];
     pagination: PaginationInfo;
-    stats: SummaryStats;
     courses: Course[];
     message?: string;
 }
 
 export default function AttendanceRecordsPage() {
     const [records, setRecords] = useState<AttendanceRecord[]>([]);
-    const [stats, setStats] = useState<SummaryStats>({
-        totalSessions: 0,
-        averageAttendance: 0,
-        totalStudents: 0,
-        absentRate: 0,
-    });
     const [courses, setCourses] = useState<Course[]>([]);
     const [pagination, setPagination] = useState<PaginationInfo>({
         total: 0,
@@ -160,7 +141,6 @@ export default function AttendanceRecordsPage() {
 
             setRecords(data.data);
             setPagination(data.pagination);
-            setStats(data.stats);
             setCourses(data.courses);
             setCurrentPage(pageNum);
             console.log('Successfully fetched records:', data.data.length);
@@ -177,48 +157,6 @@ export default function AttendanceRecordsPage() {
     useEffect(() => {
         fetchRecords(1);
     }, [searchQuery, selectedCourse, selectedDateRange, selectedStatus, selectedRescheduleType]);
-
-    // Format stats for display
-    const summaryStats = useMemo(() => {
-        return [
-            {
-                title: 'Total Sessions',
-                value: stats.totalSessions.toString(),
-                icon: Calendar,
-                iconColor: 'text-blue-500',
-                iconBg: 'bg-blue-100 dark:bg-blue-900/20',
-                change: '+12',
-                changeType: 'positive' as const,
-            },
-            {
-                title: 'Average Attendance',
-                value: `${stats.averageAttendance.toFixed(1)}%`,
-                icon: Users,
-                iconColor: 'text-green-500',
-                iconBg: 'bg-green-100 dark:bg-green-900/20',
-                change: '+2.4%',
-                changeType: 'positive' as const,
-            },
-            {
-                title: 'Total Students',
-                value: stats.totalStudents.toString(),
-                icon: Users,
-                iconColor: 'text-purple-500',
-                iconBg: 'bg-purple-100 dark:bg-purple-900/20',
-                change: '+15',
-                changeType: 'positive' as const,
-            },
-            {
-                title: 'Absent Rate',
-                value: `${stats.absentRate.toFixed(1)}%`,
-                icon: AlertCircle,
-                iconColor: 'text-orange-500',
-                iconBg: 'bg-orange-100 dark:bg-orange-900/20',
-                change: '-1.2%',
-                changeType: 'positive' as const,
-            },
-        ];
-    }, [stats]);
 
     const handleDownloadReport = async () => {
         try {
@@ -481,42 +419,6 @@ export default function AttendanceRecordsPage() {
                             Export Data
                         </button>
                     </div>
-                </div>
-
-                {/* Summary Statistics */}
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    {summaryStats.map((stat, index) => {
-                        const Icon = stat.icon;
-                        return (
-                            <div
-                                key={index}
-                                className="rounded-xl border border-sidebar-border/70 bg-white p-5 shadow-sm dark:border-sidebar-border dark:bg-sidebar-accent"
-                            >
-                                <div className="flex items-start justify-between">
-                                    <div className="flex-1">
-                                        <p className="text-sm font-medium text-sidebar-foreground/60 dark:text-sidebar-foreground/60">{stat.title}</p>
-                                        <p className="mt-1 text-2xl font-bold text-sidebar-foreground dark:text-sidebar-foreground">{stat.value}</p>
-                                        <div
-                                            className={`mt-2 flex items-center gap-1 text-sm ${
-                                                stat.changeType === 'positive' ? 'text-green-600' : 'text-red-600'
-                                            }`}
-                                        >
-                                            {stat.changeType === 'positive' ? (
-                                                <TrendingUp className="h-4 w-4" />
-                                            ) : (
-                                                <TrendingDown className="h-4 w-4" />
-                                            )}
-                                            <span className="font-medium">{stat.change}</span>
-                                            <span className="text-xs text-sidebar-foreground/50">vs last month</span>
-                                        </div>
-                                    </div>
-                                    <div className={`rounded-xl p-3 ${stat.iconBg}`}>
-                                        <Icon className={`h-6 w-6 ${stat.iconColor}`} />
-                                    </div>
-                                </div>
-                            </div>
-                        );
-                    })}
                 </div>
 
                 {/* Filters Section */}
