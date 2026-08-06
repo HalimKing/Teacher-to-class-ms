@@ -41,12 +41,14 @@ export default function TeacherAttendanceAnalysisPage() {
     const [selectedDepartment, setSelectedDepartment] = useState('all');
     const [selectedProgram, setSelectedProgram] = useState('all');
     const [selectedLevel, setSelectedLevel] = useState('all');
+    const [selectedEmploymentStatus, setSelectedEmploymentStatus] = useState('all');
     const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null);
     const [teachers, setTeachers] = useState<any[]>([]);
     const [faculties, setFaculties] = useState<any[]>([]);
     const [departments, setDepartments] = useState<any[]>([]);
     const [programs, setPrograms] = useState<any[]>([]);
     const [levels, setLevels] = useState<any[]>([]);
+    const [employmentStatuses, setEmploymentStatuses] = useState<Array<{ value: string; label: string }>>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -137,6 +139,9 @@ export default function TeacherAttendanceAnalysisPage() {
             if (selectedLevel && selectedLevel !== 'all') {
                 params.append('levelId', selectedLevel);
             }
+            if (selectedEmploymentStatus && selectedEmploymentStatus !== 'all') {
+                params.append('employmentStatus', selectedEmploymentStatus);
+            }
 
             const response = await fetch(`/admin/settings-reports/attendance-analysis/data?${params}`);
 
@@ -153,6 +158,7 @@ export default function TeacherAttendanceAnalysisPage() {
                 setDepartments(data.data.filters?.departments || []);
                 setPrograms(data.data.filters?.programs || []);
                 setLevels(data.data.filters?.levels || []);
+                setEmploymentStatuses(data.data.filters?.employmentStatuses || []);
                 setDateRange(data.data.dateRange);
             } else {
                 throw new Error(data.message || 'Failed to fetch analysis data');
@@ -198,6 +204,7 @@ export default function TeacherAttendanceAnalysisPage() {
         // Prepare CSV headers
         const headers = [
             'Staff Name',
+            'Employment Status',
             'Course',
             'Faculty',
             'Department',
@@ -210,6 +217,7 @@ export default function TeacherAttendanceAnalysisPage() {
         ];
         const rows = analysisData.teacherPerformance.map((teacher) => [
             teacher.teacherName,
+            teacher.employmentStatusLabel || 'Permanent Staff',
             teacher.courses,
             teacher.faculty,
             teacher.department,
@@ -424,6 +432,25 @@ export default function TeacherAttendanceAnalysisPage() {
                             </div>
                         </div>
 
+                        {/* Employment Status Filter */}
+                        <div>
+                            <label className="mb-2 block text-xs font-semibold tracking-wider text-sidebar-foreground/60 uppercase">Employment Status</label>
+                            <div className="relative">
+                                <select
+                                    value={selectedEmploymentStatus}
+                                    onChange={(e) => setSelectedEmploymentStatus(e.target.value)}
+                                    className="w-full rounded-lg border border-sidebar-border/50 bg-white px-3 py-2 text-sm text-sidebar-foreground transition-colors hover:border-blue-300 dark:bg-sidebar-accent dark:text-sidebar-foreground dark:hover:border-blue-700"
+                                >
+                                    <option value="all">All Employment Statuses</option>
+                                    {employmentStatuses.map((status) => (
+                                        <option key={status.value} value={status.value}>
+                                            {status.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
                         {/* Apply Filters Button */}
                         <div className="flex items-end">
                             <button
@@ -578,6 +605,9 @@ export default function TeacherAttendanceAnalysisPage() {
                                         Staff Name
                                     </th>
                                     <th className="px-6 py-4 text-left text-xs font-semibold tracking-wider text-sidebar-foreground/60 uppercase">
+                                        Employment Status
+                                    </th>
+                                    <th className="px-6 py-4 text-left text-xs font-semibold tracking-wider text-sidebar-foreground/60 uppercase">
                                         Course
                                     </th>
                                     <th className="px-6 py-4 text-left text-xs font-semibold tracking-wider text-sidebar-foreground/60 uppercase">
@@ -612,6 +642,7 @@ export default function TeacherAttendanceAnalysisPage() {
                                             className="border-b border-sidebar-border/30 transition-colors hover:bg-sidebar-accent/50 dark:border-sidebar-border/50"
                                         >
                                             <td className="px-6 py-4 text-sm font-medium text-sidebar-foreground">{teacher.teacherName}</td>
+                                            <td className="px-6 py-4 text-sm text-sidebar-foreground">{teacher.employmentStatusLabel || 'Permanent Staff'}</td>
                                             <td className="px-6 py-4 text-sm text-sidebar-foreground">{teacher.courses}</td>
                                             <td className="px-6 py-4 text-sm text-sidebar-foreground">{teacher.faculty}</td>
                                             <td className="px-6 py-4 text-sm text-sidebar-foreground">{teacher.department}</td>

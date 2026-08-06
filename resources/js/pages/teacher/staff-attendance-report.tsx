@@ -13,6 +13,8 @@ interface StaffInfo {
     employee_id: string;
     department?: string;
     faculty?: string;
+    employment_status?: string;
+    employment_status_label?: string;
     face_enrollment_status: string;
 }
 
@@ -172,6 +174,7 @@ export default function StaffAttendanceReportPage({ staff, initialFilters }: Pag
                             <InfoRow label="Email" value={staff.email} />
                             <InfoRow label="Department" value={staff.department ?? 'N/A'} />
                             <InfoRow label="Faculty" value={staff.faculty ?? 'N/A'} />
+                            <InfoRow label="Employment Status" value={staff.employment_status_label ?? 'Permanent Staff'} />
                             <InfoRow label="Face Enrollment" value={staff.face_enrollment_status.replace(/_/g, ' ')} />
                         </dl>
                     </div>

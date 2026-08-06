@@ -73,7 +73,14 @@ interface FilterOptions {
 interface PageProps {
     filterOptions: FilterOptions;
     initialFilters: { start_date: string; end_date: string };
-    teacher: { name: string; employee_id: string };
+    teacher: {
+        name: string;
+        employee_id: string;
+        staff_type?: string;
+        staff_type_label?: string;
+        employment_status?: string;
+        employment_status_label?: string;
+    };
 }
 
 const defaultVisibleColumns = [
@@ -286,6 +293,12 @@ export default function LecturerAttendanceReportPage({ filterOptions, initialFil
                         <h1 className="text-2xl font-bold text-sidebar-foreground">Attendance Analytics Center</h1>
                         <p className="mt-1 text-sm text-sidebar-foreground/60">
                             Insights, trends, and detailed attendance intelligence for {teacher.name} ({teacher.employee_id})
+                            {(teacher.staff_type_label || teacher.employment_status_label) && (
+                                <>
+                                    {' · '}
+                                    {[teacher.staff_type_label, teacher.employment_status_label].filter(Boolean).join(' · ')}
+                                </>
+                            )}
                         </p>
                     </div>
                     <ReportExportButtons canExport onExport={handleExport} />

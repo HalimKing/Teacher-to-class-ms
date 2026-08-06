@@ -65,6 +65,7 @@ class TeacherController extends Controller
             'employeeId' => 'required|string|unique:teachers,employee_id',
             'title' => 'required|string|max:255|in:Prof.,Dr.,Mr.,Ms.',
             'staffType' => ['required', Rule::in(Teacher::STAFF_TYPES)],
+            'employmentStatus' => ['required', Rule::in(Teacher::EMPLOYMENT_STATUSES)],
             // Add other validation rules
         ]);
         
@@ -79,6 +80,7 @@ class TeacherController extends Controller
             $teacher->employee_id = $validated['employeeId'];
             $teacher->title = $validated['title'];
             $teacher->staff_type = $validated['staffType'];
+            $teacher->employment_status = $validated['employmentStatus'];
             // Assign other fields
             $teacher->save();
 
@@ -152,6 +154,7 @@ class TeacherController extends Controller
         'employeeId' => 'required|string|unique:teachers,employee_id,' . $id,
         'title' => 'required|string|max:255|in:Prof.,Dr.,Mr.,Ms.',
         'staffType' => ['required', Rule::in(Teacher::STAFF_TYPES)],
+        'employmentStatus' => ['required', Rule::in(Teacher::EMPLOYMENT_STATUSES)],
     ]);
     
     try {
@@ -164,6 +167,7 @@ class TeacherController extends Controller
         $teacher->employee_id = $validated['employeeId'];
         $teacher->title = $validated['title'];
         $teacher->staff_type = $validated['staffType'];
+        $teacher->employment_status = $validated['employmentStatus'];
         $teacher->save();
 
         app(ActivityLogService::class)->logUserManagement(
@@ -286,6 +290,7 @@ class TeacherController extends Controller
                 'Department' => $teacher->department->name ?? '',
                 'Title' => $teacher->title ?? '',
                 'Staff Type' => $teacher->staff_type ?? Teacher::STAFF_TYPE_LECTURER,
+                'Employment Status' => $teacher->employmentStatusLabel(),
                 'Face Enrolled' => $teacher->faceEnrollmentStatus(),
                 'Created At' => optional($teacher->created_at)->toDateTimeString(),
             ];
@@ -352,13 +357,14 @@ class TeacherController extends Controller
             fputcsv($out, ['# 2. faculty and department must match existing names exactly. Department must belong to faculty']);
             fputcsv($out, ['# 3. title must be one of: Prof., Dr., Mr., Ms.']);
             fputcsv($out, ['# 4. staff_type is optional and must be one of: lecturer, administrator. Defaults to lecturer']);
-            fputcsv($out, ['# 5. email and employee_id must be unique']);
-            fputcsv($out, ['# 6. Do not modify the header row. Remove instruction rows before uploading']);
-            fputcsv($out, ['# 7. Duplicate employee_id will update existing teacher']);
+            fputcsv($out, ['# 5. employment_status is optional and must be one of: permanent, nss, intern, volunteer, other. Defaults to permanent']);
+            fputcsv($out, ['# 6. email and employee_id must be unique']);
+            fputcsv($out, ['# 7. Do not modify the header row. Remove instruction rows before uploading']);
+            fputcsv($out, ['# 8. Duplicate employee_id will update existing teacher']);
             fputcsv($out, ['']);
-            fputcsv($out, ['first_name', 'last_name', 'email', 'phone', 'employee_id', 'faculty', 'department', 'title', 'staff_type']);
-            fputcsv($out, ['John', 'Doe', 'john.doe@example.com', '+1234567890', 'EMP001', 'Faculty of Engineering', 'Computer Science', 'Dr.', 'lecturer']);
-            fputcsv($out, ['Jane', 'Smith', 'jane.smith@example.com', '+0987654321', 'EMP002', 'Faculty of Science', 'Mathematics', 'Prof.', 'administrator']);
+            fputcsv($out, ['first_name', 'last_name', 'email', 'phone', 'employee_id', 'faculty', 'department', 'title', 'staff_type', 'employment_status']);
+            fputcsv($out, ['John', 'Doe', 'john.doe@example.com', '+1234567890', 'EMP001', 'Faculty of Engineering', 'Computer Science', 'Dr.', 'lecturer', 'permanent']);
+            fputcsv($out, ['Jane', 'Smith', 'jane.smith@example.com', '+0987654321', 'EMP002', 'Faculty of Science', 'Mathematics', 'Prof.', 'administrator', 'nss']);
             fclose($out);
         };
 
@@ -475,6 +481,10 @@ class TeacherController extends Controller
                     if ($staffTypeError) {
                         $errors[] = $staffTypeError;
                     }
+                    $employmentStatusError = $this->getEmploymentStatusValidationError($row['employment_status'] ?? null);
+                    if ($employmentStatusError) {
+                        $errors[] = $employmentStatusError;
+                    }
 
                     $empKey = strtolower(trim($row['employee_id'] ?? ''));
                     if ($empKey && isset($seen[$empKey])) {
@@ -565,6 +575,10 @@ class TeacherController extends Controller
                         $staffTypeError = $this->getStaffTypeValidationError($row['staff_type'] ?? null);
                         if ($staffTypeError) {
                             $errors[] = $staffTypeError;
+                        }
+                        $employmentStatusError = $this->getEmploymentStatusValidationError($row['employment_status'] ?? null);
+                        if ($employmentStatusError) {
+                            $errors[] = $employmentStatusError;
                         }
 
                         $line = $i + 1;
@@ -688,6 +702,7 @@ class TeacherController extends Controller
             $departmentName = trim($r['department'] ?? '');
             $title = trim($r['title'] ?? '');
             $staffType = $this->normalizeStaffType($r['staff_type'] ?? null);
+            $employmentStatus = $this->normalizeEmploymentStatus($r['employment_status'] ?? null);
 
             if (empty($firstName) || empty($lastName) || empty($email) || empty($phone) || empty($employeeId)) {
                 $skipped++;
@@ -732,6 +747,12 @@ class TeacherController extends Controller
                 $failed[] = ['index' => $idx, 'reason' => $staffTypeError];
                 continue;
             }
+            $employmentStatusError = $this->getEmploymentStatusValidationError($r['employment_status'] ?? null);
+            if ($employmentStatusError) {
+                $skipped++;
+                $failed[] = ['index' => $idx, 'reason' => $employmentStatusError];
+                continue;
+            }
 
             try {
                 Teacher::updateOrCreate(
@@ -745,6 +766,7 @@ class TeacherController extends Controller
                         'department_id' => $department->id,
                         'title' => $title,
                         'staff_type' => $staffType,
+                        'employment_status' => $employmentStatus,
                     ]
                 );
                 $imported++;
@@ -769,6 +791,37 @@ class TeacherController extends Controller
 
         if (!in_array($normalized, Teacher::STAFF_TYPES, true)) {
             return 'Staff type must be lecturer or administrator.';
+        }
+
+        return null;
+    }
+
+    private function normalizeEmploymentStatus(mixed $employmentStatus): string
+    {
+        $normalized = strtolower(trim((string) $employmentStatus));
+        $aliases = [
+            'permanent staff' => Teacher::EMPLOYMENT_STATUS_PERMANENT,
+            'nss personnel' => Teacher::EMPLOYMENT_STATUS_NSS,
+            'nss' => Teacher::EMPLOYMENT_STATUS_NSS,
+            'intern' => Teacher::EMPLOYMENT_STATUS_INTERN,
+            'volunteer' => Teacher::EMPLOYMENT_STATUS_VOLUNTEER,
+            'other' => Teacher::EMPLOYMENT_STATUS_OTHER,
+            'permanent' => Teacher::EMPLOYMENT_STATUS_PERMANENT,
+        ];
+
+        if ($normalized === '') {
+            return Teacher::EMPLOYMENT_STATUS_PERMANENT;
+        }
+
+        return $aliases[$normalized] ?? $normalized;
+    }
+
+    private function getEmploymentStatusValidationError(mixed $employmentStatus): ?string
+    {
+        $normalized = $this->normalizeEmploymentStatus($employmentStatus);
+
+        if (! in_array($normalized, Teacher::EMPLOYMENT_STATUSES, true)) {
+            return 'Employment status must be permanent, nss, intern, volunteer, or other.';
         }
 
         return null;

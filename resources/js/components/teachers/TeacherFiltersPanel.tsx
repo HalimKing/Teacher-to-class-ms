@@ -93,6 +93,15 @@ export default function TeacherFiltersPanel({ filters, faculties, departments, o
                         <option value="administrator">Administrators</option>
                     </select>
 
+                    <select value={filters.employmentStatus ?? 'all'} onChange={(event) => onChange('employmentStatus', event.target.value)} className={selectClass}>
+                        <option value="all">All Employment Statuses</option>
+                        <option value="permanent">Permanent Staff</option>
+                        <option value="nss">NSS Personnel</option>
+                        <option value="intern">Intern</option>
+                        <option value="volunteer">Volunteer</option>
+                        <option value="other">Other</option>
+                    </select>
+
                     <Button type="button" variant="outline" onClick={() => setExpanded((current) => !current)}>
                         <Filter className="size-4" />
                         Advanced Filters

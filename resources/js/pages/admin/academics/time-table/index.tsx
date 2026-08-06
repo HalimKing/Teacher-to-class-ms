@@ -69,6 +69,8 @@ interface Teacher {
   employee_id: string;
   title: string;
   staff_type?: string;
+  employment_status?: string;
+  employment_status_label?: string;
 }
 
 interface TimeTable {
@@ -100,8 +102,9 @@ interface TimeTablesIndexPageProps {
   programOptions: Array<{ label: string; value: number }>;
   courseOptions: Array<{ label: string; value: number }>;
   classRoomOptions: Array<{ label: string; value: number }>;
-  teacherOptions: Array<{ label: string; value: number; staff_type?: string }>;
+  teacherOptions: Array<{ label: string; value: number; staff_type?: string; employment_status?: string; employment_status_label?: string }>;
   staffTypeOptions: Array<{ label: string; value: string }>;
+  employmentStatusOptions: Array<{ label: string; value: string }>;
   dayOptions: Array<{ label: string; value: string }>;
   filters: {
     academic_year_id?: number;
@@ -110,6 +113,7 @@ interface TimeTablesIndexPageProps {
     class_room_id?: number;
     teacher_id?: number;
     staff_type?: string;
+    employment_status?: string;
     day?: string;
   };
 }
@@ -122,6 +126,7 @@ const TimeTablesIndexPage = ({
   classRoomOptions,
   teacherOptions,
   staffTypeOptions,
+  employmentStatusOptions = [],
   dayOptions,
   filters: initialFilters
 }: TimeTablesIndexPageProps) => {
@@ -134,6 +139,7 @@ const TimeTablesIndexPage = ({
     class_room_id: initialFilters.class_room_id || '',
     teacher_id: initialFilters.teacher_id || '',
     staff_type: initialFilters.staff_type || '',
+    employment_status: initialFilters.employment_status || '',
     day: initialFilters.day || ''
   });
   const [showFilters, setShowFilters] = useState(false);
@@ -206,6 +212,7 @@ const TimeTablesIndexPage = ({
       class_room_id: '',
       teacher_id: '',
       staff_type: '',
+      employment_status: '',
       day: ''
     });
     setShowFilters(false);
@@ -713,6 +720,18 @@ const TimeTablesIndexPage = ({
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Employment Status
+                    </label>
+                    <ComboBox
+                      options={employmentStatusOptions}
+                      label="All Employment Statuses"
+                      externalValue={handleValueChange('employment_status')}
+                      defaultValue={null}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
                       Staff Member
                     </label>
                     <ComboBox
@@ -903,6 +922,11 @@ const TimeTablesIndexPage = ({
                                     </div>
                                     <div className="text-xs text-slate-500">
                                       {timetable.teacher.employee_id}
+                                      {timetable.teacher.employment_status_label
+                                        ? ` · ${timetable.teacher.employment_status_label}`
+                                        : timetable.teacher.employment_status
+                                          ? ` · ${timetable.teacher.employment_status}`
+                                          : ''}
                                     </div>
                                   </div>
                                 </div>

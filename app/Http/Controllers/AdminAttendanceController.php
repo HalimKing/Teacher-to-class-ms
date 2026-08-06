@@ -31,6 +31,14 @@ class AdminAttendanceController extends Controller
             'programs' => $programs,
             'levels' => $levels,
             'academicYears' => $academicYears,
+            'employmentStatusOptions' => collect(Teacher::EMPLOYMENT_STATUS_LABELS)
+                ->map(fn (string $label, string $value) => ['value' => $value, 'label' => $label])
+                ->values()
+                ->all(),
+            'staffTypeOptions' => [
+                ['value' => Teacher::STAFF_TYPE_LECTURER, 'label' => 'Lecturer'],
+                ['value' => Teacher::STAFF_TYPE_ADMINISTRATOR, 'label' => 'Administrator'],
+            ],
         ]);
     }
 
@@ -45,6 +53,16 @@ class AdminAttendanceController extends Controller
         if ($request->department_id) {
             $query->whereHas('teacher', function ($q) use ($request) {
                 $q->where('department_id', $request->department_id);
+            });
+        }
+        if ($request->staff_type && in_array($request->staff_type, Teacher::STAFF_TYPES, true)) {
+            $query->whereHas('teacher', function ($q) use ($request) {
+                $q->where('staff_type', $request->staff_type);
+            });
+        }
+        if ($request->employment_status && in_array($request->employment_status, Teacher::EMPLOYMENT_STATUSES, true)) {
+            $query->whereHas('teacher', function ($q) use ($request) {
+                $q->where('employment_status', $request->employment_status);
             });
         }
         if ($request->program_id) {
@@ -89,6 +107,16 @@ class AdminAttendanceController extends Controller
                 $q->where('department_id', $request->department_id);
             });
         }
+        if ($request->staff_type && in_array($request->staff_type, Teacher::STAFF_TYPES, true)) {
+            $query->whereHas('teacher', function ($q) use ($request) {
+                $q->where('staff_type', $request->staff_type);
+            });
+        }
+        if ($request->employment_status && in_array($request->employment_status, Teacher::EMPLOYMENT_STATUSES, true)) {
+            $query->whereHas('teacher', function ($q) use ($request) {
+                $q->where('employment_status', $request->employment_status);
+            });
+        }
         if ($request->program_id) {
             $query->whereHas('course', function ($q) use ($request) {
                 $q->where('program_id', $request->program_id);
@@ -118,6 +146,7 @@ class AdminAttendanceController extends Controller
             return [
                 'Teacher' => $rec->teacher?->first_name . ' ' . $rec->teacher?->last_name,
                 'Staff Type' => $rec->teacher?->staff_type ?? Teacher::STAFF_TYPE_LECTURER,
+                'Employment Status' => $rec->teacher?->employmentStatusLabel() ?? 'Permanent Staff',
                 'Course' => $rec->course?->name,
                 'Venue' => $rec->classroom?->name,
                 'Date' => $rec->date,

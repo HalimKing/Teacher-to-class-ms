@@ -45,9 +45,10 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 interface FilterOptions {
-    administrators: Array<{ id: number; name: string; employee_id: string }>;
+    administrators: Array<{ id: number; name: string; employee_id: string; employment_status?: string; employment_status_label?: string }>;
     faculties: Array<{ id: number; name: string }>;
     departments: Array<{ id: number; name: string; faculty_id: number }>;
+    employmentStatuses?: Array<{ value: string; label: string }>;
     attendanceStatuses: string[];
     exceptionCategories?: Array<{ value: string; label: string }>;
     attendanceSources: Array<{ value: string; label: string }>;
@@ -67,6 +68,10 @@ interface AttendanceRecord {
     staff_id: string;
     staff_member_id: number;
     administrator_name: string;
+    staff_type?: string;
+    staff_type_label?: string;
+    employment_status?: string;
+    employment_status_label?: string;
     department: string;
     faculty: string;
     date: string;
@@ -119,8 +124,15 @@ interface Analytics {
         };
         most_punctual: Array<{ name: string; department: string; attendance_rate: number; late: number; punctuality_score?: number }>;
         frequently_late: Array<{ name: string; department: string; late: number; attendance_rate: number }>;
-        attendance_ranking: Array<{ name: string; department: string; attendance_rate: number; present: number; total: number }>;
+        attendance_ranking: Array<{ name: string; department: string; attendance_rate: number; present: number; total: number; employment_status_label?: string }>;
     };
+    employmentStatusBreakdown?: Array<{
+        employment_status: string;
+        label: string;
+        total_records: number;
+        present_count: number;
+        attendance_rate: number;
+    }>;
 }
 
 interface PageProps {
@@ -165,6 +177,7 @@ export default function StaffAttendanceReportsIndex({ filterOptions, initialFilt
         staff_id: 'all',
         faculty_id: 'all',
         department_id: 'all',
+        employment_status: 'all',
         attendance_status: 'all',
         exception_category: 'all',
         attendance_source: 'all',
@@ -443,6 +456,16 @@ export default function StaffAttendanceReportsIndex({ filterOptions, initialFilt
                                 ))}
                             </select>
                         </FilterField>
+                        <FilterField label="Employment Status">
+                            <select value={filters.employment_status} onChange={(e) => setFilters((prev) => ({ ...prev, employment_status: e.target.value }))} className="filter-input">
+                                <option value="all">All Employment Statuses</option>
+                                {(filterOptions.employmentStatuses || []).map((status) => (
+                                    <option key={status.value} value={status.value}>
+                                        {status.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </FilterField>
                         <FilterField label="Attendance Status">
                             <select value={filters.attendance_status} onChange={(e) => setFilters((prev) => ({ ...prev, attendance_status: e.target.value }))} className="filter-input">
                                 <option value="all">All Statuses</option>
@@ -631,6 +654,25 @@ export default function StaffAttendanceReportsIndex({ filterOptions, initialFilt
                     </div>
                 )}
 
+                {analytics?.employmentStatusBreakdown && analytics.employmentStatusBreakdown.length > 0 && (
+                    <div className="rounded-xl border border-sidebar-border/70 bg-white p-4 shadow-sm dark:border-sidebar-border dark:bg-sidebar-accent">
+                        <h2 className="mb-3 text-lg font-semibold text-sidebar-foreground">Attendance by Employment Status</h2>
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                            {analytics.employmentStatusBreakdown.map((item) => (
+                                <div key={item.employment_status} className="rounded-lg border border-sidebar-border/50 p-3 text-sm">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div className="font-medium text-sidebar-foreground">{item.label}</div>
+                                        <div className="font-semibold">{item.attendance_rate}%</div>
+                                    </div>
+                                    <div className="mt-1 text-xs text-sidebar-foreground/60">
+                                        {item.present_count} present of {item.total_records} records
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 <div className="rounded-xl border border-sidebar-border/70 bg-white shadow-sm dark:border-sidebar-border dark:bg-sidebar-accent">
                     <div className="flex flex-col gap-3 border-b border-sidebar-border/50 p-4 sm:flex-row sm:items-center sm:justify-between">
                         <div>
@@ -663,6 +705,8 @@ export default function StaffAttendanceReportsIndex({ filterOptions, initialFilt
                                         {[
                                             ['administrator_name', 'Staff Name'],
                                             ['staff_id', 'Staff ID'],
+                                            ['staff_type_label', 'Staff Type'],
+                                            ['employment_status_label', 'Employment Status'],
                                             ['department', 'Department'],
                                             ['date', 'Date'],
                                             ['check_in_time', 'Check-in'],
@@ -694,6 +738,8 @@ export default function StaffAttendanceReportsIndex({ filterOptions, initialFilt
                                         <tr key={record.id} className="border-t border-sidebar-border/40">
                                             <td className="px-4 py-3 font-medium">{record.administrator_name}</td>
                                             <td className="px-4 py-3">{record.staff_id}</td>
+                                            <td className="px-4 py-3 capitalize">{record.staff_type_label || 'Administrator'}</td>
+                                            <td className="px-4 py-3">{record.employment_status_label || 'Permanent Staff'}</td>
                                             <td className="px-4 py-3">{record.department}</td>
                                             <td className="px-4 py-3">{record.date}</td>
                                             <td className="px-4 py-3">{record.check_in_time ?? '—'}</td>

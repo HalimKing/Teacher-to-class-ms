@@ -40,6 +40,7 @@ class TeacherAttendanceAnalysisController extends Controller
             $departmentId = $request->get('departmentId');
             $programId = $request->get('programId');
             $levelId = $request->get('levelId');
+            $employmentStatus = $request->get('employmentStatus');
 
             // Get teachers with their attendance records
             $query = TeacherAttendance::whereBetween('teacher_attendances.date', [$startDate->toDateString(), $endDate->toDateString()])
@@ -52,6 +53,7 @@ class TeacherAttendanceAnalysisController extends Controller
                     'teacher_attendances.*',
                     'courses.name as course_name',
                     'teachers.faculty_id',
+                    'teachers.employment_status',
                     'faculties.name as faculty_name',
                     'departments.name as department_name',
                     'programs.name as program_name',
@@ -69,6 +71,10 @@ class TeacherAttendanceAnalysisController extends Controller
 
             if ($departmentId && $departmentId !== 'all') {
                 $query->where('teachers.department_id', $departmentId);
+            }
+
+            if ($employmentStatus && $employmentStatus !== 'all' && in_array($employmentStatus, Teacher::EMPLOYMENT_STATUSES, true)) {
+                $query->where('teachers.employment_status', $employmentStatus);
             }
 
             if ($programId && $programId !== 'all') {
@@ -97,6 +103,10 @@ class TeacherAttendanceAnalysisController extends Controller
                         'programs' => $departmentId && $departmentId !== 'all' ? $this->getPrograms($departmentId) : [],
                         'levels' => $this->getLevels(),
                         'teachers' => $this->getAllTeachers(),
+                        'employmentStatuses' => collect(Teacher::EMPLOYMENT_STATUS_LABELS)
+                            ->map(fn (string $label, string $value) => ['value' => $value, 'label' => $label])
+                            ->values()
+                            ->all(),
                     ],
                     'dateRange' => "{$startDate->format('M d, Y')} - {$endDate->format('M d, Y')}",
                 ],
@@ -191,6 +201,7 @@ class TeacherAttendanceAnalysisController extends Controller
             $department = $group->first()->department_name ?? 'N/A';
             $program = $group->first()->program_name ?? 'N/A';
 
+            $employmentStatus = $group->first()->employment_status ?? Teacher::EMPLOYMENT_STATUS_PERMANENT;
             $reliability = $rate >= 95 ? 'Excellent' : ($rate >= 85 ? 'Good' : ($rate >= 75 ? 'Average' : 'Poor'));
             $reliabilityColor = $rate >= 95
                 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
@@ -203,6 +214,9 @@ class TeacherAttendanceAnalysisController extends Controller
             return [
                 'teacherId' => $teacherId,
                 'teacherName' => $group->first()->teacher_name,
+                'employmentStatus' => $employmentStatus,
+                'employmentStatusLabel' => Teacher::EMPLOYMENT_STATUS_LABELS[$employmentStatus]
+                    ?? Teacher::EMPLOYMENT_STATUS_LABELS[Teacher::EMPLOYMENT_STATUS_PERMANENT],
                 'courses' => $courses,
                 'faculty' => $faculty,
                 'department' => $department,

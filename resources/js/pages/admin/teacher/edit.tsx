@@ -25,6 +25,7 @@ interface FormData {
   faculty: number;
   employeeId: string;
   staffType: string;
+  employmentStatus: string;
 }
 
 interface PageProps {
@@ -54,6 +55,7 @@ interface Teacher {
   department_id: number;
   title: string;
   staff_type: string;
+  employment_status?: string;
   face_enrollment_status?: string;
   face_registered_at?: string | null;
 }
@@ -75,6 +77,14 @@ const staffTypeData = [
   { label: 'Administrator', value: 'administrator' },
 ];
 
+const employmentStatusData = [
+  { label: 'Permanent Staff', value: 'permanent' },
+  { label: 'NSS Personnel', value: 'nss' },
+  { label: 'Intern', value: 'intern' },
+  { label: 'Volunteer', value: 'volunteer' },
+  { label: 'Other', value: 'other' },
+];
+
 const EditTeacherPage = ({ facultyOptions, teacher }: EditTeacherPageProps) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   
@@ -92,6 +102,7 @@ const EditTeacherPage = ({ facultyOptions, teacher }: EditTeacherPageProps) => {
     employeeId: teacher.employee_id?.toString() || '',
     faculty: teacher.faculty_id || 0,
     staffType: teacher.staff_type || 'lecturer',
+    employmentStatus: teacher.employment_status || 'permanent',
   });
 
   const initialFacultyOption = facultyOptions.find(option => option.value === teacher.faculty_id) || null;
@@ -126,6 +137,10 @@ const EditTeacherPage = ({ facultyOptions, teacher }: EditTeacherPageProps) => {
 
   const handleStaffTypeChange = (value: string | number | undefined) => {
     setData('staffType', value as string);
+  };
+
+  const handleEmploymentStatusChange = (value: string | number | undefined) => {
+    setData('employmentStatus', value as string);
   };
 
   const handleValueChangeFaculty = (value: string | number | undefined) => {
@@ -333,6 +348,21 @@ const EditTeacherPage = ({ facultyOptions, teacher }: EditTeacherPageProps) => {
                         />
                         {errors.staffType && (
                           <p className="mt-1 text-sm text-red-500">{errors.staffType}</p>
+                        )}
+                      </div>
+                      <div>
+                        <ComboBox
+                          options={employmentStatusData}
+                          label="Select Employment Status"
+                          externalValue={handleEmploymentStatusChange}
+                          defaultValue={
+                            employmentStatusData.find(
+                              (option) => option.value === (teacher.employment_status || 'permanent'),
+                            ) || employmentStatusData[0]
+                          }
+                        />
+                        {errors.employmentStatus && (
+                          <p className="mt-1 text-sm text-red-500">{errors.employmentStatus}</p>
                         )}
                       </div>
                     </div>

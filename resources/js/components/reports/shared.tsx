@@ -56,6 +56,16 @@ export interface PerformancePerson {
     late: number;
     present?: number;
     total?: number;
+    employment_status_label?: string;
+    staff_type?: string;
+}
+
+export interface EmploymentStatusBreakdownItem {
+    employment_status: string;
+    label: string;
+    total_records: number;
+    present_count: number;
+    attendance_rate: number;
 }
 
 export interface ReportAnalytics {
@@ -73,6 +83,7 @@ export interface ReportAnalytics {
     verificationTrend?: TrendPoint[];
     attendanceBreakdown?: Array<{ label: string; value: number }>;
     punctualityAnalytics?: Array<{ label: string; value: number }>;
+    employmentStatusBreakdown?: EmploymentStatusBreakdownItem[];
 }
 
 export interface TableColumn<T> {

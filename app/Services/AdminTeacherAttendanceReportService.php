@@ -74,6 +74,11 @@ class AdminTeacherAttendanceReportService
             $query->whereHas('teacher', fn (Builder $teacherQuery) => $teacherQuery->where('faculty_id', (int) $request->faculty_id));
         }
 
+        if ($request->filled('employment_status') && $request->employment_status !== 'all'
+            && in_array($request->employment_status, Teacher::EMPLOYMENT_STATUSES, true)) {
+            $query->whereHas('teacher', fn (Builder $teacherQuery) => $teacherQuery->where('employment_status', $request->employment_status));
+        }
+
         if ($request->filled('course_id') && $request->course_id !== 'all') {
             $query->where('course_id', (int) $request->course_id);
         }
@@ -325,8 +330,12 @@ class AdminTeacherAttendanceReportService
                     'id' => $record->teacher?->id,
                     'name' => trim(($record->teacher?->first_name ?? '') . ' ' . ($record->teacher?->last_name ?? '')),
                     'department' => $record->teacher?->department?->name ?? 'N/A',
+                    'staff_type' => $record->teacher?->staff_type ?? Teacher::STAFF_TYPE_LECTURER,
+                    'employment_status' => $record->teacher?->employment_status ?? Teacher::EMPLOYMENT_STATUS_PERMANENT,
+                    'employment_status_label' => $record->teacher?->employmentStatusLabel() ?? Teacher::EMPLOYMENT_STATUS_LABELS[Teacher::EMPLOYMENT_STATUS_PERMANENT],
                 ]
             ),
+            'employmentStatusBreakdown' => $this->employmentStatusBreakdown($records),
         ];
     }
 
@@ -349,6 +358,9 @@ class AdminTeacherAttendanceReportService
                 'employee_id' => $teacher->employee_id,
                 'department' => $teacher->department?->name,
                 'faculty' => $teacher->faculty?->name,
+                'staff_type' => $teacher->staff_type,
+                'employment_status' => $teacher->employment_status ?? Teacher::EMPLOYMENT_STATUS_PERMANENT,
+                'employment_status_label' => $teacher->employmentStatusLabel(),
                 'face_enrollment_status' => $teacher->faceEnrollmentStatus(),
             ],
             'summary' => [
@@ -392,17 +404,23 @@ class AdminTeacherAttendanceReportService
         return [
             'teachers' => Teacher::where('staff_type', Teacher::STAFF_TYPE_LECTURER)
                 ->orderBy('first_name')
-                ->get(['id', 'first_name', 'last_name', 'employee_id'])
+                ->get(['id', 'first_name', 'last_name', 'employee_id', 'employment_status'])
                 ->map(fn (Teacher $teacher) => [
                     'id' => $teacher->id,
                     'name' => trim("{$teacher->first_name} {$teacher->last_name}"),
                     'employee_id' => $teacher->employee_id,
+                    'employment_status' => $teacher->employment_status ?? Teacher::EMPLOYMENT_STATUS_PERMANENT,
+                    'employment_status_label' => $teacher->employmentStatusLabel(),
                 ])
                 ->values()
                 ->all(),
             'faculties' => Faculty::orderBy('name')->get(['id', 'name'])->values()->all(),
             'departments' => Department::orderBy('name')->get(['id', 'name', 'faculty_id'])->values()->all(),
             'courses' => Course::orderBy('name')->get(['id', 'name', 'program_id'])->values()->all(),
+            'employmentStatuses' => collect(Teacher::EMPLOYMENT_STATUS_LABELS)
+                ->map(fn (string $label, string $value) => ['value' => $value, 'label' => $label])
+                ->values()
+                ->all(),
             'attendanceStatuses' => ['pending', 'present', 'absent', 'completed', 'incomplete', 'late', 'checked_in', 'early_leave', 'overtime'],
             'exceptionCategories' => collect(AttendanceExceptionCategory::labels())
                 ->map(fn (string $label, string $value) => ['value' => $value, 'label' => $label])
@@ -425,6 +443,8 @@ class AdminTeacherAttendanceReportService
             return [
                 'Teacher Name' => $record['teacher_name'],
                 'Staff ID' => $record['staff_id'],
+                'Staff Type' => $record['staff_type_label'] ?? 'Lecturer',
+                'Employment Status' => $record['employment_status_label'] ?? 'Permanent Staff',
                 'Department' => $record['department'],
                 'Course/Venue' => $record['course_class'],
                 'Date' => $record['date'],
@@ -488,6 +508,11 @@ class AdminTeacherAttendanceReportService
             'staff_id' => $teacher?->employee_id,
             'teacher_member_id' => $record->teacher_id,
             'teacher_name' => trim(($teacher?->first_name ?? '') . ' ' . ($teacher?->last_name ?? '')),
+            'staff_type' => $teacher?->staff_type ?? Teacher::STAFF_TYPE_LECTURER,
+            'staff_type_label' => ucfirst($teacher?->staff_type ?? Teacher::STAFF_TYPE_LECTURER),
+            'employment_status' => $teacher?->employment_status ?? Teacher::EMPLOYMENT_STATUS_PERMANENT,
+            'employment_status_label' => $teacher?->employmentStatusLabel()
+                ?? Teacher::EMPLOYMENT_STATUS_LABELS[Teacher::EMPLOYMENT_STATUS_PERMANENT],
             'department' => $teacher?->department?->name ?? 'N/A',
             'faculty' => $teacher?->faculty?->name ?? 'N/A',
             'course_class' => $className ? "{$courseName} / {$className}" : $courseName,
@@ -543,5 +568,27 @@ class AdminTeacherAttendanceReportService
             ->where('day_of_week', now()->format('l'))
             ->distinct('teacher_id')
             ->count('teacher_id');
+    }
+
+    private function employmentStatusBreakdown(Collection $records): array
+    {
+        return $records
+            ->groupBy(fn (TeacherAttendance $record) => $record->teacher?->employment_status ?? Teacher::EMPLOYMENT_STATUS_PERMANENT)
+            ->map(function (Collection $group, string $status) {
+                $total = $group->count();
+                $present = $group->filter(fn ($record) => $this->isPresentRecord($record, self::STATUS_COLUMN))->count();
+
+                return [
+                    'employment_status' => $status,
+                    'label' => Teacher::EMPLOYMENT_STATUS_LABELS[$status] ?? ucfirst($status),
+                    'total_records' => $total,
+                    'present_count' => $present,
+                    'attendance_rate' => $total > 0 ? round(($present / $total) * 100, 1) : 0,
+                ];
+            })
+            ->values()
+            ->sortBy('label')
+            ->values()
+            ->all();
     }
 }

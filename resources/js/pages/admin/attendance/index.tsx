@@ -45,7 +45,7 @@ import { useState, useEffect } from 'react';
 
 interface AttendanceRecord {
     id: number;
-    teacher?: { first_name: string; last_name: string; staff_type?: string };
+    teacher?: { first_name: string; last_name: string; staff_type?: string; employment_status?: string; employment_status_label?: string };
     course?: { name: string };
     classroom?: { name: string };
     date: string;
@@ -60,6 +60,8 @@ interface TeacherAttendanceRecordsAdminProps {
     programs: Array<{ id: number; name: string }>;
     levels: Array<{ id: number; name: string }>;
     academicYears: Array<{ id: number; name: string }>;
+    employmentStatusOptions?: Array<{ value: string; label: string }>;
+    staffTypeOptions?: Array<{ value: string; label: string }>;
 }
 
 export default function TeacherAttendanceRecordsAdmin({
@@ -68,6 +70,17 @@ export default function TeacherAttendanceRecordsAdmin({
     programs,
     levels,
     academicYears,
+    employmentStatusOptions = [
+        { value: 'permanent', label: 'Permanent Staff' },
+        { value: 'nss', label: 'NSS Personnel' },
+        { value: 'intern', label: 'Intern' },
+        { value: 'volunteer', label: 'Volunteer' },
+        { value: 'other', label: 'Other' },
+    ],
+    staffTypeOptions = [
+        { value: 'lecturer', label: 'Lecturer' },
+        { value: 'administrator', label: 'Administrator' },
+    ],
 }: TeacherAttendanceRecordsAdminProps) {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -81,6 +94,8 @@ export default function TeacherAttendanceRecordsAdmin({
         level_id: '',
         academic_year_id: '',
         date: '',
+        staff_type: '',
+        employment_status: '',
     });
     const [records, setRecords] = useState<AttendanceRecord[]>([]);
     const [loading, setLoading] = useState(false);
@@ -188,6 +203,8 @@ export default function TeacherAttendanceRecordsAdmin({
             level_id: '',
             academic_year_id: '',
             date: '',
+            staff_type: '',
+            employment_status: '',
         });
         setRecords([]);
         setFilterApplied(false);
@@ -255,40 +272,50 @@ export default function TeacherAttendanceRecordsAdmin({
             <Card sx={{ mb: 2, borderRadius: 2 }}>
                 <CardContent sx={{ p: 2 }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1.5 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
                             <School size={16} color={theme.palette.primary.main} />
-                            <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-                                {record.teacher?.first_name} {record.teacher?.last_name}
-                            </Typography>
+                            <Box sx={{ minWidth: 0 }}>
+                                <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                                    {record.teacher?.first_name} {record.teacher?.last_name}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                    {record.teacher?.employment_status_label
+                                        || (record.teacher?.employment_status
+                                            ? record.teacher.employment_status.replace(/_/g, ' ')
+                                            : 'Permanent Staff')}
+                                </Typography>
+                            </Box>
                         </Box>
-                        <Chip
-                            label={formatStaffType(record.teacher?.staff_type)}
-                            size="small"
-                            sx={getStaffTypeChipStyles(record.teacher?.staff_type)}
-                        />
-                        <Box
-                            sx={{
-                                px: 1,
-                                py: 0.5,
-                                borderRadius: 1.5,
-                                fontSize: '0.7rem',
-                                fontWeight: 600,
-                                textTransform: 'capitalize',
-                                backgroundColor:
-                                    record.status === 'late' 
-                                        ? alpha(theme.palette.warning.main, 0.12)
-                                        : record.status === 'completed' 
-                                        ? alpha(theme.palette.success.main, 0.12)
-                                        : alpha(theme.palette.grey[500], 0.12),
-                                color: 
-                                    record.status === 'late' 
-                                        ? theme.palette.warning.dark
-                                        : record.status === 'completed' 
-                                        ? theme.palette.success.dark
-                                        : theme.palette.text.secondary,
-                            }}
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexShrink: 0 }}>
+                            <Chip
+                                label={formatStaffType(record.teacher?.staff_type)}
+                                size="small"
+                                sx={getStaffTypeChipStyles(record.teacher?.staff_type)}
+                            />
+                            <Box
+                                sx={{
+                                    px: 1,
+                                    py: 0.5,
+                                    borderRadius: 1.5,
+                                    fontSize: '0.7rem',
+                                    fontWeight: 600,
+                                    textTransform: 'capitalize',
+                                    backgroundColor:
+                                        record.status === 'late' 
+                                            ? alpha(theme.palette.warning.main, 0.12)
+                                            : record.status === 'completed' 
+                                            ? alpha(theme.palette.success.main, 0.12)
+                                            : alpha(theme.palette.grey[500], 0.12),
+                                    color: 
+                                        record.status === 'late' 
+                                            ? theme.palette.warning.dark
+                                            : record.status === 'completed' 
+                                            ? theme.palette.success.dark
+                                            : theme.palette.text.secondary,
+                                }}
                         >
                             {record.status}
+                        </Box>
                         </Box>
                     </Box>
                     
@@ -623,6 +650,44 @@ export default function TeacherAttendanceRecordsAdmin({
                                     sx={{ minWidth: '100%' }}
                                 />
                             </Grid>
+
+                            <Grid item xs={12} sm={6} md={4} lg={2}>
+                                <TextField
+                                    select
+                                    fullWidth
+                                    label="Staff Type"
+                                    value={filters.staff_type}
+                                    onChange={(e) => setFilters((f) => ({ ...f, staff_type: e.target.value }))}
+                                    size={isMobile ? 'small' : 'small'}
+                                    sx={{ minWidth: '100%' }}
+                                >
+                                    <MenuItem value="">All Staff Types</MenuItem>
+                                    {staffTypeOptions.map((option) => (
+                                        <MenuItem key={option.value} value={option.value}>
+                                            {option.label}
+                                        </MenuItem>
+                                    ))}
+                                </TextField>
+                            </Grid>
+
+                            <Grid item xs={12} sm={6} md={4} lg={2}>
+                                <TextField
+                                    select
+                                    fullWidth
+                                    label="Employment Status"
+                                    value={filters.employment_status}
+                                    onChange={(e) => setFilters((f) => ({ ...f, employment_status: e.target.value }))}
+                                    size={isMobile ? 'small' : 'small'}
+                                    sx={{ minWidth: '100%' }}
+                                >
+                                    <MenuItem value="">All Employment Statuses</MenuItem>
+                                    {employmentStatusOptions.map((option) => (
+                                        <MenuItem key={option.value} value={option.value}>
+                                            {option.label}
+                                        </MenuItem>
+                                    ))}
+                                </TextField>
+                            </Grid>
                         </Grid>
 
                         <Box sx={{ 
@@ -714,6 +779,14 @@ export default function TeacherAttendanceRecordsAdmin({
                                                     fontSize: { sm: '0.75rem', md: '0.875rem' },
                                                     py: { sm: 1, md: 1.5 }
                                                 }}>
+                                                    Employment Status
+                                                </TableCell>
+                                                <TableCell sx={{ 
+                                                    fontWeight: 600, 
+                                                    bgcolor: alpha(theme.palette.primary.main, 0.04),
+                                                    fontSize: { sm: '0.75rem', md: '0.875rem' },
+                                                    py: { sm: 1, md: 1.5 }
+                                                }}>
                                                     Course
                                                 </TableCell>
                                                 <TableCell sx={{ 
@@ -788,6 +861,15 @@ export default function TeacherAttendanceRecordsAdmin({
                                                             size="small"
                                                             sx={getStaffTypeChipStyles(rec.teacher?.staff_type)}
                                                         />
+                                                    </TableCell>
+                                                    <TableCell sx={{ 
+                                                        fontSize: { sm: '0.75rem', md: '0.875rem' },
+                                                        py: { sm: 1, md: 1.5 }
+                                                    }}>
+                                                        {rec.teacher?.employment_status_label
+                                                            || (rec.teacher?.employment_status
+                                                                ? rec.teacher.employment_status.replace(/_/g, ' ')
+                                                                : 'Permanent Staff')}
                                                     </TableCell>
                                                     <TableCell sx={{ 
                                                         fontSize: { sm: '0.75rem', md: '0.875rem' },

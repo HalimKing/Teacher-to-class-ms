@@ -80,6 +80,8 @@ class AdminTeacherManagementService
                 'department' => $teacher->department?->name,
                 'faculty' => $teacher->faculty?->name,
                 'staff_type' => $teacher->staff_type,
+                'employment_status' => $teacher->employment_status ?? Teacher::EMPLOYMENT_STATUS_PERMANENT,
+                'employment_status_label' => $teacher->employmentStatusLabel(),
                 'created_at' => $teacher->created_at?->format('M d, Y'),
             ],
             'attendance' => [
@@ -126,6 +128,7 @@ class AdminTeacherManagementService
             'faculty',
             'department',
             'staffType',
+            'employmentStatus',
             'faceEnrollment',
             'faceVerification',
             'timetable',
@@ -172,6 +175,10 @@ class AdminTeacherManagementService
 
         if ($request->filled('staffType') && in_array($request->staffType, Teacher::STAFF_TYPES, true)) {
             $query->where('staff_type', $request->staffType);
+        }
+
+        if ($request->filled('employmentStatus') && in_array($request->employmentStatus, Teacher::EMPLOYMENT_STATUSES, true)) {
+            $query->where('employment_status', $request->employmentStatus);
         }
 
         if ($request->filled('faceEnrollment') && $request->faceEnrollment !== 'all') {
@@ -387,6 +394,8 @@ class AdminTeacherManagementService
             'phone' => $teacher->phone,
             'employee_id' => $teacher->employee_id,
             'staff_type' => $teacher->staff_type,
+            'employment_status' => $teacher->employment_status ?? Teacher::EMPLOYMENT_STATUS_PERMANENT,
+            'employment_status_label' => $teacher->employmentStatusLabel(),
             'faculty' => $teacher->faculty?->name ?? 'N/A',
             'department' => $teacher->department?->name ?? 'N/A',
             'assigned_classes_count' => $teacher->courses_count ?? 0,

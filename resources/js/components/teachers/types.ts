@@ -21,6 +21,8 @@ export interface TeacherListItem {
     phone: string;
     employee_id: string;
     staff_type: string;
+    employment_status: string;
+    employment_status_label: string;
     faculty: string;
     department: string;
     assigned_classes_count: number;
@@ -40,6 +42,7 @@ export interface TeacherFilters {
     faculty?: string;
     department?: string;
     staffType?: string;
+    employmentStatus?: string;
     faceEnrollment?: string;
     faceVerification?: string;
     timetable?: string;
@@ -74,6 +77,8 @@ export interface TeacherQuickViewData {
         department?: string;
         faculty?: string;
         staff_type: string;
+        employment_status?: string;
+        employment_status_label?: string;
         created_at?: string;
     };
     attendance: {

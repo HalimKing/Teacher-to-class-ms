@@ -50,6 +50,11 @@ const badgeStyles: Record<string, string> = {
     inactive: 'bg-slate-100 text-slate-600 ring-slate-500/20 dark:bg-slate-800 dark:text-slate-300',
     lecturer: 'bg-blue-50 text-blue-700 ring-blue-600/20 dark:bg-blue-950/40 dark:text-blue-300',
     administrator: 'bg-purple-50 text-purple-700 ring-purple-600/20 dark:bg-purple-950/40 dark:text-purple-300',
+    permanent: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-950/40 dark:text-emerald-300',
+    nss: 'bg-sky-50 text-sky-700 ring-sky-600/20 dark:bg-sky-950/40 dark:text-sky-300',
+    intern: 'bg-orange-50 text-orange-700 ring-orange-600/20 dark:bg-orange-950/40 dark:text-orange-300',
+    volunteer: 'bg-teal-50 text-teal-700 ring-teal-600/20 dark:bg-teal-950/40 dark:text-teal-300',
+    other: 'bg-slate-100 text-slate-600 ring-slate-500/20 dark:bg-slate-800 dark:text-slate-300',
 };
 
 function StatusBadge({ label, tone }: { label: string; tone: string }) {
@@ -199,8 +204,12 @@ export default function TeacherDataTable({
                             </div>
                             <div>
                                 <div className="font-medium text-sidebar-foreground">{teacher.full_name}</div>
-                                <div className="mt-1">
+                                <div className="mt-1 flex flex-wrap gap-1.5">
                                     <StatusBadge label={teacher.staff_type} tone={teacher.staff_type} />
+                                    <StatusBadge
+                                        label={teacher.employment_status_label || teacher.employment_status}
+                                        tone={teacher.employment_status || 'permanent'}
+                                    />
                                 </div>
                             </div>
                         </div>
@@ -358,6 +367,17 @@ export default function TeacherDataTable({
                         </div>
                         <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
                             <div><p className="text-xs text-sidebar-foreground/50">Department</p><p>{teacher.department}</p></div>
+                            <div>
+                                <p className="text-xs text-sidebar-foreground/50">Staff Type</p>
+                                <StatusBadge label={teacher.staff_type} tone={teacher.staff_type} />
+                            </div>
+                            <div>
+                                <p className="text-xs text-sidebar-foreground/50">Employment Status</p>
+                                <StatusBadge
+                                    label={teacher.employment_status_label || teacher.employment_status}
+                                    tone={teacher.employment_status || 'permanent'}
+                                />
+                            </div>
                             <div><p className="text-xs text-sidebar-foreground/50">Attendance</p><StatusBadge label={teacher.attendance_status} tone={teacher.attendance_badge} /></div>
                             <div><p className="text-xs text-sidebar-foreground/50">Face</p><StatusBadge label={teacher.face_enrollment_status === 'enrolled' ? 'Enrolled' : 'Not Enrolled'} tone={teacher.face_enrollment_status} /></div>
                             <div><p className="text-xs text-sidebar-foreground/50">Timetable</p><StatusBadge label={teacher.timetable_status === 'assigned' ? 'Assigned' : 'Unassigned'} tone={teacher.timetable_status} /></div>

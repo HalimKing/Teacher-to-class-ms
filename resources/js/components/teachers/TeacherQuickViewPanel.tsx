@@ -49,6 +49,8 @@ export default function TeacherQuickViewPanel({ open, loading, teacher, data, on
                                 <dl className="grid gap-3 text-sm">
                                     <div><dt className="text-sidebar-foreground/50">Email</dt><dd className="font-medium">{data.profile.email}</dd></div>
                                     <div><dt className="text-sidebar-foreground/50">Phone</dt><dd className="font-medium">{data.profile.phone || '—'}</dd></div>
+                                    <div><dt className="text-sidebar-foreground/50">Staff Type</dt><dd className="font-medium capitalize">{data.profile.staff_type || '—'}</dd></div>
+                                    <div><dt className="text-sidebar-foreground/50">Employment Status</dt><dd className="font-medium">{data.profile.employment_status_label || '—'}</dd></div>
                                     <div><dt className="text-sidebar-foreground/50">Department</dt><dd className="font-medium">{data.profile.department || '—'}</dd></div>
                                     <div><dt className="text-sidebar-foreground/50">Faculty</dt><dd className="font-medium">{data.profile.faculty || '—'}</dd></div>
                                     <div><dt className="text-sidebar-foreground/50">Created</dt><dd className="font-medium">{data.profile.created_at || '—'}</dd></div>

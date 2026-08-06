@@ -6,11 +6,12 @@ import { Bounce, ToastContainer, toast } from 'react-toastify';
 
 export default function AdminSchedulesIndex() {
     const { props } = usePage();
-    const { schedules, filters, flash } = props as any;
+    const { schedules, filters, flash, employmentStatusOptions = [] } = props as any;
     const [search, setSearch] = useState(filters?.search || '');
     const [status, setStatus] = useState(filters?.status || '');
     const [dateFrom, setDateFrom] = useState(filters?.date_from || '');
     const [dateTo, setDateTo] = useState(filters?.date_to || '');
+    const [employmentStatus, setEmploymentStatus] = useState(filters?.employment_status || '');
 
     useEffect(() => {
         // no-op
@@ -22,6 +23,7 @@ export default function AdminSchedulesIndex() {
             status: status || undefined,
             date_from: dateFrom || undefined,
             date_to: dateTo || undefined,
+            employment_status: employmentStatus || undefined,
         }, { preserveState: true, replace: true });
     };
 
@@ -30,6 +32,7 @@ export default function AdminSchedulesIndex() {
         setStatus('');
         setDateFrom('');
         setDateTo('');
+        setEmploymentStatus('');
         router.get(route('admin.school-management.schedules.index'), {}, { preserveState: false, replace: true });
     };
 
@@ -39,6 +42,7 @@ export default function AdminSchedulesIndex() {
         if (status) params.status = status;
         if (dateFrom) params.date_from = dateFrom;
         if (dateTo) params.date_to = dateTo;
+        if (employmentStatus) params.employment_status = employmentStatus;
         params.page = page;
 
         router.get(route('admin.school-management.schedules.index'), params, { preserveState: true, replace: true });
@@ -86,7 +90,7 @@ export default function AdminSchedulesIndex() {
                 </div>
 
                 <div className="rounded-xl border border-sidebar-border/70 bg-white p-4 shadow-sm">
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
                         <div>
                             <label className="block text-xs font-semibold text-sidebar-foreground/60">Search</label>
                             <input value={search} onChange={(e) => setSearch(e.target.value)} className="w-full rounded-lg border px-3 py-2" placeholder="Lecturer, course, class..." />
@@ -101,6 +105,15 @@ export default function AdminSchedulesIndex() {
                                 <option value="active">Active</option>
                             </select>
                         </div>
+                        <div>
+                            <label className="block text-xs font-semibold text-sidebar-foreground/60">Employment Status</label>
+                            <select value={employmentStatus} onChange={(e) => setEmploymentStatus(e.target.value)} className="w-full rounded-lg border px-3 py-2">
+                                <option value="">All Employment Statuses</option>
+                                {employmentStatusOptions.map((option: { value: string; label: string }) => (
+                                    <option key={option.value} value={option.value}>{option.label}</option>
+                                ))}
+                            </select>
+                        </div>
                             <div>
                                 <label className="block text-xs font-semibold text-sidebar-foreground/60">Date From</label>
                                 <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="w-full rounded-lg border px-3 py-2" />
@@ -109,7 +122,7 @@ export default function AdminSchedulesIndex() {
                                 <label className="block text-xs font-semibold text-sidebar-foreground/60">Date To</label>
                                 <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-full rounded-lg border px-3 py-2" />
                             </div>
-                        <div className="flex items-end justify-end col-span-1 md:col-span-4">
+                        <div className="flex items-end justify-end col-span-1 md:col-span-5">
                             <button type="button" onClick={handleFilter} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white">Filter</button>
                             <button type="button" onClick={handleClear} className="ml-2 rounded-lg border px-4 py-2 text-sm">Clear</button>
                         </div>
@@ -139,7 +152,12 @@ export default function AdminSchedulesIndex() {
                                     <tr key={s.id} className="border-b hover:bg-gray-50">
                                         <td className="px-4 py-3">
                                             <div className="text-sm font-medium">{s.timetable.course && s.timetable.course.teacher ? `${s.timetable.course.teacher.first_name} ${s.timetable.course.teacher.last_name}` : '—'}</div>
-                                            <div className="text-xs text-sidebar-foreground/60">{s.timetable.course && s.timetable.course.teacher ? s.timetable.course.teacher.email : ''}</div>
+                                            <div className="text-xs text-sidebar-foreground/60">
+                                                {s.timetable.course && s.timetable.course.teacher ? s.timetable.course.teacher.email : ''}
+                                                {s.timetable.course?.teacher?.employment_status_label
+                                                    ? ` · ${s.timetable.course.teacher.employment_status_label}`
+                                                    : ''}
+                                            </div>
                                         </td>
                                         <td className="px-4 py-3">
                                             <div className="text-sm">{s.timetable.course?.name}</div>

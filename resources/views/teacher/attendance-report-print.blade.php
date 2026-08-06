@@ -17,6 +17,7 @@
     <h1>My Attendance Report</h1>
     <div class="meta">
         Lecturer: {{ trim("{$teacher->title} {$teacher->first_name} {$teacher->last_name}") }} ({{ $teacher->employee_id }})<br>
+        Staff Type: {{ ucfirst($teacher->staff_type ?? 'lecturer') }} · Employment Status: {{ $teacher->employmentStatusLabel() }}<br>
         Generated at: {{ $generatedAt }}
     </div>
     <table>

@@ -105,7 +105,12 @@ export function ReportAnalyticsSection({ analytics, variant = 'admin' }: ReportA
                                 {analytics.performanceAnalytics.most_punctual.map((item, index) => (
                                     <div key={index} className="rounded-lg border border-sidebar-border/50 p-2 text-sm">
                                         <div className="font-medium">{item.name}</div>
-                                        <div className="text-sidebar-foreground/60">{item.department} · {item.attendance_rate}%</div>
+                                        <div className="text-sidebar-foreground/60">
+                                            {item.department}
+                                            {item.employment_status_label ? ` · ${item.employment_status_label}` : ''}
+                                            {' · '}
+                                            {item.attendance_rate}%
+                                        </div>
                                     </div>
                                 ))}
                             </div>
@@ -116,7 +121,12 @@ export function ReportAnalyticsSection({ analytics, variant = 'admin' }: ReportA
                                 {analytics.performanceAnalytics.frequently_late.map((item, index) => (
                                     <div key={index} className="rounded-lg border border-sidebar-border/50 p-2 text-sm">
                                         <div className="font-medium">{item.name}</div>
-                                        <div className="text-sidebar-foreground/60">{item.department} · {item.late} late check-ins</div>
+                                        <div className="text-sidebar-foreground/60">
+                                            {item.department}
+                                            {item.employment_status_label ? ` · ${item.employment_status_label}` : ''}
+                                            {' · '}
+                                            {item.late} late check-ins
+                                        </div>
                                     </div>
                                 ))}
                             </div>
@@ -138,6 +148,24 @@ export function ReportAnalyticsSection({ analytics, variant = 'admin' }: ReportA
                             )}
                         </div>
                     )}
+                </ReportChartCard>
+            )}
+
+            {analytics.employmentStatusBreakdown && analytics.employmentStatusBreakdown.length > 0 && (
+                <ReportChartCard title="Attendance by Employment Status">
+                    <div className="space-y-3">
+                        {analytics.employmentStatusBreakdown.map((item) => (
+                            <div key={item.employment_status} className="rounded-lg border border-sidebar-border/50 p-3 text-sm">
+                                <div className="flex items-center justify-between gap-3">
+                                    <div className="font-medium text-sidebar-foreground">{item.label}</div>
+                                    <div className="font-semibold text-sidebar-foreground">{item.attendance_rate}%</div>
+                                </div>
+                                <div className="mt-1 text-xs text-sidebar-foreground/60">
+                                    {item.present_count} present of {item.total_records} records
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </ReportChartCard>
             )}
         </div>

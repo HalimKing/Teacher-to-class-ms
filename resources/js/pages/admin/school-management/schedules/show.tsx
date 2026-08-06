@@ -32,6 +32,15 @@ export default function AdminSchedulesShow() {
                             <h3 className="font-semibold">Lecturer</h3>
                             <div>{schedule.timetable.course.teacher.first_name} {schedule.timetable.course.teacher.last_name}</div>
                             <div className="text-xs text-sidebar-foreground/60">{schedule.timetable.course.teacher.email}</div>
+                            <div className="text-xs text-sidebar-foreground/60">
+                                {[
+                                    schedule.timetable.course.teacher.staff_type
+                                        ? schedule.timetable.course.teacher.staff_type.charAt(0).toUpperCase()
+                                          + schedule.timetable.course.teacher.staff_type.slice(1)
+                                        : null,
+                                    schedule.timetable.course.teacher.employment_status_label || null,
+                                ].filter(Boolean).join(' · ')}
+                            </div>
 
                             <h3 className="mt-4 font-semibold">Course / Program</h3>
                             <div>{schedule.timetable.course.name}</div>

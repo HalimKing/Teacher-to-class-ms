@@ -7,6 +7,7 @@ use App\Services\RescheduleNotificationService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use App\Models\RescheduledSession;
+use App\Models\Teacher;
 use App\Models\TimeTable;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -61,11 +62,23 @@ class SchedulesController extends Controller
             }
         }
 
+        if ($employmentStatus = $request->get('employment_status')) {
+            if (in_array($employmentStatus, Teacher::EMPLOYMENT_STATUSES, true)) {
+                $q->whereHas('timetable.course.teacher', function ($qq) use ($employmentStatus) {
+                    $qq->where('employment_status', $employmentStatus);
+                });
+            }
+        }
+
         $items = $q->orderBy('created_at', 'desc')->paginate(25)->appends($request->all());
 
         return Inertia::render('admin/school-management/schedules/index', [
             'schedules' => $items,
-            'filters' => $request->only(['status','search']),
+            'filters' => $request->only(['status', 'search', 'date_from', 'date_to', 'employment_status']),
+            'employmentStatusOptions' => collect(Teacher::EMPLOYMENT_STATUS_LABELS)
+                ->map(fn (string $label, string $value) => ['value' => $value, 'label' => $label])
+                ->values()
+                ->all(),
         ]);
     }
 

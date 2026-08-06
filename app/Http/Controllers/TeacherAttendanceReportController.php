@@ -32,6 +32,10 @@ class TeacherAttendanceReportController extends Controller
             'teacher' => [
                 'name' => trim("{$teacher->title} {$teacher->first_name} {$teacher->last_name}"),
                 'employee_id' => $teacher->employee_id,
+                'staff_type' => $teacher->staff_type,
+                'staff_type_label' => ucfirst($teacher->staff_type ?? Teacher::STAFF_TYPE_LECTURER),
+                'employment_status' => $teacher->employment_status ?? Teacher::EMPLOYMENT_STATUS_PERMANENT,
+                'employment_status_label' => $teacher->employmentStatusLabel(),
             ],
         ]);
     }

@@ -62,10 +62,11 @@ interface TeacherRecord {
 }
 
 interface FilterOptions {
-    teachers: Array<{ id: number; name: string; employee_id: string }>;
+    teachers: Array<{ id: number; name: string; employee_id: string; employment_status?: string; employment_status_label?: string }>;
     faculties: Array<{ id: number; name: string }>;
     departments: Array<{ id: number; name: string; faculty_id: number }>;
     courses: Array<{ id: number; name: string }>;
+    employmentStatuses?: Array<{ value: string; label: string }>;
     attendanceStatuses: string[];
     exceptionCategories?: Array<{ value: string; label: string }>;
     attendanceSources: Array<{ value: string; label: string }>;
@@ -86,6 +87,7 @@ export default function TeacherAttendanceReportsIndex({ filterOptions, initialFi
         teacher_id: 'all',
         faculty_id: 'all',
         department_id: 'all',
+        employment_status: 'all',
         course_id: 'all',
         attendance_status: 'all',
         exception_category: 'all',
@@ -158,6 +160,8 @@ export default function TeacherAttendanceReportsIndex({ filterOptions, initialFi
     const tableColumns = useMemo(() => [
         { key: 'teacher_name', label: 'Staff Name' },
         { key: 'staff_id', label: 'Staff ID', sortable: false },
+        { key: 'staff_type_label', label: 'Staff Type', sortable: false },
+        { key: 'employment_status_label', label: 'Employment Status', sortable: false },
         { key: 'department', label: 'Department', sortable: false },
         { key: 'course_class', label: 'Course/Venue', sortable: false },
         { key: 'date', label: 'Date' },
@@ -250,6 +254,7 @@ export default function TeacherAttendanceReportsIndex({ filterOptions, initialFi
                         <ReportFilterField label="Teaching Staff"><select value={filters.teacher_id} onChange={(e) => setFilters((p) => ({ ...p, teacher_id: e.target.value }))} className={filterInputClass}><option value="all">All Teaching Staff</option>{filterOptions.teachers.map((t) => <option key={t.id} value={String(t.id)}>{t.name} ({t.employee_id})</option>)}</select></ReportFilterField>
                         <ReportFilterField label="Faculty"><select value={filters.faculty_id} onChange={(e) => setFilters((p) => ({ ...p, faculty_id: e.target.value, department_id: 'all' }))} className={filterInputClass}><option value="all">All Faculties</option>{filterOptions.faculties.map((f) => <option key={f.id} value={String(f.id)}>{f.name}</option>)}</select></ReportFilterField>
                         <ReportFilterField label="Department"><select value={filters.department_id} onChange={(e) => setFilters((p) => ({ ...p, department_id: e.target.value }))} className={filterInputClass}><option value="all">All Departments</option>{filteredDepartments.map((d) => <option key={d.id} value={String(d.id)}>{d.name}</option>)}</select></ReportFilterField>
+                        <ReportFilterField label="Employment Status"><select value={filters.employment_status} onChange={(e) => setFilters((p) => ({ ...p, employment_status: e.target.value }))} className={filterInputClass}><option value="all">All Employment Statuses</option>{(filterOptions.employmentStatuses || []).map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select></ReportFilterField>
                         <ReportFilterField label="Course"><select value={filters.course_id} onChange={(e) => setFilters((p) => ({ ...p, course_id: e.target.value }))} className={filterInputClass}><option value="all">All Courses</option>{filterOptions.courses.map((c) => <option key={c.id} value={String(c.id)}>{c.name}</option>)}</select></ReportFilterField>
                         <ReportFilterField label="Attendance Status"><select value={filters.attendance_status} onChange={(e) => setFilters((p) => ({ ...p, attendance_status: e.target.value }))} className={filterInputClass}><option value="all">All Statuses</option>{filterOptions.attendanceStatuses.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}</select></ReportFilterField>
                         <ReportFilterField label="Exception Category"><select value={filters.exception_category} onChange={(e) => setFilters((p) => ({ ...p, exception_category: e.target.value }))} className={filterInputClass}><option value="all">All Exceptions</option>{(filterOptions.exceptionCategories || []).map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}</select></ReportFilterField>

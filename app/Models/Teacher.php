@@ -24,10 +24,33 @@ class Teacher extends Authenticatable
         self::STAFF_TYPE_ADMINISTRATOR,
     ];
 
+    public const EMPLOYMENT_STATUS_PERMANENT = 'permanent';
+    public const EMPLOYMENT_STATUS_NSS = 'nss';
+    public const EMPLOYMENT_STATUS_INTERN = 'intern';
+    public const EMPLOYMENT_STATUS_VOLUNTEER = 'volunteer';
+    public const EMPLOYMENT_STATUS_OTHER = 'other';
+
+    public const EMPLOYMENT_STATUSES = [
+        self::EMPLOYMENT_STATUS_PERMANENT,
+        self::EMPLOYMENT_STATUS_NSS,
+        self::EMPLOYMENT_STATUS_INTERN,
+        self::EMPLOYMENT_STATUS_VOLUNTEER,
+        self::EMPLOYMENT_STATUS_OTHER,
+    ];
+
+    public const EMPLOYMENT_STATUS_LABELS = [
+        self::EMPLOYMENT_STATUS_PERMANENT => 'Permanent Staff',
+        self::EMPLOYMENT_STATUS_NSS => 'NSS Personnel',
+        self::EMPLOYMENT_STATUS_INTERN => 'Intern',
+        self::EMPLOYMENT_STATUS_VOLUNTEER => 'Volunteer',
+        self::EMPLOYMENT_STATUS_OTHER => 'Other',
+    ];
+
     protected $guard = 'teacher';
 
     protected $attributes = [
         'staff_type' => self::STAFF_TYPE_LECTURER,
+        'employment_status' => self::EMPLOYMENT_STATUS_PERMANENT,
     ];
 
     protected $fillable = [
@@ -41,6 +64,7 @@ class Teacher extends Authenticatable
         'employee_id',
         'title',
         'staff_type',
+        'employment_status',
         'face_descriptor',
         'face_registered_at',
         'password_changed_at',
@@ -50,6 +74,10 @@ class Teacher extends Authenticatable
         'password',
         'remember_token',
         'face_descriptor',
+    ];
+
+    protected $appends = [
+        'employment_status_label',
     ];
 
     protected function casts(): array
@@ -111,6 +139,19 @@ class Teacher extends Authenticatable
     public function isAdministrator(): bool
     {
         return $this->staff_type === self::STAFF_TYPE_ADMINISTRATOR;
+    }
+
+    public function employmentStatusLabel(): string
+    {
+        return $this->employment_status_label;
+    }
+
+    public function getEmploymentStatusLabelAttribute(): string
+    {
+        $status = $this->attributes['employment_status'] ?? self::EMPLOYMENT_STATUS_PERMANENT;
+
+        return self::EMPLOYMENT_STATUS_LABELS[$status]
+            ?? self::EMPLOYMENT_STATUS_LABELS[self::EMPLOYMENT_STATUS_PERMANENT];
     }
 
     public function hasFaceEnrollment(): bool

@@ -63,6 +63,12 @@ class TimeTableController extends Controller
             $query->where('staff_type', $request->staff_type);
         }
 
+        if ($request->filled('employment_status') && in_array($request->employment_status, Teacher::EMPLOYMENT_STATUSES, true)) {
+            $query->whereHas('teacher', function ($q) use ($request) {
+                $q->where('employment_status', $request->employment_status);
+            });
+        }
+
         if ($request->filled('day')) {
             $query->where('day_of_week', $request->day);
         }
@@ -105,14 +111,21 @@ class TimeTableController extends Controller
             'teacherOptions' => Teacher::orderBy('last_name')->orderBy('first_name')->get()->map(function ($teacher) {
                 return [
                     'value' => $teacher->id,
-                    'label' => trim("{$teacher->title} {$teacher->first_name} {$teacher->last_name}") . ' (' . ucfirst($teacher->staff_type) . ')',
+                    'label' => trim("{$teacher->title} {$teacher->first_name} {$teacher->last_name}")
+                        . ' (' . ucfirst($teacher->staff_type) . ' · ' . $teacher->employmentStatusLabel() . ')',
                     'staff_type' => $teacher->staff_type,
+                    'employment_status' => $teacher->employment_status ?? Teacher::EMPLOYMENT_STATUS_PERMANENT,
+                    'employment_status_label' => $teacher->employmentStatusLabel(),
                 ];
             }),
             'staffTypeOptions' => [
                 ['value' => Teacher::STAFF_TYPE_LECTURER, 'label' => 'Lecturer'],
                 ['value' => Teacher::STAFF_TYPE_ADMINISTRATOR, 'label' => 'Administrator'],
             ],
+            'employmentStatusOptions' => collect(Teacher::EMPLOYMENT_STATUS_LABELS)
+                ->map(fn (string $label, string $value) => ['value' => $value, 'label' => $label])
+                ->values()
+                ->all(),
             'dayOptions' => [
                 ['value' => 'Monday', 'label' => 'Monday'],
                 ['value' => 'Tuesday', 'label' => 'Tuesday'],
@@ -122,7 +135,7 @@ class TimeTableController extends Controller
                 ['value' => 'Saturday', 'label' => 'Saturday'],
                 ['value' => 'Sunday', 'label' => 'Sunday'],
             ],
-            'filters' => $request->only(['academic_year_id', 'program_id', 'course_id', 'class_room_id', 'teacher_id', 'staff_type', 'day']),
+            'filters' => $request->only(['academic_year_id', 'program_id', 'course_id', 'class_room_id', 'teacher_id', 'staff_type', 'employment_status', 'day']),
         ]);
     }
 
@@ -160,6 +173,12 @@ class TimeTableController extends Controller
 
         if ($request->filled('staff_type') && in_array($request->staff_type, Teacher::STAFF_TYPES, true)) {
             $query->where('staff_type', $request->staff_type);
+        }
+
+        if ($request->filled('employment_status') && in_array($request->employment_status, Teacher::EMPLOYMENT_STATUSES, true)) {
+            $query->whereHas('teacher', function ($q) use ($request) {
+                $q->where('employment_status', $request->employment_status);
+            });
         }
 
         if ($request->filled('day')) {
@@ -204,6 +223,7 @@ class TimeTableController extends Controller
                 'Course Code',
                 'Course Name',
                 'Staff Type',
+                'Employment Status',
                 'Program',
                 'Program Code',
                 'Venue',
@@ -225,6 +245,7 @@ class TimeTableController extends Controller
                     'Course Code' => $timetable->course->course_code ?? 'N/A',
                     'Course Name' => $timetable->course->name ?? 'N/A',
                     'Staff Type' => ucfirst($timetable->staff_type ?? Teacher::STAFF_TYPE_LECTURER),
+                    'Employment Status' => $timetable->teacher?->employmentStatusLabel() ?? 'Permanent Staff',
                     'Program' => $timetable->course->program->name ?? 'N/A',
                     'Program Code' => $timetable->course->program->program_code ?? 'N/A',
                     'Venue' => $timetable->classRoom->name ?? 'N/A',
@@ -360,9 +381,12 @@ class TimeTableController extends Controller
             'teachers' => Teacher::orderBy('last_name')->orderBy('first_name')->get()->map(function ($teacher) {
                 return [
                     'value' => $teacher->id,
-                    'label' => trim("{$teacher->title} {$teacher->first_name} {$teacher->last_name}") . ' (' . ucfirst($teacher->staff_type) . ')',
+                    'label' => trim("{$teacher->title} {$teacher->first_name} {$teacher->last_name}")
+                        . ' (' . ucfirst($teacher->staff_type) . ' · ' . $teacher->employmentStatusLabel() . ')',
                     'staff_type' => $teacher->staff_type,
                     'employee_id' => $teacher->employee_id,
+                    'employment_status' => $teacher->employment_status ?? Teacher::EMPLOYMENT_STATUS_PERMANENT,
+                    'employment_status_label' => $teacher->employmentStatusLabel(),
                 ];
             }),
             'staffTypeOptions' => [
@@ -551,9 +575,12 @@ class TimeTableController extends Controller
             'teachers' => Teacher::orderBy('last_name')->orderBy('first_name')->get()->map(function ($teacher) {
                 return [
                     'value' => $teacher->id,
-                    'label' => trim("{$teacher->title} {$teacher->first_name} {$teacher->last_name}") . ' (' . ucfirst($teacher->staff_type) . ')',
+                    'label' => trim("{$teacher->title} {$teacher->first_name} {$teacher->last_name}")
+                        . ' (' . ucfirst($teacher->staff_type) . ' · ' . $teacher->employmentStatusLabel() . ')',
                     'staff_type' => $teacher->staff_type,
                     'employee_id' => $teacher->employee_id,
+                    'employment_status' => $teacher->employment_status ?? Teacher::EMPLOYMENT_STATUS_PERMANENT,
+                    'employment_status_label' => $teacher->employmentStatusLabel(),
                 ];
             }),
             'staffTypeOptions' => [
@@ -753,9 +780,12 @@ class TimeTableController extends Controller
             ]),
             'teachers' => Teacher::orderBy('last_name')->orderBy('first_name')->get()->map(fn (Teacher $teacher) => [
                 'value' => $teacher->id,
-                'label' => trim("{$teacher->title} {$teacher->first_name} {$teacher->last_name}") . ' (' . ucfirst($teacher->staff_type) . ')',
+                'label' => trim("{$teacher->title} {$teacher->first_name} {$teacher->last_name}")
+                    . ' (' . ucfirst($teacher->staff_type) . ' · ' . $teacher->employmentStatusLabel() . ')',
                 'staff_type' => $teacher->staff_type,
                 'employee_id' => $teacher->employee_id,
+                'employment_status' => $teacher->employment_status ?? Teacher::EMPLOYMENT_STATUS_PERMANENT,
+                'employment_status_label' => $teacher->employmentStatusLabel(),
             ]),
             'staffTypeOptions' => [
                 ['value' => Teacher::STAFF_TYPE_LECTURER, 'label' => 'Lecturer'],
@@ -1126,6 +1156,12 @@ class TimeTableController extends Controller
 
         if ($request->filled('staff_type') && in_array($request->staff_type, Teacher::STAFF_TYPES, true)) {
             $query->where('staff_type', $request->staff_type);
+        }
+
+        if ($request->filled('employment_status') && in_array($request->employment_status, Teacher::EMPLOYMENT_STATUSES, true)) {
+            $query->whereHas('teacher', function ($q) use ($request) {
+                $q->where('employment_status', $request->employment_status);
+            });
         }
 
         if ($request->filled('day')) {

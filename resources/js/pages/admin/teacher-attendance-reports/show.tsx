@@ -17,6 +17,9 @@ interface TeacherInfo {
     employee_id: string;
     department?: string;
     faculty?: string;
+    staff_type?: string;
+    employment_status?: string;
+    employment_status_label?: string;
     face_enrollment_status: string;
 }
 
@@ -141,6 +144,8 @@ export default function TeacherAttendanceReportShow({ teacher, initialFilters }:
                         </div>
                         <dl className="space-y-3 text-sm">
                             <InfoRow label="Email" value={teacher.email} />
+                            <InfoRow label="Staff Type" value={teacher.staff_type ? teacher.staff_type.replace(/_/g, ' ') : 'lecturer'} />
+                            <InfoRow label="Employment Status" value={teacher.employment_status_label ?? 'Permanent Staff'} />
                             <InfoRow label="Department" value={teacher.department ?? 'N/A'} />
                             <InfoRow label="Faculty" value={teacher.faculty ?? 'N/A'} />
                             <InfoRow label="Face Enrollment" value={teacher.face_enrollment_status.replace(/_/g, ' ')} />

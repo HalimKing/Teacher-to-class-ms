@@ -24,7 +24,7 @@ interface FormData {
   faculty: number;
   employeeId: string;
   staffType: string;
-
+  employmentStatus: string;
 }
 
 interface PageProps {
@@ -53,6 +53,14 @@ const staffTypeData = [
   { label: 'Administrator', value: 'administrator' },
 ];
 
+const employmentStatusData = [
+  { label: 'Permanent Staff', value: 'permanent' },
+  { label: 'NSS Personnel', value: 'nss' },
+  { label: 'Intern', value: 'intern' },
+  { label: 'Volunteer', value: 'volunteer' },
+  { label: 'Other', value: 'other' },
+];
+
 const CreateTeacherPage = ({facultyOptions}: {facultyOptions: FacultyOption[]}) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   
@@ -68,9 +76,8 @@ const CreateTeacherPage = ({facultyOptions}: {facultyOptions: FacultyOption[]}) 
     title: '',
     employeeId: '',
     staffType: 'lecturer',
-   
+    employmentStatus: 'permanent',
     faculty: 0,
-  
   });
 
   useEffect(() => {
@@ -123,6 +130,9 @@ const CreateTeacherPage = ({facultyOptions}: {facultyOptions: FacultyOption[]}) 
     };
      const handleStaffTypeChange = (value: string | number | undefined) => {
         setData('staffType', value as string);
+    };
+     const handleEmploymentStatusChange = (value: string | number | undefined) => {
+        setData('employmentStatus', value as string);
     };
 
     const handleValueChangeFaculty = (value: string | number | undefined) => {
@@ -314,6 +324,17 @@ const CreateTeacherPage = ({facultyOptions}: {facultyOptions: FacultyOption[]}) 
                       />
                       {errors.staffType && (
                         <p className="mt-1 text-sm text-red-500">{errors.staffType}</p>
+                      )}
+                    </div>
+                    <div>
+                      <ComboBox
+                        options={employmentStatusData}
+                        label="Select Employment Status"
+                        externalValue={handleEmploymentStatusChange}
+                        defaultValue={employmentStatusData[0]}
+                      />
+                      {errors.employmentStatus && (
+                        <p className="mt-1 text-sm text-red-500">{errors.employmentStatus}</p>
                       )}
                     </div>
                   </div>
