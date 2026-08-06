@@ -153,6 +153,11 @@ const mainNavItems: NavItem[] = [
                 permission: 'admin.academics.time-tables.create',
             },
             {
+                title: 'Bulk Create Schedules',
+                href: '/admin/academics/time-tables/bulk-create',
+                permission: 'admin.academics.time-tables.create',
+            },
+            {
                 title: 'Generate Time Table',
                 href: '/admin/academics/time-tables/generate',
                 permission: 'admin.academics.time-tables.generate',

@@ -1,5 +1,4 @@
-// resources/js/pages/Admin/SchoolManagement/TimeTables/Index.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, type FormEvent } from 'react';
 import { 
   Search,
   Plus,
@@ -15,16 +14,20 @@ import {
   ChevronDown,
   ChevronUp,
   GraduationCap,
-  Download // Added for export
+  Download,
+  Upload,
+  Layers,
+  FileSpreadsheet,
+  FileText,
+  Loader2,
 } from 'lucide-react';
-import axios from 'axios';
 import AppLayout from '@/layouts/app-layout';
 import { Head, Link, usePage, router } from '@inertiajs/react';
 import { PagePropsWithFlash } from '@/types';
 import { ToastContainer, toast, Bounce } from 'react-toastify';
-import { Button } from '@headlessui/react';
 import ComboBox from '@/components/combobox';
 import { can } from '@/lib/can';
+import { getCsrfToken, refreshCsrfToken } from '@/lib/csrf';
 
 interface AcademicYear {
   id: number;
@@ -136,6 +139,17 @@ const TimeTablesIndexPage = ({
   const [showFilters, setShowFilters] = useState(false);
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [previewRows, setPreviewRows] = useState<Array<{
+    line: number;
+    data: Record<string, string | null>;
+    errors: string[];
+    exists: boolean;
+  }>>([]);
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [confirmLoading, setConfirmLoading] = useState(false);
+  const [importSummary, setImportSummary] = useState<{ total: number; valid: number; invalid: number } | null>(null);
   const { flash } = usePage().props as PagePropsWithFlash;
 
   // Show toast notifications based on flash messages
@@ -270,6 +284,89 @@ const TimeTablesIndexPage = ({
     }
   };
 
+  const handleImportPreview = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!importFile) {
+      toast.error('Please select a file to preview.', { theme: 'dark' });
+      return;
+    }
+
+    setPreviewLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', importFile);
+      let token = getCsrfToken();
+      if (!token) {
+        token = await refreshCsrfToken();
+      }
+
+      const response = await fetch(route('admin.academics.time-tables.preview'), {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'X-CSRF-TOKEN': token,
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        credentials: 'same-origin',
+        body: formData,
+      });
+
+      const json = await response.json();
+      if (!response.ok) {
+        throw new Error(json.error || json.message || 'Unable to preview file.');
+      }
+
+      setPreviewRows(json.rows || []);
+      setImportSummary(json.summary || null);
+      setShowPreview(true);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to preview file.', { theme: 'dark' });
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handleConfirmImport = async () => {
+    if (!importFile) return;
+
+    setConfirmLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', importFile);
+      let token = getCsrfToken();
+      if (!token) {
+        token = await refreshCsrfToken();
+      }
+
+      const response = await fetch(route('admin.academics.time-tables.confirm-import'), {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'X-CSRF-TOKEN': token,
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        credentials: 'same-origin',
+        body: formData,
+      });
+
+      const json = await response.json();
+      if (!response.ok) {
+        throw new Error(json.error || json.message || 'Import failed.');
+      }
+
+      toast.success(json.message || `Imported ${json.imported} schedule(s).`, { theme: 'dark' });
+      setShowPreview(false);
+      setImportFile(null);
+      setPreviewRows([]);
+      setImportSummary(null);
+      router.reload({ only: ['timeTables'] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Import failed.', { theme: 'dark' });
+    } finally {
+      setConfirmLoading(false);
+    }
+  };
+
   // Format time
   const formatTime = (time: string) => {
     return new Date(`2000-01-01T${time}`).toLocaleTimeString('en-US', {
@@ -383,16 +480,91 @@ const TimeTablesIndexPage = ({
                 </div>
 
                 {can('admin.academics.time-tables.create') && (
-                <Link
-                  href={route('admin.academics.time-tables.create')}
-                  className="flex items-center justify-center px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-700 hover:from-indigo-700 hover:to-purple-800 text-white font-semibold rounded-xl transition-all duration-200 shadow-md hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-500/50"
-                >
-                  <Plus className="w-5 h-5 mr-2" />
-                  Create Schedule
-                </Link>
+                  <>
+                    <Link
+                      href={route('admin.academics.time-tables.bulk-create')}
+                      className="flex items-center justify-center px-6 py-3 bg-gradient-to-r from-slate-700 to-slate-900 hover:from-slate-800 hover:to-black text-white font-semibold rounded-xl transition-all duration-200 shadow-md hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-slate-500/50"
+                    >
+                      <Layers className="w-5 h-5 mr-2" />
+                      Bulk Create
+                    </Link>
+                    <Link
+                      href={route('admin.academics.time-tables.create')}
+                      className="flex items-center justify-center px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-700 hover:from-indigo-700 hover:to-purple-800 text-white font-semibold rounded-xl transition-all duration-200 shadow-md hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-500/50"
+                    >
+                      <Plus className="w-5 h-5 mr-2" />
+                      Create Schedule
+                    </Link>
+                  </>
                 )}
               </div>
             </div>
+
+            {can('admin.academics.time-tables.create') && (
+              <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-lg">
+                <div className="mb-4">
+                  <h3 className="text-lg font-semibold text-slate-900">Import Schedules</h3>
+                  <p className="text-sm text-slate-600">
+                    Upload CSV or Excel files to create multiple schedules. Download the template for the required column structure.
+                  </p>
+                </div>
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div className="space-y-3">
+                    <a
+                      href={route('admin.academics.time-tables.template')}
+                      className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                    >
+                      <Download className="h-4 w-4" />
+                      Download Template
+                    </a>
+                    <div className="flex flex-wrap gap-2 text-xs text-slate-500">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1">
+                        <FileSpreadsheet className="h-3.5 w-3.5" />
+                        .xlsx / .xls
+                      </span>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1">
+                        <FileText className="h-3.5 w-3.5" />
+                        .csv
+                      </span>
+                    </div>
+                  </div>
+                  <form onSubmit={handleImportPreview} className="space-y-3">
+                    <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-slate-300 px-4 py-3 text-sm transition-colors hover:bg-slate-50">
+                      <Upload className="h-4 w-4 text-slate-500" />
+                      <span className="flex-1 truncate text-slate-700">
+                        {importFile?.name || 'Choose CSV or Excel file...'}
+                      </span>
+                      <input
+                        type="file"
+                        accept=".csv,.xlsx,.xls"
+                        className="hidden"
+                        onChange={(event) => setImportFile(event.target.files?.[0] ?? null)}
+                      />
+                    </label>
+                    <div className="flex gap-2">
+                      {importFile && (
+                        <button
+                          type="button"
+                          onClick={() => setImportFile(null)}
+                          className="inline-flex items-center gap-1 rounded-lg px-3 py-2 text-sm text-slate-600 hover:bg-slate-100"
+                        >
+                          <X className="h-4 w-4" />
+                          Clear
+                        </button>
+                      )}
+                      <button
+                        type="submit"
+                        disabled={previewLoading || !importFile}
+                        className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                      >
+                        {previewLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                        {previewLoading ? 'Previewing...' : 'Preview Import'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
 
             {/* Filters Section */}
             <div className="mb-6 bg-white rounded-2xl shadow-lg border border-slate-200 p-4">
@@ -775,7 +947,8 @@ const TimeTablesIndexPage = ({
                                 )}
 
                                 {can('admin.academics.time-tables.delete') && (
-                                <Button
+                                <button
+                                  type="button"
                                   onClick={(e) => {
                                     e.preventDefault();
                                     handleDelete(
@@ -789,7 +962,7 @@ const TimeTablesIndexPage = ({
                                   title="Delete time slot"
                                 >
                                   <Trash2 className="w-5 h-5" />
-                                </Button>
+                                </button>
                                 )}
                               </div>
                             </td>
@@ -905,6 +1078,109 @@ const TimeTablesIndexPage = ({
           </div>
         </div>
       </div>
+
+      {showPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setShowPreview(false)}
+            aria-label="Close import preview"
+          />
+          <div className="relative z-10 flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-start justify-between border-b border-slate-200 px-6 py-4">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Import Preview</h3>
+                <p className="text-sm text-slate-600">
+                  Review {previewRows.length} row(s) before importing.
+                  {importSummary && (
+                    <> Total {importSummary.total} · Valid {importSummary.valid} · Failed {importSummary.invalid}</>
+                  )}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPreview(false)}
+                className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="overflow-auto px-6 py-4">
+              <table className="min-w-full text-left text-sm">
+                <thead className="sticky top-0 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="px-3 py-2">Line</th>
+                    <th className="px-3 py-2">Staff</th>
+                    <th className="px-3 py-2">Course</th>
+                    <th className="px-3 py-2">Venue</th>
+                    <th className="px-3 py-2">Day / Time</th>
+                    <th className="px-3 py-2">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {previewRows.map((row) => (
+                    <tr key={row.line} className="border-t border-slate-100 align-top">
+                      <td className="px-3 py-3 font-medium text-slate-700">{row.line}</td>
+                      <td className="px-3 py-3">
+                        <div className="font-medium text-slate-900">{row.data.employee_id || '—'}</div>
+                        <div className="text-xs text-slate-500">{row.data.staff_type || '—'}</div>
+                      </td>
+                      <td className="px-3 py-3 text-slate-700">{row.data.course_code || '—'}</td>
+                      <td className="px-3 py-3 text-slate-700">{row.data.venue || row.data.classroom || '—'}</td>
+                      <td className="px-3 py-3 text-slate-700">
+                        <div>{row.data.day || '—'}</div>
+                        <div className="text-xs text-slate-500">
+                          {row.data.start_time || '—'} – {row.data.end_time || '—'}
+                        </div>
+                      </td>
+                      <td className="px-3 py-3">
+                        {row.errors.length === 0 ? (
+                          <span className="inline-flex rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                            {row.exists ? 'Exists / conflict check passed' : 'Ready'}
+                          </span>
+                        ) : (
+                          <ul className="space-y-1 text-xs text-rose-600">
+                            {row.errors.map((error) => (
+                              <li key={error}>• {error}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-6 py-4">
+              <p className="text-sm text-slate-600">
+                Valid rows will be imported. Invalid rows are skipped.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowPreview(false)}
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmImport}
+                  disabled={confirmLoading || previewRows.filter((row) => row.errors.length === 0).length === 0}
+                  className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {confirmLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                  {confirmLoading ? 'Importing...' : 'Confirm Import'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <ToastContainer />
     </AppLayout>
   );

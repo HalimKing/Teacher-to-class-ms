@@ -14,6 +14,8 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\TimeTablesExport;
+use App\Imports\RawSheetImport;
+use App\Services\TimeTableScheduleService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -21,6 +23,10 @@ use Throwable;
 
 class TimeTableController extends Controller
 {
+    public function __construct(private readonly TimeTableScheduleService $scheduleService)
+    {
+    }
+
     /**
      * Display a listing of the resource.
      */
@@ -717,6 +723,399 @@ class TimeTableController extends Controller
         }
 
         return back()->with('success', "Bulk assignment complete. Created {$created} schedule(s), skipped " . count($skipped) . '.');
+    }
+
+    /**
+     * Multi-row bulk schedule creation form.
+     */
+    public function bulkCreate()
+    {
+        $academicYear = AcademicYear::active()->first();
+
+        return Inertia::render('admin/academics/time-table/bulk-create', [
+            'academicYear' => $academicYear,
+            'academicYearOptions' => AcademicYear::orderByDesc('id')->get()->map(fn (AcademicYear $year) => [
+                'value' => $year->id,
+                'label' => $year->name,
+            ]),
+            'courses' => Course::with(['teacher', 'program'])
+                ->whereHas('academicYear', fn ($q) => $q->where('status', 'active'))
+                ->orderBy('name')
+                ->get()
+                ->map(fn (Course $course) => [
+                    'value' => $course->id,
+                    'label' => $course->name . ' (' . $course->course_code . ')',
+                    'academic_year_id' => $course->academic_year_id,
+                ]),
+            'classRooms' => ClassRoom::orderBy('name')->get()->map(fn (ClassRoom $room) => [
+                'value' => $room->id,
+                'label' => $room->name . ' - Capacity: ' . $room->capacity,
+            ]),
+            'teachers' => Teacher::orderBy('last_name')->orderBy('first_name')->get()->map(fn (Teacher $teacher) => [
+                'value' => $teacher->id,
+                'label' => trim("{$teacher->title} {$teacher->first_name} {$teacher->last_name}") . ' (' . ucfirst($teacher->staff_type) . ')',
+                'staff_type' => $teacher->staff_type,
+                'employee_id' => $teacher->employee_id,
+            ]),
+            'staffTypeOptions' => [
+                ['value' => Teacher::STAFF_TYPE_LECTURER, 'label' => 'Lecturer'],
+                ['value' => Teacher::STAFF_TYPE_ADMINISTRATOR, 'label' => 'Administrator'],
+            ],
+            'days' => TimeTableScheduleService::DAYS,
+        ]);
+    }
+
+    /**
+     * Persist multiple schedule rows, creating valid rows and reporting failures.
+     */
+    public function bulkStore(Request $request)
+    {
+        $validated = $request->validate([
+            'academic_year_id' => 'required|exists:academic_years,id',
+            'schedules' => 'required|array|min:1|max:100',
+            'schedules.*.staff_type' => ['required', Rule::in(Teacher::STAFF_TYPES)],
+            'schedules.*.teacher_id' => 'required|exists:teachers,id',
+            'schedules.*.course_id' => 'nullable|exists:courses,id',
+            'schedules.*.class_room_id' => 'required|exists:class_rooms,id',
+            'schedules.*.day' => 'required|string|in:Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday',
+            'schedules.*.start_time' => 'required|date_format:H:i',
+            'schedules.*.end_time' => 'required|date_format:H:i',
+        ]);
+
+        $pending = [];
+        $ready = [];
+        $failed = [];
+
+        foreach ($validated['schedules'] as $index => $row) {
+            $result = $this->scheduleService->validateAndResolve([
+                'academic_year_id' => $validated['academic_year_id'],
+                'staff_type' => $row['staff_type'],
+                'teacher_id' => $row['teacher_id'],
+                'course_id' => $row['course_id'] ?? null,
+                'class_room_id' => $row['class_room_id'],
+                'day' => $row['day'],
+                'start_time' => $row['start_time'],
+                'end_time' => $row['end_time'],
+            ], $pending);
+
+            if (! empty($result['errors']) || ! $result['data']) {
+                $failed[] = [
+                    'index' => $index,
+                    'errors' => $result['errors'] ?: ['Unable to validate schedule row.'],
+                ];
+                continue;
+            }
+
+            $pending[] = $result['data'];
+            $ready[] = ['index' => $index, 'data' => $result['data']];
+        }
+
+        $created = 0;
+
+        try {
+            DB::transaction(function () use ($ready, &$created) {
+                foreach ($ready as $item) {
+                    $this->scheduleService->create($item['data']);
+                    $created++;
+                }
+            });
+        } catch (Throwable $e) {
+            report($e);
+
+            return back()
+                ->withInput()
+                ->with('error', 'Unable to save schedules. No changes were applied. Please try again.');
+        }
+
+        if ($created > 0) {
+            app(ActivityLogService::class)->logTimetable(
+                'timetable_bulk_created',
+                "Bulk created {$created} timetable entr" . ($created === 1 ? 'y' : 'ies'),
+                ['created' => $created, 'failed' => count($failed)]
+            );
+        }
+
+        $message = "Processed " . count($validated['schedules']) . " row(s): {$created} created, " . count($failed) . " failed.";
+
+        if ($created > 0 && empty($failed)) {
+            return redirect()
+                ->route('admin.academics.time-tables.index')
+                ->with('success', $message);
+        }
+
+        return back()
+            ->withInput()
+            ->with('bulk_result', [
+                'created' => $created,
+                'failed' => count($failed),
+                'total' => count($validated['schedules']),
+                'errors' => $failed,
+            ])
+            ->with($created > 0 ? 'success' : 'error', $message);
+    }
+
+    public function template()
+    {
+        $fileName = 'schedules_template_' . now()->format('Ymd') . '.csv';
+        $headers = [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"{$fileName}\"",
+        ];
+
+        $activeYear = AcademicYear::active()->value('name') ?? '2025/2026';
+
+        $callback = function () use ($activeYear) {
+            $out = fopen('php://output', 'w');
+            fputcsv($out, ['# IMPORT RULES AND INSTRUCTIONS']);
+            fputcsv($out, ['# 1. employee_id, staff_type, venue, day, start_time, end_time are REQUIRED']);
+            fputcsv($out, ['# 2. course_code is REQUIRED when staff_type is lecturer']);
+            fputcsv($out, ['# 3. academic_year must match an existing academic year name (defaults to active year if blank)']);
+            fputcsv($out, ['# 4. staff_type must be lecturer or administrator']);
+            fputcsv($out, ['# 5. day must be Monday through Sunday']);
+            fputcsv($out, ['# 6. times must use 24-hour HH:MM format (e.g. 09:00, 14:30)']);
+            fputcsv($out, ['# 7. venue must match an existing venue name exactly']);
+            fputcsv($out, ['# 8. Duplicate or conflicting schedules will be rejected']);
+            fputcsv($out, ['# 9. Do not modify the header row. Remove instruction rows before uploading']);
+            fputcsv($out, ['']);
+            fputcsv($out, ['academic_year', 'staff_type', 'employee_id', 'course_code', 'venue', 'day', 'start_time', 'end_time']);
+            fputcsv($out, [$activeYear, 'lecturer', 'EMP001', 'CSC101', 'Room A101', 'Monday', '09:00', '11:00']);
+            fputcsv($out, [$activeYear, 'administrator', 'EMP002', '', 'Room B205', 'Tuesday', '08:00', '16:00']);
+            fclose($out);
+        };
+
+        return response()->streamDownload($callback, $fileName, $headers);
+    }
+
+    public function preview(Request $request)
+    {
+        $request->validate([
+            'file' => [
+                'required',
+                'file',
+                function ($attribute, $value, $fail) {
+                    if (! $value) {
+                        $fail('The file field is required.');
+
+                        return;
+                    }
+                    $ext = strtolower($value->getClientOriginalExtension());
+                    if (! in_array($ext, ['xlsx', 'xls', 'csv'], true)) {
+                        $fail('The file must be a file of type: xlsx, xls, csv.');
+                    }
+                },
+            ],
+        ]);
+
+        try {
+            $parsed = $this->parseScheduleImportFile($request->file('file'));
+        } catch (Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
+
+        $pending = [];
+        $rows = [];
+
+        foreach ($parsed as $item) {
+            $result = $this->scheduleService->validateAndResolve($item['data'], $pending);
+            if ($result['data']) {
+                $pending[] = $result['data'];
+            }
+
+            $rows[] = [
+                'line' => $item['line'],
+                'data' => $item['data'],
+                'errors' => $result['errors'],
+                'exists' => $result['exists'],
+            ];
+        }
+
+        return response()->json([
+            'rows' => $rows,
+            'summary' => [
+                'total' => count($rows),
+                'valid' => count(array_filter($rows, fn ($row) => empty($row['errors']))),
+                'invalid' => count(array_filter($rows, fn ($row) => ! empty($row['errors']))),
+            ],
+        ]);
+    }
+
+    public function confirmImport(Request $request)
+    {
+        $request->validate([
+            'file' => [
+                'required',
+                'file',
+                function ($attribute, $value, $fail) {
+                    if (! $value) {
+                        $fail('The file field is required.');
+
+                        return;
+                    }
+                    $ext = strtolower($value->getClientOriginalExtension());
+                    if (! in_array($ext, ['xlsx', 'xls', 'csv'], true)) {
+                        $fail('The file must be a file of type: xlsx, xls, csv.');
+                    }
+                },
+            ],
+        ]);
+
+        try {
+            $parsed = $this->parseScheduleImportFile($request->file('file'));
+        } catch (Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
+
+        $pending = [];
+        $ready = [];
+        $failed = [];
+
+        foreach ($parsed as $item) {
+            $result = $this->scheduleService->validateAndResolve($item['data'], $pending);
+            if (! empty($result['errors']) || ! $result['data']) {
+                $failed[] = [
+                    'line' => $item['line'],
+                    'errors' => $result['errors'] ?: ['Unable to validate schedule row.'],
+                ];
+                continue;
+            }
+
+            $pending[] = $result['data'];
+            $ready[] = $result['data'];
+        }
+
+        $imported = 0;
+
+        try {
+            DB::transaction(function () use ($ready, &$imported) {
+                foreach ($ready as $data) {
+                    $this->scheduleService->create($data);
+                    $imported++;
+                }
+            });
+        } catch (Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'error' => 'Import failed. No schedules were saved.',
+                'imported' => 0,
+                'failed' => count($parsed),
+                'skipped' => 0,
+                'errors' => [['line' => null, 'errors' => ['A database error occurred during import.']]],
+            ], 500);
+        }
+
+        if ($imported > 0) {
+            app(ActivityLogService::class)->logTimetable(
+                'timetable_imported',
+                "Imported {$imported} timetable entr" . ($imported === 1 ? 'y' : 'ies'),
+                ['imported' => $imported, 'failed' => count($failed)]
+            );
+        }
+
+        return response()->json([
+            'imported' => $imported,
+            'failed' => count($failed),
+            'skipped' => count($failed),
+            'total' => count($parsed),
+            'errors' => $failed,
+            'message' => "Processed " . count($parsed) . " record(s): {$imported} imported, " . count($failed) . " failed.",
+        ]);
+    }
+
+    /**
+     * @return array<int, array{line: int, data: array<string, mixed>}>
+     */
+    private function parseScheduleImportFile($file): array
+    {
+        $ext = strtolower($file->getClientOriginalExtension());
+        $rows = [];
+
+        if ($ext === 'csv') {
+            $path = $file->getRealPath();
+            if (($handle = fopen($path, 'r')) === false) {
+                throw new \RuntimeException('Unable to read uploaded CSV file.');
+            }
+
+            $header = null;
+            $line = 0;
+            while (($row = fgetcsv($handle)) !== false) {
+                $line++;
+                $firstCell = trim($row[0] ?? '');
+                if ($firstCell === '' || str_starts_with($firstCell, '#')) {
+                    continue;
+                }
+                $header = $row;
+                break;
+            }
+
+            if ($header === null) {
+                fclose($handle);
+                throw new \RuntimeException('Header row not found in CSV file.');
+            }
+
+            $normalizedHeader = array_map(
+                fn ($h) => strtolower(trim(str_replace([' ', '-'], '_', (string) $h))),
+                $header
+            );
+
+            while (($data = fgetcsv($handle)) !== false) {
+                $line++;
+                $firstCell = trim($data[0] ?? '');
+                if ($firstCell === '' || str_starts_with($firstCell, '#')) {
+                    continue;
+                }
+
+                $row = [];
+                foreach ($normalizedHeader as $i => $key) {
+                    $row[$key] = $data[$i] ?? null;
+                }
+                $rows[] = ['line' => $line, 'data' => $row];
+            }
+            fclose($handle);
+
+            return $rows;
+        }
+
+        $array = Excel::toArray(new RawSheetImport(), $file);
+        if (empty($array[0])) {
+            throw new \RuntimeException('Unable to parse uploaded spreadsheet.');
+        }
+
+        $sheet = $array[0];
+        $headerRowIndex = null;
+        for ($i = 0; $i < count($sheet); $i++) {
+            $firstCell = trim((string) ($sheet[$i][0] ?? ''));
+            if ($firstCell !== '' && ! str_starts_with($firstCell, '#')) {
+                $headerRowIndex = $i;
+                break;
+            }
+        }
+
+        if ($headerRowIndex === null) {
+            throw new \RuntimeException('Header row not found in spreadsheet.');
+        }
+
+        $header = array_map(
+            fn ($h) => strtolower(trim(str_replace([' ', '-'], '_', (string) $h))),
+            $sheet[$headerRowIndex] ?? []
+        );
+
+        for ($i = $headerRowIndex + 1; $i < count($sheet); $i++) {
+            $data = $sheet[$i];
+            $firstCell = trim((string) ($data[0] ?? ''));
+            if ($firstCell === '' || str_starts_with($firstCell, '#')) {
+                continue;
+            }
+
+            $row = [];
+            foreach ($header as $j => $key) {
+                $value = $data[$j] ?? null;
+                $row[$key] = is_string($value) ? trim($value) : $value;
+            }
+            $rows[] = ['line' => $i + 1, 'data' => $row];
+        }
+
+        return $rows;
     }
 
     public function report(Request $request)

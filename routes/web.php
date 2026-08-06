@@ -541,21 +541,22 @@ Route::middleware(['auth:web', 'verified', 'password.changed'])->group(function 
 
             Route::prefix('academics')->name('academics.')->group(
                 function () {
-                    // Time Tables routes
-                    Route::resource('time-tables', TimeTableController::class)
-                        ->only(['create', 'store'])
+                    // Custom Time Tables routes (before resource to avoid {time_table} collisions)
+                    Route::get('/time-tables/bulk-create', [TimeTableController::class, 'bulkCreate'])
+                        ->name('time-tables.bulk-create')
                         ->middleware('permission:admin.academics.time-tables.create');
-                    Route::resource('time-tables', TimeTableController::class)
-                        ->only(['index', 'show'])
-                        ->middleware('permission:admin.academics.time-tables.view');
-                    Route::resource('time-tables', TimeTableController::class)
-                        ->only(['edit', 'update'])
-                        ->middleware('permission:admin.academics.time-tables.edit');
-                    Route::resource('time-tables', TimeTableController::class)
-                        ->only(['destroy'])
-                        ->middleware('permission:admin.academics.time-tables.delete');
-
-                    // Custom Time Tables routes
+                    Route::post('/time-tables/bulk-store', [TimeTableController::class, 'bulkStore'])
+                        ->name('time-tables.bulk-store')
+                        ->middleware('permission:admin.academics.time-tables.create');
+                    Route::get('/time-tables/import/template', [TimeTableController::class, 'template'])
+                        ->name('time-tables.template')
+                        ->middleware('permission:admin.academics.time-tables.create');
+                    Route::post('/time-tables/import/preview', [TimeTableController::class, 'preview'])
+                        ->name('time-tables.preview')
+                        ->middleware('permission:admin.academics.time-tables.create');
+                    Route::post('/time-tables/import/confirm', [TimeTableController::class, 'confirmImport'])
+                        ->name('time-tables.confirm-import')
+                        ->middleware('permission:admin.academics.time-tables.create');
                     Route::get('/time-tables/generate', [TimeTableController::class, 'generateForm'])
                         ->name('time-tables.generate-form')
                         ->middleware('permission:admin.academics.time-tables.create');
@@ -575,6 +576,20 @@ Route::middleware(['auth:web', 'verified', 'password.changed'])->group(function 
                     Route::get('/api/time-tables/check-conflict', [TimeTableController::class, 'checkConflict'])
                         ->name('time-tables.check-conflicts-form')
                         ->middleware('permission:admin.academics.time-tables.view');
+
+                    // Time Tables resource routes
+                    Route::resource('time-tables', TimeTableController::class)
+                        ->only(['create', 'store'])
+                        ->middleware('permission:admin.academics.time-tables.create');
+                    Route::resource('time-tables', TimeTableController::class)
+                        ->only(['index', 'show'])
+                        ->middleware('permission:admin.academics.time-tables.view');
+                    Route::resource('time-tables', TimeTableController::class)
+                        ->only(['edit', 'update'])
+                        ->middleware('permission:admin.academics.time-tables.edit');
+                    Route::resource('time-tables', TimeTableController::class)
+                        ->only(['destroy'])
+                        ->middleware('permission:admin.academics.time-tables.delete');
                 }
             );
 
