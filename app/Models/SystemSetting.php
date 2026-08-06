@@ -120,6 +120,42 @@ class SystemSetting extends Model
         Cache::forget(self::CACHE_KEY);
     }
 
+    /**
+     * Whether administrator staff may submit venue change requests.
+     * Does not affect direct admin venue change authorizations.
+     */
+    public static function administratorVenueChangeRequestsEnabled(): bool
+    {
+        return (bool) self::getValue('administrator_venue_change_requests_enabled', true);
+    }
+
+    public static function appName(): string
+    {
+        $name = self::getValue('app_name', config('app.name', 'UBIDS ATTENDANCE'));
+
+        return is_string($name) && trim($name) !== '' ? trim($name) : 'UBIDS ATTENDANCE';
+    }
+
+    /**
+     * Public URL path for the application logo.
+     */
+    public static function appLogoUrl(): string
+    {
+        $logo = self::getValue('app_logo', '/images/ubids-logo.png');
+
+        if (!is_string($logo) || trim($logo) === '') {
+            return '/images/ubids-logo.png';
+        }
+
+        $logo = trim($logo);
+
+        if (str_starts_with($logo, 'http://') || str_starts_with($logo, 'https://')) {
+            return $logo;
+        }
+
+        return str_starts_with($logo, '/') ? $logo : '/' . ltrim($logo, '/');
+    }
+
     private static function castValue(?string $value, string $type): mixed
     {
         if ($value === null || $value === '') {

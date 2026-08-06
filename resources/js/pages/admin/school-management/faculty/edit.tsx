@@ -61,8 +61,8 @@ const CreateFacultyPage = ({faculty}: {faculty: FormData | any}) => {
 
   const breadcrumbs = [
     {
-      title: 'Dashboard',
-      href: '/admin/dashboard',
+      title: 'Settings',
+      href: '/admin/settings-reports/settings',
     },
     {
       title: 'Faculties',

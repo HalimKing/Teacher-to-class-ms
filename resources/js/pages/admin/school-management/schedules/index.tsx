@@ -74,7 +74,7 @@ export default function AdminSchedulesIndex() {
     }, [flash?.success, flash?.error]);
 
     return (
-        <AppLayout breadcrumbs={[{ title: 'Academics', href: '/admin/school-management' }, { title: 'Schedules', href: '/admin/school-management/schedules' }]}>
+        <AppLayout breadcrumbs={[{ title: 'Academics', href: '/admin/academics/time-tables' }, { title: 'Schedules', href: '/admin/school-management/schedules' }]}>
             <Head title="Schedules" />
 
             <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto rounded-xl p-4 md:p-6">
@@ -129,7 +129,7 @@ export default function AdminSchedulesIndex() {
                                     <th className="px-4 py-3 text-left text-xs font-semibold">Course / Program</th>
                                     <th className="px-4 py-3 text-left text-xs font-semibold">Original</th>
                                     <th className="px-4 py-3 text-left text-xs font-semibold">Requested</th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold">Class Room</th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold">Venue</th>
                                     <th className="px-4 py-3 text-center text-xs font-semibold">Status</th>
                                     <th className="px-4 py-3 text-right text-xs font-semibold">Actions</th>
                                 </tr>

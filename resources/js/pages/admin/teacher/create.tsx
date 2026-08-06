@@ -179,7 +179,7 @@ const CreateTeacherPage = ({facultyOptions}: {facultyOptions: FacultyOption[]}) 
       href: '/admin/dashboard',
     },
     {
-      title: 'Teachers',
+      title: 'Staff Management',
       href: '/admin/teachers',
     }
   ];
@@ -199,10 +199,10 @@ const CreateTeacherPage = ({facultyOptions}: {facultyOptions: FacultyOption[]}) 
                   className="flex items-center text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 mb-4 transition-colors"
                 >
                   <ChevronDown className="w-5 h-5 mr-1 rotate-90" />
-                  Back to Teachers
+                  Back to Staff
                 </button>
-                <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">Add New Teacher</h2>
-                <p className="text-slate-600 dark:text-slate-400">Fill in the information below to create a new teacher profile</p>
+                <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">Add Staff Member</h2>
+                <p className="text-slate-600 dark:text-slate-400">Fill in the information below to create a new administrator or lecturer profile</p>
               </div>
 
               <form onSubmit={handleSubmit}>
@@ -226,7 +226,7 @@ const CreateTeacherPage = ({facultyOptions}: {facultyOptions: FacultyOption[]}) 
                         required
                         error={!!errors.email}
                         helperText={errors.email}
-                        placeholder="teacher@school.com"
+                        placeholder="staff@school.com"
                         variant="outlined"
                       />
                     </div>
@@ -340,7 +340,7 @@ const CreateTeacherPage = ({facultyOptions}: {facultyOptions: FacultyOption[]}) 
                     }`}
                     disabled={processing}
                   >
-                    {processing ? 'Creating...' : 'Create Teacher Profile'}
+                    {processing ? 'Creating...' : 'Create Staff Profile'}
                   </button>
                 </div>
               </form>

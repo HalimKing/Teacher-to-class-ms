@@ -22,7 +22,7 @@ export default function TeacherImportExportPanel({
             <div className="mb-4 flex items-center justify-between">
                 <div>
                     <h2 className="text-lg font-semibold text-sidebar-foreground">Import & Export</h2>
-                    <p className="text-sm text-sidebar-foreground/60">Bulk manage teacher records with templates and filtered exports.</p>
+                    <p className="text-sm text-sidebar-foreground/60">Bulk manage staff member records with templates and filtered exports.</p>
                 </div>
             </div>
 

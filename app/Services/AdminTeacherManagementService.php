@@ -356,9 +356,9 @@ class AdminTeacherManagementService
         $administratorsPresentToday = $context['present_staff_ids']->count();
 
         return [
-            ['title' => 'Total Teachers', 'value' => (string) $totalTeachers, 'change' => "{$lecturerCount} lecturers · {$administratorCount} administrators", 'changeType' => 'neutral', 'icon' => 'Users', 'group' => 'overview'],
-            ['title' => 'Active Teachers', 'value' => (string) $withTimetables, 'change' => 'With assigned timetables', 'changeType' => 'positive', 'icon' => 'CheckCircle', 'group' => 'overview'],
-            ['title' => 'Inactive Teachers', 'value' => (string) $withoutTimetables, 'change' => 'No timetable assigned', 'changeType' => $withoutTimetables > 0 ? 'negative' : 'neutral', 'icon' => 'XCircle', 'group' => 'overview'],
+            ['title' => 'Total Staff', 'value' => (string) $totalTeachers, 'change' => "{$lecturerCount} lecturers · {$administratorCount} administrators", 'changeType' => 'neutral', 'icon' => 'Users', 'group' => 'overview'],
+            ['title' => 'Active Staff', 'value' => (string) $withTimetables, 'change' => 'With assigned timetables', 'changeType' => 'positive', 'icon' => 'CheckCircle', 'group' => 'overview'],
+            ['title' => 'Inactive Staff', 'value' => (string) $withoutTimetables, 'change' => 'No timetable assigned', 'changeType' => $withoutTimetables > 0 ? 'negative' : 'neutral', 'icon' => 'XCircle', 'group' => 'overview'],
             ['title' => 'New This Month', 'value' => (string) $newThisMonth, 'change' => now()->format('F Y'), 'changeType' => 'positive', 'icon' => 'TrendingUp', 'group' => 'overview'],
             ['title' => 'Present Today', 'value' => (string) $presentToday, 'change' => "{$lecturersPresentToday} lecturers · {$administratorsPresentToday} administrators", 'changeType' => 'positive', 'icon' => 'LogIn', 'group' => 'attendance'],
             ['title' => 'Absent Today', 'value' => (string) $absentToday, 'change' => "{$scheduledToday} scheduled today", 'changeType' => $absentToday > 0 ? 'negative' : 'neutral', 'icon' => 'LogOut', 'group' => 'attendance'],

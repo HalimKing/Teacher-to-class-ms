@@ -83,7 +83,6 @@ class LecturerAttendanceReportService
             return [
                 'Date' => $record['date'],
                 'Course' => $record['course'],
-                'Class' => $record['classroom'] ?? '—',
                 'Venue' => $record['classroom'] ?? '—',
                 'Check-in Time' => $record['check_in_time'],
                 'Check-out Time' => $record['check_out_time'],

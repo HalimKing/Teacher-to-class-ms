@@ -1,4 +1,6 @@
 import { Button } from '@/components/ui/button';
+import { apiJsonRequest } from '@/lib/http';
+import { getCsrfToken } from '@/lib/csrf';
 import { type FaceCaptureResult } from '@/lib/face-recognition';
 import { ShieldCheck, ShieldX, Trash2 } from 'lucide-react';
 import { useState } from 'react';
@@ -12,7 +14,7 @@ interface FaceEnrollmentSectionProps {
     enrollmentRequired?: boolean;
 }
 
-const csrfToken = () => (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '';
+const csrfToken = () => getCsrfToken();
 
 export default function FaceEnrollmentSection({
     teacherId,
@@ -28,33 +30,24 @@ export default function FaceEnrollmentSection({
 
     const handleEnrollment = async (result: FaceCaptureResult) => {
         if (!teacherId) {
-            toast.info('Create the lecturer first, then open Edit Teacher to enroll their face.', { theme: 'dark' });
+            toast.info('Create the staff member first, then open Edit Staff Member to enroll their face.', { theme: 'dark' });
             return;
         }
 
         setProcessing(true);
         try {
             const token = csrfToken();
-            const response = await fetch(route('admin.teachers.face-enrollment.store', teacherId), {
-                method: 'POST',
-                credentials: 'same-origin',
-                headers: {
-                    Accept: 'application/json',
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': token,
-                    'X-Requested-With': 'XMLHttpRequest',
+            const payload = await apiJsonRequest<{ message?: string; face_enrollment_status?: string; face_registered_at?: string }>(
+                route('admin.teachers.face-enrollment.store', teacherId),
+                {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        _token: token,
+                        face_descriptor: result.descriptor,
+                        quality: result.quality,
+                    }),
                 },
-                body: JSON.stringify({
-                    _token: token,
-                    face_descriptor: result.descriptor,
-                    quality: result.quality,
-                }),
-            });
-            const payload = await response.json();
-
-            if (!response.ok) {
-                throw new Error(payload.message || 'Unable to enroll face.');
-            }
+            );
 
             setCurrentStatus(payload.face_enrollment_status || 'enrolled');
             setRegisteredAt(payload.face_registered_at || new Date().toISOString());
@@ -75,22 +68,13 @@ export default function FaceEnrollmentSection({
         setProcessing(true);
         try {
             const token = csrfToken();
-            const response = await fetch(route('admin.teachers.face-enrollment.destroy', teacherId), {
-                method: 'DELETE',
-                credentials: 'same-origin',
-                headers: {
-                    Accept: 'application/json',
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': token,
-                    'X-Requested-With': 'XMLHttpRequest',
+            const payload = await apiJsonRequest<{ message?: string }>(
+                route('admin.teachers.face-enrollment.destroy', teacherId),
+                {
+                    method: 'DELETE',
+                    body: JSON.stringify({ _token: token }),
                 },
-                body: JSON.stringify({ _token: token }),
-            });
-            const payload = await response.json();
-
-            if (!response.ok) {
-                throw new Error(payload.message || 'Unable to remove face enrollment.');
-            }
+            );
 
             setCurrentStatus('not_enrolled');
             setRegisteredAt(null);

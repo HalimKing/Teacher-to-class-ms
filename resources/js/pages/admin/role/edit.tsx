@@ -42,7 +42,7 @@ const formatGroupName = (groupName: string) => {
     'admin.dashboard': 'Dashboard',
     'admin.attendance': 'Teacher Attendance',
     'admin.staff-attendance': 'Staff Attendance',
-    'admin.teachers': 'Teachers',
+    'admin.teachers': 'Staff',
     'admin.user-management': 'User Management',
     'admin.academics': 'Academics',
     'admin.school-management': 'School Management',
@@ -213,6 +213,7 @@ const EditRolePage = ({ role, permissions }: EditRolePageProps) => {
                                   {groupPermissions.map((permission) => {
                                     const isChecked = data.permissions.includes(permission.name);
                                     const formattedName = permission.name
+                                      .replace(/class-rooms/g, 'venues')
                                       .split('.')
                                       .slice(1)
                                       .map(word => word.charAt(0).toUpperCase() + word.slice(1))

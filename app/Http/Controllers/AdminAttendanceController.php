@@ -119,7 +119,7 @@ class AdminAttendanceController extends Controller
                 'Teacher' => $rec->teacher?->first_name . ' ' . $rec->teacher?->last_name,
                 'Staff Type' => $rec->teacher?->staff_type ?? Teacher::STAFF_TYPE_LECTURER,
                 'Course' => $rec->course?->name,
-                'Classroom' => $rec->classroom?->name,
+                'Venue' => $rec->classroom?->name,
                 'Date' => $rec->date,
                 'Check In' => $rec->check_in_time,
                 'Check Out' => $rec->check_out_time,

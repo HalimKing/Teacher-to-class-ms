@@ -12,6 +12,9 @@ Artisan::command('inspire', function () {
 Schedule::command('attendance:process')
     ->everyTenMinutes();
 
+Schedule::command('attendance:expire-venue-authorizations')
+    ->everyTenMinutes();
+
 Schedule::command('reminders:process')
     ->everyMinute();
 

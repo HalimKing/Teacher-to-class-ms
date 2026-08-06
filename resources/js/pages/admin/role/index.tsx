@@ -184,6 +184,7 @@ const RolesIndexPage = ({ roles, filters: initialFilters }: RolesIndexPageProps)
   // Format permission name for display
   const formatPermissionName = (permissionName: string) => {
     return permissionName
+      .replace(/class-rooms/g, 'venues')
       .split('.')
       .slice(1)
       .map(word => word.charAt(0).toUpperCase() + word.slice(1))

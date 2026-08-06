@@ -12,6 +12,7 @@ import {
 } from '@/components/users/types';
 import { KpiGrid } from '@/components/dashboard/kpi-card';
 import AppLayout from '@/layouts/app-layout';
+import { apiJsonRequest } from '@/lib/http';
 import { buildListQueryParams, listQueryParamsEqual } from '@/lib/list-filters';
 import { type BreadcrumbItem, type PagePropsWithFlash } from '@/types';
 import { Head, router, usePage } from '@inertiajs/react';
@@ -171,25 +172,10 @@ export default function UsersIndexPage({
     };
 
     const postBulkAction = async (url: string, payload: Record<string, unknown>) => {
-        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
-        const response = await fetch(url, {
+        return apiJsonRequest<{ success: boolean; message?: string }>(url, {
             method: 'POST',
-            credentials: 'same-origin',
-            headers: {
-                Accept: 'application/json',
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': csrfToken,
-                'X-Requested-With': 'XMLHttpRequest',
-            },
             body: JSON.stringify(payload),
         });
-
-        const result = await response.json();
-        if (!response.ok || !result.success) {
-            throw new Error(result.message || 'Bulk action failed.');
-        }
-
-        return result;
     };
 
     const handleToggleSelect = (id: number) => {
@@ -294,24 +280,14 @@ export default function UsersIndexPage({
         setResetLoading(true);
 
         try {
-            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
-            const response = await fetch(route('admin.user-management.users.reset-password', resetUser.id), {
+            const result = await apiJsonRequest<{
+                success: boolean;
+                message?: string;
+                data?: { temporary_password?: string | null };
+            }>(route('admin.user-management.users.reset-password', resetUser.id), {
                 method: 'POST',
-                credentials: 'same-origin',
-                headers: {
-                    Accept: 'application/json',
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': csrfToken,
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
                 body: JSON.stringify(payload),
             });
-
-            const result = await response.json();
-
-            if (!response.ok || !result.success) {
-                throw new Error(result.message || 'Password reset failed.');
-            }
 
             toast.success(result.message || 'Password reset successfully.', { theme: 'dark' });
             router.reload({ only: ['users', 'summaryCards'] });

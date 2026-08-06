@@ -448,7 +448,7 @@ export default function TeacherAttendanceRecordsAdmin({
                             <Grid container spacing={1.5}>
                                 <Grid item xs={6}>
                                     <Typography variant="caption" color="text.secondary" display="block">
-                                        Classroom
+                                        Venue
                                     </Typography>
                                     <Typography variant="body2">
                                         {record.classroom?.name || 'N/A'}
@@ -905,7 +905,7 @@ export default function TeacherAttendanceRecordsAdmin({
                                                     py: { sm: 1, md: 1.5 },
                                                     display: { sm: 'none', md: 'table-cell' }
                                                 }}>
-                                                    Classroom
+                                                    Venue
                                                 </TableCell>
                                                 <TableCell sx={{ 
                                                     fontWeight: 600, 

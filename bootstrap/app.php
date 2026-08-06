@@ -13,6 +13,8 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Request;
+use Illuminate\Session\TokenMismatchException;
+use Illuminate\Support\Facades\Log;
 use Spatie\Permission\Exceptions\UnauthorizedException;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -22,7 +24,12 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
-        $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
+        // Do NOT exclude XSRF-TOKEN: Inertia/Axios send it as X-XSRF-TOKEN and
+        // Laravel must decrypt that header. Keep CSRF sync via shared csrf_token + meta.
+        $middleware->encryptCookies(except: [
+            'appearance',
+            'sidebar_state',
+        ]);
 
          $middleware->alias([
             'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
@@ -62,6 +69,28 @@ return Application::configure(basePath: dirname(__DIR__))
                         'message' => $exception->getMessage(),
                     ],
                 );
+            }
+
+            return null;
+        });
+
+        $exceptions->render(function (TokenMismatchException $exception, Request $request) {
+            if (filter_var(env('CSRF_DEBUG', false), FILTER_VALIDATE_BOOLEAN)) {
+                Log::warning('csrf.token_mismatch', [
+                    'path' => $request->path(),
+                    'method' => $request->method(),
+                    'session_id' => $request->hasSession() ? $request->session()->getId() : null,
+                    'session_token' => $request->hasSession() ? $request->session()->token() : null,
+                    'header_token' => $request->header('X-CSRF-TOKEN'),
+                    'input_token' => $request->input('_token'),
+                    'x_xsrf_token' => $request->header('X-XSRF-TOKEN'),
+                    'user_id' => $request->user()?->id,
+                    'teacher_id' => auth('teacher')->id(),
+                    'referer' => $request->headers->get('referer'),
+                    'user_agent' => $request->userAgent(),
+                    'ajax' => $request->ajax(),
+                    'inertia' => (bool) $request->header('X-Inertia'),
+                ]);
             }
 
             return null;

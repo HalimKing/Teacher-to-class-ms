@@ -502,14 +502,14 @@ const TimeTablesIndexPage = ({
                     </select> */}
                   </div>
 
-                  {/* Classroom Filter */}
+                  {/* Venue Filter */}
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Classroom
+                      Venue
                     </label>
                      <ComboBox
                         options={classRoomOptions}
-                        label="All Classroom"
+                        label="All Venues"
                         externalValue={handleValueChange('class_room_id')}
                         defaultValue={null}
                       />
@@ -518,7 +518,7 @@ const TimeTablesIndexPage = ({
                         onChange={(e) => setFilters(prev => ({ ...prev, class_room_id: e.target.value ? Number(e.target.value) : '' }))}
                         className="w-full px-3 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-sm transition-shadow"
                       >
-                        <option value="">All Classrooms</option>
+                        <option value="">All Venues</option>
                         {classRoomOptions.map((option) => (
                           <option key={option.value} value={option.value}>
                             {option.label}
@@ -645,7 +645,7 @@ const TimeTablesIndexPage = ({
                           <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Staff Type</th>
                           <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Course</th>
                           <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Program</th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Class Room</th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Venue</th>
                           <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Staff</th>
                           <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Academic Year</th>
                           <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Duration</th>
@@ -735,7 +735,7 @@ const TimeTablesIndexPage = ({
                                   </div>
                                 </div>
                               ) : (
-                                <div className="text-sm text-slate-400 italic">No teacher assigned</div>
+                                <div className="text-sm text-slate-400 italic">No staff assigned</div>
                               )}
                             </td>
                             <td className="px-6 py-4">

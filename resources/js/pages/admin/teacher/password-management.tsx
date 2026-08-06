@@ -109,7 +109,7 @@ const TeacherPasswordManagementPage = ({ teacher: initialTeacher, generatedPassw
             setNewPassword('');
           } else {
             setTeacher(null);
-            toast.error('No teacher found with this employee ID', {
+            toast.error('No staff member found with this employee ID', {
               position: "top-right",
               autoClose: 3000,
               theme: "dark",
@@ -183,7 +183,7 @@ const TeacherPasswordManagementPage = ({ teacher: initialTeacher, generatedPassw
       href: '/admin/dashboard',
     },
     {
-      title: 'Teachers',
+      title: 'Staff Management',
       href: '/admin/teachers',
     },
     {
@@ -194,7 +194,7 @@ const TeacherPasswordManagementPage = ({ teacher: initialTeacher, generatedPassw
 
   return (
     <AppLayout breadcrumbs={breadcrumbs}>
-      <Head title="Teacher Password Management" />
+      <Head title="Staff Password Management" />
       <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex">
         <div className="flex-1 min-w-0 flex flex-col">
           <div className="p-4 sm:p-6 lg:p-8 flex-1 overflow-auto">
@@ -206,18 +206,18 @@ const TeacherPasswordManagementPage = ({ teacher: initialTeacher, generatedPassw
                     <Lock className="w-6 h-6 text-white" />
                   </div>
                   <h2 className="text-3xl font-extrabold text-slate-900 dark:text-white">
-                    Teacher Password Management
+                    Staff Password Management
                   </h2>
                 </div>
                 <p className="text-slate-600 dark:text-slate-400 ml-[60px]">
-                  Search for teachers and reset their passwords securely
+                  Search for administrators or lecturers and reset their passwords securely
                 </p>
               </div>
 
               {/* Search Section */}
               <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-700 p-6 mb-6">
                 <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
-                  Search Teacher
+                  Search Staff Member
                 </h3>
                 <div className="flex flex-col sm:flex-row gap-3">
                   <div className="relative flex-1">
@@ -263,7 +263,7 @@ const TeacherPasswordManagementPage = ({ teacher: initialTeacher, generatedPassw
                 </div>
               </div>
 
-              {/* Teacher Details Section */}
+              {/* Staff Details Section */}
               {teacher && (
                 <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-700 overflow-hidden mb-6">
                   <div className="p-6 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50">
@@ -332,7 +332,7 @@ const TeacherPasswordManagementPage = ({ teacher: initialTeacher, generatedPassw
                             Security Notice
                           </p>
                           <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
-                            Resetting the password will generate a new secure password. Make sure to save it and provide it to the teacher.
+                            Resetting the password will generate a new secure password. Make sure to save it and provide it to the staff member.
                           </p>
                         </div>
                       </div>
@@ -401,7 +401,7 @@ const TeacherPasswordManagementPage = ({ teacher: initialTeacher, generatedPassw
 
                   <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4">
                     <p className="text-sm text-green-800 dark:text-green-200">
-                      <strong>Important:</strong> Please save this password and provide it to the teacher securely. 
+                      <strong>Important:</strong> Please save this password and provide it to the staff member securely. 
                       They should change it after their first login.
                     </p>
                   </div>
@@ -415,10 +415,10 @@ const TeacherPasswordManagementPage = ({ teacher: initialTeacher, generatedPassw
                     <Search className="w-10 h-10 text-slate-400 dark:text-slate-500" />
                   </div>
                   <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">
-                    No Teacher Selected
+                    No Staff Member Selected
                   </h3>
                   <p className="text-slate-600 dark:text-slate-400">
-                    Enter an employee ID above to search for a teacher and manage their password.
+                    Enter an employee ID above to search for a staff member and manage their password.
                   </p>
                 </div>
               )}

@@ -33,6 +33,7 @@ use App\Http\Controllers\Teacher\StaffAttendanceReportController as TeacherStaff
 
 use App\Http\Controllers\AdminAttendanceController;
 use App\Http\Controllers\AttendancePortalController;
+use App\Http\Controllers\CsrfTokenController;
 use App\Http\Controllers\DeployCheckController;
 use App\Models\AcademicPeriod;
 use Illuminate\Support\Facades\Route;
@@ -43,6 +44,7 @@ Route::get('/', function () {
 })->name('home');
 
 Route::get('/deploy-check', DeployCheckController::class)->name('deploy-check');
+Route::get('/csrf-token', CsrfTokenController::class)->name('csrf-token');
 
 
 
@@ -143,6 +145,26 @@ Route::middleware(['auth:teacher', 'attendance.portal.restrict'])->group(functio
         Route::post('/teacher/reschedules', [\App\Http\Controllers\Teacher\RescheduledSessionController::class, 'store'])->name('teacher.reschedules.store');
     });
 
+    Route::get('/teacher/attendance-explanations', [\App\Http\Controllers\Teacher\AttendanceExplanationController::class, 'index'])
+        ->name('teacher.attendance-explanations.index');
+    Route::post('/teacher/attendance-explanations', [\App\Http\Controllers\Teacher\AttendanceExplanationController::class, 'store'])
+        ->name('teacher.attendance-explanations.store');
+
+    Route::middleware('teacher.staff_type:administrator')->group(function () {
+        Route::get('/teacher/venue-change-requests', [\App\Http\Controllers\Teacher\VenueChangeRequestController::class, 'index'])
+            ->name('teacher.venue-change-requests.index');
+        Route::get('/teacher/venue-change-requests/create', [\App\Http\Controllers\Teacher\VenueChangeRequestController::class, 'create'])
+            ->name('teacher.venue-change-requests.create');
+        Route::post('/teacher/venue-change-requests', [\App\Http\Controllers\Teacher\VenueChangeRequestController::class, 'store'])
+            ->name('teacher.venue-change-requests.store');
+        Route::get('/teacher/venue-change-requests/my-schedules', [\App\Http\Controllers\Teacher\VenueChangeRequestController::class, 'mySchedules'])
+            ->name('teacher.venue-change-requests.my-schedules');
+        Route::get('/teacher/venue-change-requests/{venueChangeRequest}', [\App\Http\Controllers\Teacher\VenueChangeRequestController::class, 'show'])
+            ->name('teacher.venue-change-requests.show');
+        Route::post('/teacher/venue-change-requests/{venueChangeRequest}/cancel', [\App\Http\Controllers\Teacher\VenueChangeRequestController::class, 'cancel'])
+            ->name('teacher.venue-change-requests.cancel');
+    });
+
     // Session reminders for teachers
     Route::middleware('teacher.staff_type:lecturer')->group(function () {
         Route::get('/teacher/reminders', [SessionReminderController::class, 'index'])->name('teacher.reminders.index');
@@ -185,6 +207,57 @@ Route::middleware(['auth:web', 'verified', 'password.changed'])->group(function 
             Route::get('dashboard', [\App\Http\Controllers\Admin\DashboardController::class, 'index'])->name('dashboard');
 
             Route::get('dashboard/attendance-data', [\App\Http\Controllers\Admin\DashboardController::class, 'getAttendanceData'])->name('dashboard.attendance-data');
+
+            // Venue change authorizations
+            Route::get('venue-change-authorizations', [\App\Http\Controllers\Admin\VenueChangeAuthorizationController::class, 'index'])
+                ->name('venue-change-authorizations.index')
+                ->middleware('permission:admin.venue-change-authorizations.view');
+            Route::get('venue-change-authorizations/create', [\App\Http\Controllers\Admin\VenueChangeAuthorizationController::class, 'create'])
+                ->name('venue-change-authorizations.create')
+                ->middleware('permission:admin.venue-change-authorizations.manage');
+            Route::post('venue-change-authorizations', [\App\Http\Controllers\Admin\VenueChangeAuthorizationController::class, 'store'])
+                ->name('venue-change-authorizations.store')
+                ->middleware('permission:admin.venue-change-authorizations.manage');
+            Route::get('venue-change-authorizations/staff/{teacher}/schedules', [\App\Http\Controllers\Admin\VenueChangeAuthorizationController::class, 'staffSchedules'])
+                ->name('venue-change-authorizations.staff-schedules')
+                ->middleware('permission:admin.venue-change-authorizations.manage');
+            Route::get('venue-change-authorizations/{venueChangeAuthorization}', [\App\Http\Controllers\Admin\VenueChangeAuthorizationController::class, 'show'])
+                ->name('venue-change-authorizations.show')
+                ->middleware('permission:admin.venue-change-authorizations.view');
+            Route::post('venue-change-authorizations/{venueChangeAuthorization}/revoke', [\App\Http\Controllers\Admin\VenueChangeAuthorizationController::class, 'revoke'])
+                ->name('venue-change-authorizations.revoke')
+                ->middleware('permission:admin.venue-change-authorizations.manage');
+
+            // Venue change requests (staff-submitted, pending approval)
+            Route::get('venue-change-requests', [\App\Http\Controllers\Admin\VenueChangeRequestController::class, 'index'])
+                ->name('venue-change-requests.index')
+                ->middleware('permission:admin.venue-change-requests.view');
+            Route::get('venue-change-requests/{venueChangeRequest}', [\App\Http\Controllers\Admin\VenueChangeRequestController::class, 'show'])
+                ->name('venue-change-requests.show')
+                ->middleware('permission:admin.venue-change-requests.view');
+            Route::post('venue-change-requests/{venueChangeRequest}/approve', [\App\Http\Controllers\Admin\VenueChangeRequestController::class, 'approve'])
+                ->name('venue-change-requests.approve')
+                ->middleware('permission:admin.venue-change-requests.manage');
+            Route::post('venue-change-requests/{venueChangeRequest}/reject', [\App\Http\Controllers\Admin\VenueChangeRequestController::class, 'reject'])
+                ->name('venue-change-requests.reject')
+                ->middleware('permission:admin.venue-change-requests.manage');
+
+            // Attendance explanations review
+            Route::get('attendance-explanations', [\App\Http\Controllers\Admin\AttendanceExplanationController::class, 'index'])
+                ->name('attendance-explanations.index')
+                ->middleware('permission:admin.attendance-explanations.view');
+            Route::get('attendance-explanations/{attendanceExplanation}', [\App\Http\Controllers\Admin\AttendanceExplanationController::class, 'show'])
+                ->name('attendance-explanations.show')
+                ->middleware('permission:admin.attendance-explanations.view');
+            Route::post('attendance-explanations/{attendanceExplanation}/approve', [\App\Http\Controllers\Admin\AttendanceExplanationController::class, 'approve'])
+                ->name('attendance-explanations.approve')
+                ->middleware('permission:admin.attendance-explanations.manage');
+            Route::post('attendance-explanations/{attendanceExplanation}/reject', [\App\Http\Controllers\Admin\AttendanceExplanationController::class, 'reject'])
+                ->name('attendance-explanations.reject')
+                ->middleware('permission:admin.attendance-explanations.manage');
+            Route::get('attendance-explanations/{attendanceExplanation}/document', [\App\Http\Controllers\Admin\AttendanceExplanationController::class, 'document'])
+                ->name('attendance-explanations.document')
+                ->middleware('permission:admin.attendance-explanations.view');
 
             Route::prefix('system-logs')->name('system-logs.')->group(function () {
                 Route::get('/', [SystemLogController::class, 'index'])

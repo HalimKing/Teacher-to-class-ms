@@ -10,6 +10,8 @@ use App\Models\TimeTable;
 use App\Services\FacialRecognitionService;
 use App\Services\AttendanceTimingService;
 use App\Services\ActivityLogService;
+use App\Services\VenueChangeAuthorizationService;
+use App\Support\AttendanceExceptionCategory;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -19,7 +21,8 @@ use Inertia\Response;
 class StaffAttendanceController extends Controller
 {
     public function __construct(
-        private AttendanceTimingService $timingService
+        private AttendanceTimingService $timingService,
+        private VenueChangeAuthorizationService $venueChangeAuthorization,
     ) {}
 
     public function index(FacialRecognitionService $facialRecognition): Response
@@ -191,6 +194,13 @@ class StaffAttendanceController extends Controller
         }
 
         $gpsEnforcement = SystemSetting::getValue('gps_enforcement_enabled', true);
+        $venueContext = $this->venueChangeAuthorization->resolveEffectiveVenue(
+            $timetable,
+            (int) $staff->id,
+            $now,
+            'check_in',
+        );
+
         if ($gpsEnforcement && !$request->boolean('within_range')) {
             return response()->json([
                 'success' => false,
@@ -198,10 +208,18 @@ class StaffAttendanceController extends Controller
             ], 400);
         }
 
+        $effectiveClassroom = $venueContext['classroom'] ?? $timetable->classRoom;
+        $authorization = $venueContext['authorization'];
+
         $attendance = StaffAttendance::create([
             'staff_id' => $staff->id,
             'timetable_id' => $timetable->id,
-            'classroom_id' => $timetable->class_room_id,
+            'classroom_id' => $effectiveClassroom?->id ?? $timetable->class_room_id,
+            'venue_change_authorization_id' => $authorization?->id,
+            'authorized_venue_used' => (bool) $venueContext['authorized_venue_used'],
+            'exception_category' => $venueContext['authorized_venue_used']
+                ? AttendanceExceptionCategory::AUTHORIZED_VENUE_CHANGE
+                : AttendanceExceptionCategory::NORMAL,
             'academic_year_id' => $timetable->academic_year_id,
             'date' => $today,
             'check_in_time' => $now->format('H:i:s'),
@@ -302,6 +320,16 @@ class StaffAttendanceController extends Controller
         }
 
         $gpsEnforcement = SystemSetting::getValue('gps_enforcement_enabled', true);
+        $now = Carbon::now();
+        $venueContext = $attendance->timetable
+            ? $this->venueChangeAuthorization->resolveEffectiveVenue(
+                $attendance->timetable,
+                (int) $staff->id,
+                $now,
+                'check_out',
+            )
+            : ['classroom' => null, 'authorization' => null, 'authorized_venue_used' => false];
+
         if ($gpsEnforcement && !$request->boolean('within_range')) {
             return response()->json([
                 'success' => false,
@@ -309,7 +337,6 @@ class StaffAttendanceController extends Controller
             ], 400);
         }
 
-        $now = Carbon::now();
         $scheduledEnd = $this->timingService->parseScheduleTime((string) $attendance->timetable?->end_time, $now);
         $checkOutOutcome = $this->timingService->resolveCheckOutOutcome(
             $now,
@@ -317,6 +344,13 @@ class StaffAttendanceController extends Controller
             $attendance->attendance_status,
             AttendanceTimingService::ROLE_ADMINISTRATOR
         );
+
+        $exceptionCategory = $attendance->exception_category;
+        if ($checkOutOutcome['departure_category'] === 'early_leave') {
+            $exceptionCategory = AttendanceExceptionCategory::UNAUTHORIZED_EARLY_DEPARTURE;
+        } elseif ($venueContext['authorized_venue_used']) {
+            $exceptionCategory = AttendanceExceptionCategory::AUTHORIZED_VENUE_CHANGE;
+        }
 
         $attendance->update([
             'check_out_time' => $now->format('H:i:s'),
@@ -327,6 +361,10 @@ class StaffAttendanceController extends Controller
             'attendance_status' => $checkOutOutcome['attendance_status'],
             'departure_category' => $checkOutOutcome['departure_category'],
             'minutes_overtime' => $checkOutOutcome['minutes_overtime'],
+            'venue_change_authorization_id' => $attendance->venue_change_authorization_id
+                ?? $venueContext['authorization']?->id,
+            'authorized_venue_used' => $attendance->authorized_venue_used || (bool) $venueContext['authorized_venue_used'],
+            'exception_category' => $exceptionCategory,
         ]);
 
         app(ActivityLogService::class)->logAttendance(
@@ -399,17 +437,40 @@ class StaffAttendanceController extends Controller
                 'attendance_opens_message' => null,
             ];
 
+        $venueContext = $isToday
+            ? $this->venueChangeAuthorization->resolveEffectiveVenue(
+                $schedule,
+                (int) $schedule->teacher_id,
+                now(),
+                $attendance && !$attendance->check_out_time ? 'check_out' : 'check_in',
+            )
+            : ['classroom' => $schedule->classRoom, 'authorization' => null, 'authorized_venue_used' => false];
+
+        $displayClassroom = $venueContext['classroom'] ?? $schedule->classRoom;
+        $authorization = $venueContext['authorization'];
+
         return [
             'id' => $schedule->id,
-            'classroom' => $schedule->classRoom?->name,
+            'classroom' => $displayClassroom?->name,
+            'original_classroom' => $schedule->classRoom?->name,
             'day' => $schedule->day_of_week ?? $schedule->day,
             'start_time' => $schedule->start_time,
             'end_time' => $schedule->end_time,
             'coordinates' => [
-                'lat' => $schedule->classRoom?->latitude,
-                'lng' => $schedule->classRoom?->longitude,
+                'lat' => $displayClassroom?->latitude,
+                'lng' => $displayClassroom?->longitude,
             ],
-            'radius' => $schedule->classRoom?->radius_meters ?? 0,
+            'radius' => $displayClassroom?->radius_meters ?? 0,
+            'venue_authorization' => $authorization ? [
+                'id' => $authorization->id,
+                'authorization_type' => $authorization->authorization_type,
+                'authorized_venue' => $authorization->authorizedClassroom?->name,
+                'original_venue' => $authorization->originalClassroom?->name,
+                'reason' => $authorization->reason,
+                'start_date' => $authorization->start_date?->toDateString(),
+                'end_date' => $authorization->end_date?->toDateString(),
+                'period_label' => $authorization->period_label,
+            ] : null,
             'attendance_taken' => $attendance !== null,
             'attendance_status' => $attendance ? [
                 'id' => $attendance->id,
@@ -421,8 +482,25 @@ class StaffAttendanceController extends Controller
                 'minutes_early' => $attendance->minutes_early,
                 'minutes_late' => $attendance->minutes_late,
                 'location_match' => $attendance->check_in_within_range,
+                'exception_category' => $attendance->exception_category,
             ] : null,
             'is_completed' => $attendance && $attendance->check_out_time !== null,
+            'needs_explanation' => $attendance
+                && !in_array($attendance->attendance_status, ['excused_absence'], true)
+                && !in_array($attendance->exception_category, [
+                    AttendanceExceptionCategory::EXCUSED_ABSENCE,
+                    AttendanceExceptionCategory::AUTHORIZED_EARLY_DEPARTURE,
+                ], true)
+                && (
+                    $attendance->attendance_status === 'absent'
+                    || $attendance->departure_category === 'early_leave'
+                    || $attendance->attendance_status === 'early_leave'
+                )
+                && !\App\Models\AttendanceExplanation::query()
+                    ->where('attendance_type', 'staff')
+                    ->where('attendance_id', $attendance->id)
+                    ->whereIn('status', ['pending', 'approved'])
+                    ->exists(),
             'timing' => $timing,
         ];
     }

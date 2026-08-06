@@ -51,7 +51,7 @@
                 <th>Course Code</th>
                 <th>Course Name</th>
                 <th>Program</th>
-                <th>Classroom</th>
+                <th>Venue</th>
                 <th>Academic Year</th>
             </tr>
         </thead>

@@ -31,6 +31,15 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Align Laravel config name with the editable system branding setting when available.
+        try {
+            if (class_exists(\App\Models\SystemSetting::class)) {
+                config(['app.name' => \App\Models\SystemSetting::appName()]);
+            }
+        } catch (\Throwable) {
+            // Database may be unavailable during early boot/migrations.
+        }
+
         Gate::define('view-lecturer-attendance', fn ($user): bool => $user instanceof Teacher && $user->isLecturer());
         Gate::define('view-class-attendance', fn ($user): bool => $user instanceof Teacher && $user->isLecturer());
         Gate::define('view-staff-attendance', fn ($user): bool => $user instanceof Teacher && $user->isAdministrator());

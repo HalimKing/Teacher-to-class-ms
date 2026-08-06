@@ -138,7 +138,7 @@ export const defaultVisibleColumns: TeacherColumnKey[] = [
 ];
 
 export const columnLabels: Record<TeacherColumnKey, string> = {
-    profile: 'Teacher',
+    profile: 'Staff Member',
     staff_id: 'Staff ID',
     email: 'Email',
     phone: 'Phone',

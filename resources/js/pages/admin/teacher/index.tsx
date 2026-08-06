@@ -21,7 +21,7 @@ import { ToastContainer, toast, Bounce } from 'react-toastify';
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Dashboard', href: '/admin/dashboard' },
-    { title: 'Teacher Management', href: '/admin/teachers' },
+    { title: 'Staff Management', href: '/admin/teachers' },
 ];
 
 export default function TeachersIndexPage({
@@ -185,11 +185,11 @@ export default function TeachersIndexPage({
             });
             const payload = await response.json();
             if (!response.ok || !payload.success) {
-                throw new Error(payload.message || 'Unable to load teacher details.');
+                throw new Error(payload.message || 'Unable to load staff member details.');
             }
             setQuickViewData(payload.data);
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'Unable to load teacher details.', { theme: 'dark' });
+            toast.error(error instanceof Error ? error.message : 'Unable to load staff member details.', { theme: 'dark' });
             setQuickViewTeacher(null);
         } finally {
             setQuickViewLoading(false);
@@ -197,13 +197,13 @@ export default function TeachersIndexPage({
     };
 
     const handleDelete = (teacherId: number) => {
-        if (confirm('Are you sure you want to delete this teacher?')) {
+        if (confirm('Are you sure you want to delete this staff member?')) {
             router.delete(route('admin.teachers.destroy', teacherId), { preserveScroll: true });
         }
     };
 
     const handleFaceEnrollmentReminder = () => {
-        toast.info(`Enrollment reminder queued for ${selectedIds.length} selected teacher(s).`, { theme: 'dark' });
+        toast.info(`Enrollment reminder queued for ${selectedIds.length} selected staff member(s).`, { theme: 'dark' });
     };
 
     const handlePreview = async (event: FormEvent) => {
@@ -290,7 +290,7 @@ export default function TeachersIndexPage({
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="Teacher Management" />
+            <Head title="Staff Management" />
 
             <div className="space-y-6 p-4 sm:p-6 lg:p-8">
                 <TeacherPageHeader

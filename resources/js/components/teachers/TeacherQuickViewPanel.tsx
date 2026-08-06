@@ -24,7 +24,7 @@ export default function TeacherQuickViewPanel({ open, loading, teacher, data, on
             <aside className="relative flex h-full w-full max-w-xl flex-col bg-white shadow-2xl dark:bg-sidebar-accent">
                 <div className="flex items-start justify-between border-b border-sidebar-border/60 p-6">
                     <div>
-                        <p className="text-xs font-medium tracking-wide text-primary uppercase">Teacher Profile</p>
+                        <p className="text-xs font-medium tracking-wide text-primary uppercase">Staff Profile</p>
                         <h2 className="mt-1 text-2xl font-semibold text-sidebar-foreground">{teacher.full_name}</h2>
                         <p className="text-sm text-sidebar-foreground/60">{teacher.employee_id}</p>
                     </div>
@@ -37,7 +37,7 @@ export default function TeacherQuickViewPanel({ open, loading, teacher, data, on
                     {loading || !data ? (
                         <div className="flex h-40 items-center justify-center text-sidebar-foreground/60">
                             <Loader2 className="size-5 animate-spin" />
-                            <span className="ml-2 text-sm">Loading teacher details...</span>
+                            <span className="ml-2 text-sm">Loading staff member details...</span>
                         </div>
                     ) : (
                         <div className="space-y-6">
@@ -112,7 +112,7 @@ export default function TeacherQuickViewPanel({ open, loading, teacher, data, on
                     {can('admin.teachers.edit') && (
                         <Button asChild variant="outline" size="sm">
                             <Link href={route('admin.teachers.edit', teacher.id)}>
-                                Edit Teacher
+                                Edit Staff Member
                             </Link>
                         </Button>
                     )}

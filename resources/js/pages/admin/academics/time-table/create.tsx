@@ -38,7 +38,7 @@ interface CreateTimeTablePageProps {
     academicYear: AcademicYear;
     courses: Option[];
     classRooms: Option[];
-    teachers: Array<Option & { staff_type?: string }>;
+    teachers: Array<Option & { staff_type?: string; employee_id?: string }>;
     staffTypeOptions: Option[];
     days: string[];
 }
@@ -46,6 +46,8 @@ interface CreateTimeTablePageProps {
 interface Option {
     label: string;
     value: string;
+    employee_id?: string;
+    staff_type?: string;
 }
 
 interface CreateTimeTableForm {
@@ -159,11 +161,11 @@ const CreateTimeTablePage = ({ academicYear, courses, classRooms, teachers, staf
                         const { day, result } = conflict;
                         if (result.conflict_type === 'classroom') {
                             setConflictMessage(
-                                `This time slot conflicts with an existing schedule for ${result.classroom_name || 'the selected classroom'} on ${day}.`,
+                                `This time slot conflicts with an existing schedule for ${result.classroom_name || 'the selected venue'} on ${day}.`,
                             );
                         } else if (result.conflict_type === 'both') {
                             setConflictMessage(
-                                `This time slot conflicts with both the teacher's schedule and the classroom availability on ${day}.`,
+                                `This time slot conflicts with both the staff member's schedule and the venue availability on ${day}.`,
                             );
                         } else {
                             setConflictMessage(`This time slot conflicts with an existing schedule on ${day}.`);
@@ -495,7 +497,7 @@ const CreateTimeTablePage = ({ academicYear, courses, classRooms, teachers, staf
                                                 <p className="font-medium text-red-800">Time Conflict Detected!</p>
                                                 <p className="mt-1 text-sm text-red-700">{conflictMessage}</p>
                                                 <p className="mt-2 text-xs text-red-600">
-                                                    Please adjust the time, classroom, teacher, or day to resolve the conflict.
+                                                    Please adjust the time, venue, staff member, or day to resolve the conflict.
                                                 </p>
                                             </div>
                                         </div>

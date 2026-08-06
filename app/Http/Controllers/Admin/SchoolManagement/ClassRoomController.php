@@ -196,7 +196,7 @@ class ClassRoomController extends Controller
             fputcsv($out, ['# 3. latitude, longitude, radius_meters are OPTIONAL - Numeric']);
             fputcsv($out, ['# 4. is_active is OPTIONAL - Use 1 or 0 (default 1)']);
             fputcsv($out, ['# 5. Do not modify the header row. Remove instruction rows before uploading']);
-            fputcsv($out, ['# 6. Duplicate name will update existing class room']);
+            fputcsv($out, ['# 6. Duplicate name will update existing venue']);
             fputcsv($out, ['']);
             fputcsv($out, ['name', 'capacity', 'latitude', 'longitude', 'radius_meters', 'is_active']);
             fputcsv($out, ['Room A101', '50', '', '', '', '1']);

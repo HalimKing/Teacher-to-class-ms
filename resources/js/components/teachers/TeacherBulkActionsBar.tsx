@@ -30,7 +30,7 @@ export default function TeacherBulkActionsBar({
         <div className="sticky top-4 z-10 flex flex-col gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 shadow-sm backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between">
             <div>
                 <p className="text-sm font-semibold text-sidebar-foreground">
-                    {selectedCount} teacher{selectedCount === 1 ? '' : 's'} selected
+                    {selectedCount} staff member{selectedCount === 1 ? '' : 's'} selected
                 </p>
                 <p className="text-xs text-sidebar-foreground/60">Bulk actions apply only to selected records.</p>
             </div>
@@ -57,7 +57,7 @@ export default function TeacherBulkActionsBar({
                             variant="outline"
                             size="sm"
                             onClick={() =>
-                                toast.info('Assign timetables from School Management → Timetables for the selected teachers.', {
+                                toast.info('Assign timetables from Academics → Timetables for the selected staff members.', {
                                     theme: 'dark',
                                 })
                             }
@@ -104,7 +104,7 @@ export default function TeacherBulkActionsBar({
                     <DropdownMenuContent align="end">
                         <DropdownMenuItem
                             onClick={() =>
-                                toast.info('Notification delivery is not configured yet for bulk teacher alerts.', { theme: 'dark' })
+                                toast.info('Notification delivery is not configured yet for bulk staff alerts.', { theme: 'dark' })
                             }
                         >
                             <Mail className="size-4" />

@@ -26,7 +26,7 @@ export default function TeacherTimeTablePrint() {
                             <TableCell>End</TableCell>
                             <TableCell>Course</TableCell>
                             <TableCell>Program</TableCell>
-                            <TableCell>Classroom</TableCell>
+                            <TableCell>Venue</TableCell>
                             <TableCell>Academic Year</TableCell>
                         </TableRow>
                     </TableHead>

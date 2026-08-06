@@ -8,6 +8,7 @@ use App\Models\SystemSetting;
 use App\Services\ActivityLogService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -35,6 +36,7 @@ class SystemSettingsController extends Controller
 
         return Inertia::render('admin/settings/index', [
             'settings' => $grouped,
+            'appLogoUrl' => SystemSetting::appLogoUrl(),
         ]);
     }
 
@@ -53,7 +55,66 @@ class SystemSettingsController extends Controller
                 unset($keyValues[$key]);
             }
         }
+
+        // Keep existing logo path unless a new file is uploaded.
+        if (array_key_exists('app_logo', $keyValues) && !$request->hasFile('app_logo_file')) {
+            unset($keyValues['app_logo']);
+        }
+
+        if ($request->hasFile('app_logo_file') && $request->validated('group') === 'general') {
+            $previousLogo = SystemSetting::getValue('app_logo');
+            $path = $request->file('app_logo_file')->store('branding', 'public');
+            $keyValues['app_logo'] = Storage::disk('public')->url($path);
+
+            // Normalize to app-relative path for portability.
+            $keyValues['app_logo'] = '/storage/' . ltrim($path, '/');
+
+            if (is_string($previousLogo) && str_starts_with($previousLogo, '/storage/branding/')) {
+                $oldRelative = str_replace('/storage/', '', $previousLogo);
+                if ($oldRelative !== '' && Storage::disk('public')->exists($oldRelative)) {
+                    Storage::disk('public')->delete($oldRelative);
+                }
+            }
+        }
+
+        $changes = [];
+        foreach ($keyValues as $key => $newValue) {
+            $previous = SystemSetting::getValue($key);
+            $normalizedNew = $this->normalizeForCompare($newValue, $previous);
+
+            if ($this->valuesDiffer($previous, $normalizedNew)) {
+                $changes[$key] = [
+                    'previous_value' => $previous,
+                    'new_value' => $normalizedNew,
+                ];
+            }
+        }
+
         SystemSetting::setMany($keyValues);
+
+        $actor = $request->user();
+        $changedAt = now()->toIso8601String();
+
+        foreach ($changes as $key => $change) {
+            $this->activityLogService->logSystemSettings(
+                eventType: 'setting_changed',
+                description: "System setting '{$key}' changed from "
+                    . $this->formatAuditValue($change['previous_value'])
+                    . ' to '
+                    . $this->formatAuditValue($change['new_value'])
+                    . '.',
+                metadata: [
+                    'setting_key' => $key,
+                    'previous_value' => $change['previous_value'],
+                    'new_value' => $change['new_value'],
+                    'changed_by' => $actor?->id,
+                    'changed_by_name' => $actor?->name,
+                    'changed_by_email' => $actor?->email,
+                    'changed_at' => $changedAt,
+                    'group' => $request->validated('group'),
+                ],
+            );
+        }
 
         $this->activityLogService->logSystemSettings(
             eventType: 'settings_updated',
@@ -61,6 +122,10 @@ class SystemSettingsController extends Controller
             metadata: [
                 'group' => $request->validated('group'),
                 'keys' => array_keys($keyValues),
+                'changed_keys' => array_keys($changes),
+                'changed_by' => $actor?->id,
+                'changed_by_name' => $actor?->name,
+                'changed_at' => $changedAt,
             ],
         );
 
@@ -81,5 +146,44 @@ class SystemSettingsController extends Controller
             }
         }
         return $grouped;
+    }
+
+    private function normalizeForCompare(mixed $newValue, mixed $previous): mixed
+    {
+        if (is_bool($previous) || is_bool($newValue)) {
+            return filter_var($newValue, FILTER_VALIDATE_BOOLEAN);
+        }
+
+        if (is_int($previous) || (is_numeric($newValue) && is_int($previous))) {
+            return (int) $newValue;
+        }
+
+        if (is_float($previous) || (is_numeric($newValue) && is_float($previous))) {
+            return (float) $newValue;
+        }
+
+        return $newValue;
+    }
+
+    private function valuesDiffer(mixed $previous, mixed $newValue): bool
+    {
+        if (is_bool($previous) || is_bool($newValue)) {
+            return (bool) $previous !== (bool) $newValue;
+        }
+
+        return $previous != $newValue;
+    }
+
+    private function formatAuditValue(mixed $value): string
+    {
+        if (is_bool($value)) {
+            return $value ? 'On' : 'Off';
+        }
+
+        if ($value === null || $value === '') {
+            return '(empty)';
+        }
+
+        return (string) $value;
     }
 }

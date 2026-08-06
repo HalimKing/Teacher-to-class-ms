@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Head, useForm } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
+import ClassRoomLocationPicker from '@/components/class-room/ClassRoomLocationPicker';
 import { AlertCircle } from 'lucide-react';
 import TextField from '@mui/material/TextField';
 import { Switch, FormControlLabel } from '@mui/material';
@@ -51,6 +52,14 @@ const EditClassRoomPage = ({ classRoom }: { classRoom: ClassRoom }) => {
     setData('is_active', e.target.checked);
   };
 
+  const handleLocationChange = (latitude: number, longitude: number) => {
+    setData((current) => ({
+      ...current,
+      latitude,
+      longitude,
+    }));
+  };
+
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     put(route('admin.school-management.class-rooms.update', classRoom.id));
@@ -58,11 +67,11 @@ const EditClassRoomPage = ({ classRoom }: { classRoom: ClassRoom }) => {
 
   const breadcrumbs = [
     {
-      title: 'Dashboard',
-      href: '/admin/dashboard',
+      title: 'Settings',
+      href: '/admin/settings-reports/settings',
     },
     {
-      title: 'Class Rooms',
+      title: 'Venues',
       href: '/admin/school-management/class-rooms',
     },
     {
@@ -79,7 +88,7 @@ const EditClassRoomPage = ({ classRoom }: { classRoom: ClassRoom }) => {
         <div className="max-w-5xl mx-auto">
           <div className="bg-white rounded-2xl shadow-lg border border-slate-200">
             <div className="p-6 border-b border-slate-200">
-              <h1 className="text-2xl font-bold text-slate-900">Edit Class Room</h1>
+              <h1 className="text-2xl font-bold text-slate-900">Edit Venue</h1>
               <p className="mt-1 text-sm text-slate-500">Update the details for {classRoom.name}.</p>
             </div>
 
@@ -92,7 +101,7 @@ const EditClassRoomPage = ({ classRoom }: { classRoom: ClassRoom }) => {
                     <div>
                       <TextField
                         fullWidth
-                        label="Class Room Name"
+                        label="Venue Name"
                         type="text"
                         name="name"
                         value={data.name}
@@ -174,15 +183,19 @@ const EditClassRoomPage = ({ classRoom }: { classRoom: ClassRoom }) => {
                       />
                     </div>
                   </div>
+
+                  <div className="mt-6">
+                    <ClassRoomLocationPicker
+                      latitude={data.latitude}
+                      longitude={data.longitude}
+                      radiusMeters={data.radius_meters}
+                      onChange={handleLocationChange}
+                    />
+                  </div>
+
                   <p className="mt-2 text-sm text-slate-500">
                     Optional: Set geographical boundaries for attendance tracking
                   </p>
-                  {data.latitude && data.longitude && (
-                    <p className="mt-2 text-sm text-indigo-600">
-                      Current location: {data.latitude}, {data.longitude}
-                      {data.radius_meters && ` (${data.radius_meters}m radius)`}
-                    </p>
-                  )}
                 </div>
 
                 {/* Status Section */}
@@ -202,8 +215,8 @@ const EditClassRoomPage = ({ classRoom }: { classRoom: ClassRoom }) => {
                     />
                     <span className="ml-4 text-sm text-slate-500">
                       {data.is_active 
-                        ? "This class room is active and available for use."
-                        : "This class room is inactive and won't be available for scheduling."
+                        ? "This venue is active and available for use."
+                        : "This venue is inactive and won't be available for scheduling."
                       }
                     </span>
                   </div>
@@ -224,7 +237,7 @@ const EditClassRoomPage = ({ classRoom }: { classRoom: ClassRoom }) => {
                   disabled={processing}
                   className="bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white py-4 px-16 md:h-12"
                 >
-                  {processing ? 'Updating...' : 'Update Class Room'}
+                  {processing ? 'Updating...' : 'Update Venue'}
                 </Button>
               </div>
             </form>

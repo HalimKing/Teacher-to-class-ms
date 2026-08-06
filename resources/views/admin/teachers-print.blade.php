@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Teachers Export</title>
+    <title>Staff Export</title>
     <style>
         body { font-family: Arial, sans-serif; font-size: 12px; color: #111; }
         h1 { font-size: 18px; margin-bottom: 4px; }
@@ -13,7 +13,7 @@
     </style>
 </head>
 <body>
-    <h1>Teacher Management Export</h1>
+    <h1>Staff Management Export</h1>
     <p>Generated at {{ $generatedAt }}</p>
     <table>
         <thead>

@@ -54,7 +54,7 @@ class RescheduleStatusNotification extends Notification
         ));
 
         if ($this->session->classroom?->name) {
-            $message->line('Classroom: ' . $this->session->classroom->name);
+            $message->line('Venue: ' . $this->session->classroom->name);
         }
 
         if ($this->session->admin_remarks) {

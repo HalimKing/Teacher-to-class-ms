@@ -15,7 +15,7 @@ export default function AdminSchedulesShow() {
     }, [flash?.error, flash?.success]);
 
     return (
-        <AppLayout breadcrumbs={[{ title: 'Academics', href: '/admin/school-management' }, { title: 'Schedules', href: '/admin/school-management/schedules' }, { title: 'Review', href: '#' }]}>
+        <AppLayout breadcrumbs={[{ title: 'Academics', href: '/admin/academics/time-tables' }, { title: 'Schedules', href: '/admin/school-management/schedules' }, { title: 'Review', href: '#' }]}>
             <Head title="Schedule Review" />
 
             <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto rounded-xl p-4 md:p-6">
@@ -43,7 +43,7 @@ export default function AdminSchedulesShow() {
                             <h3 className="mt-4 font-semibold">Requested</h3>
                             <div>{schedule.new_date} • {schedule.new_start_time} - {schedule.new_end_time}</div>
 
-                            <h3 className="mt-4 font-semibold">Class Room</h3>
+                            <h3 className="mt-4 font-semibold">Venue</h3>
                             <div>{schedule.classroom ? schedule.classroom.name : '—'}</div>
                         </div>
 

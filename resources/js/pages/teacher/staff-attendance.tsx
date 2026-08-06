@@ -1,12 +1,14 @@
 import AppLayout from '@/layouts/app-layout';
 import FaceCaptureModal from '@/components/face/FaceCaptureModal';
 import { buildFaceVerificationPayload } from '@/lib/teacher-api';
+import { apiJsonRequest } from '@/lib/http';
 import { type FaceCaptureResult } from '@/lib/face-recognition';
 import { getBooleanSetting } from '@/lib/system-settings';
 import { type BreadcrumbItem } from '@/types';
-import { Head, usePage } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import { Circle, GoogleMap, LoadScript, Marker } from '@react-google-maps/api';
 import {
+    AlertTriangle,
     CalendarCheck,
     CheckCircle,
     Clock,
@@ -38,9 +40,21 @@ interface ScheduleTiming {
     checkout_opens_message?: string | null;
 }
 
+interface VenueAuthorization {
+    id: number;
+    authorization_type: string;
+    authorized_venue?: string | null;
+    original_venue?: string | null;
+    reason?: string | null;
+    start_date?: string | null;
+    end_date?: string | null;
+    period_label?: string | null;
+}
+
 interface StaffSchedule {
     id: number;
     classroom: string | null;
+    original_classroom?: string | null;
     day: string;
     start_time: string;
     end_time: string;
@@ -49,6 +63,7 @@ interface StaffSchedule {
         lng: number | null;
     };
     radius: number;
+    venue_authorization?: VenueAuthorization | null;
     attendance_taken: boolean;
     attendance_status?: {
         id: number;
@@ -60,8 +75,10 @@ interface StaffSchedule {
         minutes_early?: number | null;
         minutes_late?: number | null;
         location_match: boolean;
+        exception_category?: string | null;
     } | null;
     is_completed: boolean;
+    needs_explanation?: boolean;
     timing?: ScheduleTiming;
 }
 
@@ -93,25 +110,8 @@ const createUserLocationIcon = () => ({
     strokeWeight: 2,
 });
 
-const csrfToken = () => (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '';
-
 async function requestJson<T>(url: string, options: RequestInit = {}): Promise<T> {
-    const response = await fetch(url, {
-        ...options,
-        headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': csrfToken(),
-            ...(options.headers || {}),
-        },
-    });
-
-    const payload = await response.json();
-    if (!response.ok) {
-        throw new Error(payload.message || 'Something went wrong. Please try again.');
-    }
-
-    return payload;
+    return apiJsonRequest<T>(url, options);
 }
 
 function formatTime(time: string) {
@@ -134,6 +134,7 @@ export default function StaffAttendancePage({
             attendance?: {
                 gps_enforcement_enabled?: { value?: boolean };
                 facial_recognition_enabled?: { value?: boolean };
+                administrator_venue_change_requests_enabled?: { value?: boolean };
             };
             map?: {
                 default_campus_lat?: { value?: number };
@@ -155,6 +156,11 @@ export default function StaffAttendancePage({
     const [pendingAttendanceAction, setPendingAttendanceAction] = useState<'check-in' | 'check-out' | null>(null);
 
     const gpsEnforcementEnabled = getBooleanSetting(systemSettings?.attendance, 'gps_enforcement_enabled', true);
+    const venueChangeRequestsEnabled = getBooleanSetting(
+        systemSettings?.attendance,
+        'administrator_venue_change_requests_enabled',
+        true,
+    );
     const facialRecognitionEnabled =
         typeof facialRecognitionEnabledProp === 'boolean'
             ? facialRecognitionEnabledProp
@@ -596,6 +602,74 @@ export default function StaffAttendancePage({
                     )}
                 </section>
 
+                {selectedSchedule?.venue_authorization && (
+                    <section className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-4 text-sm text-sky-900 dark:border-sky-900/40 dark:bg-sky-950/20 dark:text-sky-100">
+                        <div className="flex items-start gap-3">
+                            <ShieldCheck className="mt-0.5 size-5 shrink-0 text-sky-600" />
+                            <div>
+                                <p className="font-semibold">Authorized venue change</p>
+                                <p className="mt-1">
+                                    You may mark attendance at{' '}
+                                    <span className="font-medium">
+                                        {selectedSchedule.venue_authorization.authorized_venue || selectedSchedule.classroom}
+                                    </span>
+                                    {selectedSchedule.original_classroom
+                                        ? ` instead of ${selectedSchedule.original_classroom}`
+                                        : ''}
+                                    {selectedSchedule.venue_authorization.period_label
+                                        ? ` from ${selectedSchedule.venue_authorization.period_label}`
+                                        : ''}
+                                    .
+                                </p>
+                                {selectedSchedule.venue_authorization.reason && (
+                                    <p className="mt-1 text-sky-800/80 dark:text-sky-200/80">
+                                        Reason: {selectedSchedule.venue_authorization.reason}
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                    </section>
+                )}
+
+                {selectedSchedule?.needs_explanation && (
+                    <section className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex items-start gap-3">
+                                <AlertTriangle className="mt-0.5 size-5 shrink-0 text-amber-600" />
+                                <div>
+                                    <p className="font-semibold">Explanation required</p>
+                                    <p className="mt-1">
+                                        This shift was marked absent or as an early departure. Submit a reason before the
+                                        attendance period closes.
+                                    </p>
+                                </div>
+                            </div>
+                            <Link
+                                href="/teacher/attendance-explanations"
+                                className="inline-flex shrink-0 items-center justify-center rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700"
+                            >
+                                Submit explanation
+                            </Link>
+                        </div>
+                    </section>
+                )}
+
+                {venueChangeRequestsEnabled && (
+                    <section className="rounded-2xl border border-sidebar-border/70 bg-white px-4 py-3 text-sm shadow-sm dark:border-sidebar-border dark:bg-sidebar-accent">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <p className="text-sidebar-foreground/70">
+                                Need to attend at a different venue? Submit a venue change request for approval.
+                            </p>
+                            <Link
+                                href="/teacher/venue-change-requests"
+                                className="inline-flex shrink-0 items-center justify-center rounded-lg border border-sidebar-border px-3 py-1.5 text-sm font-medium hover:bg-slate-50 dark:hover:bg-sidebar"
+                            >
+                                Venue change requests
+                            </Link>
+                        </div>
+                    </section>
+                )}
+
                 {selectedSchedule && (
                     <section className="rounded-2xl border border-sidebar-border/70 bg-white p-5 shadow-sm dark:border-sidebar-border dark:bg-sidebar-accent">
                         <h2 className="mb-4 text-lg font-semibold text-sidebar-foreground">Shift details</h2>
@@ -610,6 +684,13 @@ export default function StaffAttendancePage({
                                 label="Work location"
                                 value={selectedSchedule.classroom || 'Not assigned'}
                             />
+                            {selectedSchedule.venue_authorization && selectedSchedule.original_classroom && (
+                                <DetailItem
+                                    icon={MapPin}
+                                    label="Originally assigned"
+                                    value={selectedSchedule.original_classroom}
+                                />
+                            )}
                             {gpsEnforcementEnabled && canVerifyLocation && (
                                 <DetailItem
                                     icon={MapPin}
@@ -754,6 +835,12 @@ function ShiftCard({
                     <p className="mt-1 text-sm text-sidebar-foreground/70">
                         {formatTime(schedule.start_time)} – {formatTime(schedule.end_time)}
                     </p>
+                    {schedule.venue_authorization && (
+                        <p className="mt-1 text-xs font-medium text-sky-700">Authorized venue change</p>
+                    )}
+                    {schedule.needs_explanation && (
+                        <p className="mt-1 text-xs font-medium text-amber-700">Explanation needed</p>
+                    )}
                 </div>
                 {isCheckedIn ? (
                     <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">Checked in</span>

@@ -30,12 +30,13 @@ export default function TeacherPageHeader({
                 <div className="space-y-3">
                     <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
                         <Users className="size-3.5" />
-                        Administration
+                        Staff Directory
                     </div>
                     <div>
-                        <h1 className="text-3xl font-semibold tracking-tight text-sidebar-foreground">Teacher Management</h1>
+                        <h1 className="text-3xl font-semibold tracking-tight text-sidebar-foreground">Staff Management</h1>
                         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-sidebar-foreground/70">
-                            Manage teachers, attendance access, facial enrollment status, assigned timetables, and account information.
+                            Manage administrators and lecturers, including attendance access, facial enrollment, assigned
+                            timetables, and account information.
                         </p>
                     </div>
                 </div>
@@ -53,7 +54,7 @@ export default function TeacherPageHeader({
                         <DropdownMenuTrigger asChild>
                             <Button type="button" variant="outline" size="sm">
                                 <Download className="size-4" />
-                                Export Teachers
+                                Export Staff
                                 <ChevronDown className="size-4 opacity-60" />
                             </Button>
                         </DropdownMenuTrigger>
@@ -81,7 +82,7 @@ export default function TeacherPageHeader({
                         <Button asChild size="sm">
                             <Link href={route('admin.teachers.create')}>
                                 <Plus className="size-4" />
-                                Add Teacher
+                                Add Staff Member
                             </Link>
                         </Button>
                     )}

@@ -207,7 +207,7 @@ export default function Dashboard({
             labels: facultyDistribution.labels,
             datasets: [
                 {
-                    label: 'Teachers',
+                    label: 'Staff',
                     data: facultyDistribution.data,
                     backgroundColor: [
                         'rgba(59, 130, 246, 0.85)',

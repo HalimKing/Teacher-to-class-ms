@@ -21,6 +21,10 @@ interface AttendanceRecord {
     check_out_time: string | null;
     working_hours: string | null;
     attendance_status: string;
+    exception_category?: string | null;
+    exception_category_label?: string;
+    authorized_venue_used?: boolean;
+    authorized_venue?: string | null;
     arrival_category?: string | null;
     arrival_category_label?: string;
     minutes_early?: number | null;
@@ -72,6 +76,9 @@ const statusColors: Record<string, string> = {
     completed: 'bg-green-100 text-green-700',
     late: 'bg-amber-100 text-amber-700',
     early_leave: 'bg-orange-100 text-orange-700',
+    absent: 'bg-red-100 text-red-700',
+    excused_absence: 'bg-teal-100 text-teal-700',
+    incomplete: 'bg-purple-100 text-purple-700',
 };
 
 export default function StaffAttendanceReportShow({ staff, initialFilters }: PageProps) {
@@ -236,6 +243,7 @@ export default function StaffAttendanceReportShow({ staff, initialFilters }: Pag
                                     <th className="px-4 py-3">Check-out</th>
                                     <th className="px-4 py-3">Hours</th>
                                     <th className="px-4 py-3">Status</th>
+                                    <th className="px-4 py-3">Exception</th>
                                     <th className="px-4 py-3">Arrival</th>
                                     <th className="px-4 py-3">Min Early</th>
                                     <th className="px-4 py-3">Min Late</th>
@@ -256,6 +264,12 @@ export default function StaffAttendanceReportShow({ staff, initialFilters }: Pag
                                             <span className={`rounded-full px-2 py-1 text-xs capitalize ${statusColors[record.attendance_status] ?? 'bg-gray-100 text-gray-700'}`}>
                                                 {record.attendance_status.replace('_', ' ')}
                                             </span>
+                                        </td>
+                                        <td className="px-4 py-3 text-xs">
+                                            {record.exception_category_label || 'Normal attendance'}
+                                            {record.authorized_venue_used && record.authorized_venue
+                                                ? ` · ${record.authorized_venue}`
+                                                : ''}
                                         </td>
                                         <td className="px-4 py-3">{record.arrival_category_label ?? '—'}</td>
                                         <td className="px-4 py-3">{record.minutes_early ?? '—'}</td>

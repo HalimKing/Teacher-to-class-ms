@@ -88,7 +88,7 @@ const ShowRolePage = ({ role }: ShowRolePageProps) => {
       'admin.dashboard': 'Dashboard',
       'admin.attendance': 'Teacher Attendance',
       'admin.staff-attendance': 'Staff Attendance',
-      'admin.teachers': 'Teachers',
+      'admin.teachers': 'Staff',
       'admin.user-management': 'User Management',
       'admin.academics': 'Academics',
       'admin.school-management': 'School Management',
@@ -131,6 +131,7 @@ const ShowRolePage = ({ role }: ShowRolePageProps) => {
   // Format permission name
   const formatPermissionName = (permissionName: string) => {
     return permissionName
+      .replace(/class-rooms/g, 'venues')
       .split('.')
       .slice(1)
       .map(word => word.charAt(0).toUpperCase() + word.slice(1))

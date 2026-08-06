@@ -85,11 +85,11 @@ const ShowTeacherPage = ({ facultyOptions, teacher }: ShowTeacherPageProps) => {
       href: '/admin/dashboard',
     },
     {
-      title: 'Teachers',
+      title: 'Staff Management',
       href: '/admin/teachers',
     },
     {
-      title: 'Teacher Details',
+      title: 'Staff Details',
       href: `/admin/teachers/${teacher.id}`,
     }
   ];
@@ -125,7 +125,7 @@ const ShowTeacherPage = ({ facultyOptions, teacher }: ShowTeacherPageProps) => {
                   className="flex items-center text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 mb-4 transition-colors"
                 >
                   <ChevronDown className="w-5 h-5 mr-1 rotate-90" />
-                  Back to Teachers
+                  Back to Staff
                 </button>
                 <div className="flex items-center justify-between">
                   <div>
@@ -133,7 +133,7 @@ const ShowTeacherPage = ({ facultyOptions, teacher }: ShowTeacherPageProps) => {
                       {teacher.title} {teacher.first_name} {teacher.last_name}
                     </h2>
                     <p className="text-slate-600 dark:text-slate-400">
-                      Teacher Profile Details
+                      Staff Profile Details
                     </p>
                   </div>
                   <div className="bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 px-3 py-1 rounded-full text-sm font-medium">
@@ -211,7 +211,7 @@ const ShowTeacherPage = ({ facultyOptions, teacher }: ShowTeacherPageProps) => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {renderInfoField(
                       <IdCard className="w-5 h-5" />,
-                      'Teacher ID',
+                      'Staff ID',
                       `#${teacher.id}`
                     )}
                     {renderInfoField(
@@ -236,7 +236,7 @@ const ShowTeacherPage = ({ facultyOptions, teacher }: ShowTeacherPageProps) => {
                     onClick={() => window.location.href = `/admin/teachers/${teacher.id}/edit`}
                     className="px-6 py-3 bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white rounded-lg transition-colors font-medium"
                   >
-                    Edit Teacher Profile
+                    Edit Staff Profile
                   </button>
                 </div>
               </div>

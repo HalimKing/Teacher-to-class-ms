@@ -11,13 +11,15 @@ class SystemSettingsUpdateRequest extends FormRequest
      * Allowed keys per group for validation.
      */
     private const GROUP_RULES = [
-        'general' => [
-            'institution_name' => 'nullable|string|max:255',
-            'timezone'        => 'nullable|string|timezone|max:64',
-            'date_format'     => 'nullable|string|max:32',
-            'time_format'     => 'nullable|string|max:32',
-            'log_retention_days' => 'nullable|integer|min:7|max:3650',
-        ],
+            'general' => [
+                'app_name' => 'nullable|string|max:255',
+                'app_logo' => 'nullable|string|max:512',
+                'institution_name' => 'nullable|string|max:255',
+                'timezone'        => 'nullable|string|timezone|max:64',
+                'date_format'     => 'nullable|string|max:32',
+                'time_format'     => 'nullable|string|max:32',
+                'log_retention_days' => 'nullable|integer|min:7|max:3650',
+            ],
         'attendance' => [
             'gps_radius_meters'           => 'nullable|integer|min:1|max:5000',
             'gps_enforcement_enabled'     => 'nullable|boolean',
@@ -32,6 +34,7 @@ class SystemSettingsUpdateRequest extends FormRequest
             'face_match_threshold'         => 'nullable|numeric|min:0.1|max:2',
             'face_verification_timeout'    => 'nullable|integer|min:30|max:600',
             'face_enrollment_required'     => 'nullable|boolean',
+            'administrator_venue_change_requests_enabled' => 'nullable|boolean',
         ],
         'map' => [
             'google_maps_api_key'          => 'nullable|string|max:512',
@@ -44,6 +47,13 @@ class SystemSettingsUpdateRequest extends FormRequest
             'attendance_logs_enabled' => 'nullable|boolean',
             'log_gps_attempts'        => 'nullable|boolean',
             'log_failed_attempts'    => 'nullable|boolean',
+            'notify_venue_change_authorized' => 'nullable|boolean',
+            'notify_admin_venue_change_request_submitted' => 'nullable|boolean',
+            'notify_venue_change_request_approved' => 'nullable|boolean',
+            'notify_venue_change_request_rejected' => 'nullable|boolean',
+            'notify_admin_explanation_submitted' => 'nullable|boolean',
+            'notify_explanation_approved' => 'nullable|boolean',
+            'notify_explanation_rejected' => 'nullable|boolean',
         ],
         'security' => [
             'forgot_password_enabled' => 'nullable|boolean',
@@ -66,6 +76,7 @@ class SystemSettingsUpdateRequest extends FormRequest
         }
         return array_merge([
             'group' => ['required', 'string', Rule::in(array_keys(self::GROUP_RULES))],
+            'app_logo_file' => ['nullable', 'image', 'mimes:png,jpg,jpeg,webp,svg', 'max:4096'],
         ], $out);
     }
 

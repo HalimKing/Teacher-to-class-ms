@@ -10,6 +10,8 @@ class StaffAttendance extends Model
         'staff_id',
         'timetable_id',
         'classroom_id',
+        'venue_change_authorization_id',
+        'authorized_venue_used',
         'academic_year_id',
         'date',
         'check_in_time',
@@ -35,12 +37,14 @@ class StaffAttendance extends Model
         'auto_generated',
         'auto_generated_at',
         'auto_absence_reason',
+        'exception_category',
     ];
 
     protected $casts = [
         'date' => 'date',
         'check_in_within_range' => 'boolean',
         'check_out_within_range' => 'boolean',
+        'authorized_venue_used' => 'boolean',
         'face_verified' => 'boolean',
         'face_match_score' => 'float',
         'face_verified_at' => 'datetime',
@@ -61,6 +65,11 @@ class StaffAttendance extends Model
     public function classroom()
     {
         return $this->belongsTo(ClassRoom::class, 'classroom_id');
+    }
+
+    public function venueChangeAuthorization()
+    {
+        return $this->belongsTo(VenueChangeAuthorization::class);
     }
 
     public function academicYear()

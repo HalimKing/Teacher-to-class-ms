@@ -127,8 +127,8 @@ const CreateTeacherPage = ({facultyOptions}: {facultyOptions: FacultyOption[]}) 
 
   const breadcrumbs = [
     {
-      title: 'Admin',
-      href: '/admin/dashboard',
+      title: 'Settings',
+      href: '/admin/settings-reports/settings',
     },
     {
       title: 'Programs',

@@ -7,6 +7,7 @@ use App\Models\Faculty;
 use App\Models\StaffAttendance;
 use App\Models\Teacher;
 use App\Models\TimeTable;
+use App\Support\AttendanceExceptionCategory;
 use App\Support\AttendanceRecordSource;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -26,8 +27,10 @@ class AdminStaffAttendanceReportService
             ->with([
                 'staff.department',
                 'staff.faculty',
-                'timetable',
+                'timetable.classRoom',
                 'classroom',
+                'venueChangeAuthorization.authorizedClassroom',
+                'venueChangeAuthorization.originalClassroom',
                 'academicYear',
             ]);
     }
@@ -64,6 +67,17 @@ class AdminStaffAttendanceReportService
 
         if ($request->filled('attendance_status') && $request->attendance_status !== 'all') {
             $query->where('attendance_status', $request->attendance_status);
+        }
+
+        if ($request->filled('exception_category') && $request->exception_category !== 'all') {
+            if ($request->exception_category === AttendanceExceptionCategory::NORMAL) {
+                $query->where(function (Builder $exceptionQuery) {
+                    $exceptionQuery->whereNull('exception_category')
+                        ->orWhere('exception_category', AttendanceExceptionCategory::NORMAL);
+                });
+            } else {
+                $query->where('exception_category', $request->exception_category);
+            }
         }
 
         if ($request->filled('attendance_source') && $request->attendance_source !== 'all') {
@@ -402,7 +416,11 @@ class AdminStaffAttendanceReportService
                 ->all(),
             'faculties' => Faculty::orderBy('name')->get(['id', 'name'])->values()->all(),
             'departments' => Department::orderBy('name')->get(['id', 'name', 'faculty_id'])->values()->all(),
-            'attendanceStatuses' => ['pending', 'checked_in', 'completed', 'late', 'early_leave', 'overtime', 'incomplete', 'absent'],
+            'attendanceStatuses' => ['pending', 'checked_in', 'completed', 'late', 'early_leave', 'overtime', 'incomplete', 'absent', 'excused_absence'],
+            'exceptionCategories' => collect(AttendanceExceptionCategory::labels())
+                ->map(fn (string $label, string $value) => ['value' => $value, 'label' => $label])
+                ->values()
+                ->all(),
             'attendanceSources' => [
                 ['value' => AttendanceRecordSource::MANUAL, 'label' => 'Manual Attendance'],
                 ['value' => AttendanceRecordSource::SYSTEM, 'label' => 'System Generated'],
@@ -427,6 +445,11 @@ class AdminStaffAttendanceReportService
                 'Check-out Time' => $record['check_out_time'],
                 'Working Hours' => $record['working_hours'],
                 'Attendance Status' => $record['attendance_status'],
+                'Exception Category' => $record['exception_category_label'],
+                'Authorized Venue Used' => $record['authorized_venue_used'] ? 'Yes' : 'No',
+                'Original Venue' => $record['original_venue'] ?? '—',
+                'Authorized Venue' => $record['authorized_venue'] ?? '—',
+                'Authorization Period' => $record['authorization_period'] ?? '—',
                 'Arrival Category' => $record['arrival_category_label'],
                 'Minutes Early' => $record['minutes_early'] ?? '—',
                 'Minutes Late' => $record['minutes_late'] ?? '—',
@@ -476,6 +499,13 @@ class AdminStaffAttendanceReportService
             'check_out_time' => $this->formatTime($record->check_out_time),
             'working_hours' => $this->calculateWorkingHours($record->check_in_time, $record->check_out_time),
             'attendance_status' => $record->attendance_status,
+            'exception_category' => $record->exception_category ?: AttendanceExceptionCategory::NORMAL,
+            'exception_category_label' => AttendanceExceptionCategory::label($record->exception_category),
+            'authorized_venue_used' => (bool) $record->authorized_venue_used,
+            'original_venue' => $record->venueChangeAuthorization?->originalClassroom?->name
+                ?? $record->timetable?->classRoom?->name,
+            'authorized_venue' => $record->venueChangeAuthorization?->authorizedClassroom?->name,
+            'authorization_period' => $record->venueChangeAuthorization?->period_label,
             'arrival_category' => $arrival['arrival_category'],
             'arrival_category_label' => $arrival['arrival_category_label'],
             'minutes_early' => $arrival['minutes_early'],

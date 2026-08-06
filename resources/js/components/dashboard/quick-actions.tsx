@@ -29,8 +29,8 @@ const actions: QuickAction[] = [
         accent: 'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400',
     },
     {
-        title: 'Manage Teachers',
-        description: 'Add, edit, and manage lecturer profiles.',
+        title: 'Manage Staff',
+        description: 'Add, edit, and manage administrators and lecturers.',
         href: '/admin/teachers',
         icon: Users,
         permission: 'admin.teachers.view',

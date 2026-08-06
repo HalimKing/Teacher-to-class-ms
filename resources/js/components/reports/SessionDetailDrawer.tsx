@@ -131,7 +131,7 @@ export function SessionDetailDrawer({ recordId, onClose }: SessionDetailDrawerPr
                                 <dl className="grid grid-cols-2 gap-3 text-sm">
                                     <div><dt className="text-sidebar-foreground/60">Date</dt><dd className="font-medium">{record.date}</dd></div>
                                     <div><dt className="text-sidebar-foreground/60">Status</dt><dd><StatusBadge status={record.attendance_status ?? 'pending'} /></dd></div>
-                                    <div><dt className="text-sidebar-foreground/60">Class</dt><dd className="font-medium">{record.classroom ?? '—'}</dd></div>
+                                    <div><dt className="text-sidebar-foreground/60">Venue</dt><dd className="font-medium">{record.classroom ?? '—'}</dd></div>
                                     <div><dt className="text-sidebar-foreground/60">Working Hours</dt><dd className="font-medium">{record.working_hours ?? '—'}</dd></div>
                                     <div><dt className="text-sidebar-foreground/60">Check-In</dt><dd className="font-medium">{record.check_in_time ?? '—'}</dd></div>
                                     <div><dt className="text-sidebar-foreground/60">Check-Out</dt><dd className="font-medium">{record.check_out_time ?? '—'}</dd></div>

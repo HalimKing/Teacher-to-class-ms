@@ -134,7 +134,7 @@ class TimeTableController extends Controller
             $out = fopen('php://output', 'w');
             // BOM for Excel
             fwrite($out, "\xEF\xBB\xBF");
-            fputcsv($out, ['Day', 'Start Time', 'End Time', 'Course Code', 'Course Name', 'Program', 'Classroom', 'Academic Year']);
+            fputcsv($out, ['Day', 'Start Time', 'End Time', 'Course Code', 'Course Name', 'Program', 'Venue', 'Academic Year']);
             foreach ($timeTables as $t) {
                 fputcsv($out, [
                     $t->day_of_week ?? $t->day,

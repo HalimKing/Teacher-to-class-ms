@@ -79,6 +79,12 @@ class PermissionSeeder extends Seeder
             // Schedules permissions
             'admin.schedules.view',
             'admin.schedules.manage',
+            'admin.venue-change-authorizations.view',
+            'admin.venue-change-authorizations.manage',
+            'admin.venue-change-requests.view',
+            'admin.venue-change-requests.manage',
+            'admin.attendance-explanations.view',
+            'admin.attendance-explanations.manage',
         ];
         foreach ($permissions as $permission) {
             Permission::firstOrCreate([

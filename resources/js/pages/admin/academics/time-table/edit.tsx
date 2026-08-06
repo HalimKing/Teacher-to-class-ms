@@ -58,7 +58,7 @@ interface EditTimeTablePageProps {
   academicYear: AcademicYear;
   courses: Option[];
   classRooms: Option[];
-  teachers: Array<Option & { staff_type?: string }>;
+  teachers: Array<Option & { staff_type?: string; employee_id?: string }>;
   staffTypeOptions: Option[];
   days: string[];
   currentCourse: Option | null;
@@ -70,6 +70,8 @@ interface Option {
   value: string;
   teacher?: Teacher;
   academic_year_id?: number;
+  employee_id?: string;
+  staff_type?: string;
 }
 
 const daysOptions: Option[] = [
@@ -163,15 +165,15 @@ const EditTimeTablePage = ({
           if (result.has_conflict) {
             if (result.conflict_type === 'teacher') {
               setConflictMessage(
-                `The teacher assigned to this course already has a scheduled class during this time slot on ${data.day}.`
+                `The staff member assigned to this course already has a scheduled class during this time slot on ${data.day}.`
               );
             } else if (result.conflict_type === 'classroom') {
               setConflictMessage(
-                `This time slot conflicts with an existing schedule for ${result.classroom_name || 'the selected classroom'} on ${data.day}.`
+                `This time slot conflicts with an existing schedule for ${result.classroom_name || 'the selected venue'} on ${data.day}.`
               );
             } else if (result.conflict_type === 'both') {
               setConflictMessage(
-                `This time slot conflicts with both the teacher's schedule and the classroom availability on ${data.day}.`
+                `This time slot conflicts with both the staff member's schedule and the venue availability on ${data.day}.`
               );
             } else {
               setConflictMessage('This time slot conflicts with an existing schedule.');
@@ -255,11 +257,16 @@ const EditTimeTablePage = ({
     const selected = teachers.find((teacher) => Number(teacher.value) === Number(data.teacher_id));
     if (!selected) return null;
 
+    const employeeId =
+      selected.employee_id ||
+      (Number(timeTable.teacher?.id) === Number(selected.value) ? timeTable.teacher?.employee_id : '') ||
+      '';
+
     return {
       id: Number(selected.value),
       first_name: selected.label,
       last_name: '',
-      employee_id: '',
+      employee_id: employeeId,
       full_name: selected.label,
       staff_type: selected.staff_type,
     };
@@ -319,7 +326,7 @@ const EditTimeTablePage = ({
                 <div className="flex items-center space-x-3 p-3 bg-slate-50 rounded-xl">
                   <Building className="w-5 h-5 text-amber-600" />
                   <div>
-                    <p className="text-xs text-slate-500">Classroom</p>
+                    <p className="text-xs text-slate-500">Venue</p>
                     <p className="font-semibold text-slate-900">{timeTable.class_room?.name || 'N/A'}</p>
                     {timeTable.class_room && <p className="text-xs text-slate-500">Capacity: {timeTable.class_room.capacity}</p>}
                   </div>
@@ -327,7 +334,7 @@ const EditTimeTablePage = ({
                 <div className="flex items-center space-x-3 p-3 bg-slate-50 rounded-xl">
                   <Users className="w-5 h-5 text-indigo-600" />
                   <div>
-                    <p className="text-xs text-slate-500">Teacher</p>
+                    <p className="text-xs text-slate-500">Staff</p>
                     <p className="font-semibold text-slate-900">
                       {timeTable.teacher 
                         ? `${timeTable.teacher.first_name} ${timeTable.teacher.last_name}`
@@ -417,7 +424,7 @@ const EditTimeTablePage = ({
                   Course *
                   {selectedCourse?.teacher && (
                     <span className="ml-2 text-xs text-green-600 font-normal">
-                      (Teacher: {selectedCourse.teacher.full_name || `${selectedCourse.teacher.first_name} ${selectedCourse.teacher.last_name}`})
+                      (Staff: {selectedCourse.teacher.full_name || `${selectedCourse.teacher.first_name} ${selectedCourse.teacher.last_name}`})
                     </span>
                   )}
                 </label>
@@ -440,13 +447,13 @@ const EditTimeTablePage = ({
                         <Users className="w-4 h-4 text-green-600 mr-2" />
                         <div>
                           <p className="text-sm font-medium text-green-800">
-                            Teacher assigned to this course: {selectedCourse.teacher.full_name || `${selectedCourse.teacher.first_name} ${selectedCourse.teacher.last_name}`}
+                            Staff assigned to this course: {selectedCourse.teacher.full_name || `${selectedCourse.teacher.first_name} ${selectedCourse.teacher.last_name}`}
                           </p>
                           <p className="text-xs text-green-600">
                             Employee ID: {selectedCourse.teacher.employee_id}
                           </p>
                           <p className="text-xs text-green-600 mt-1">
-                            Note: The teacher will be automatically assigned based on the course selection.
+                            Note: The staff member will be automatically assigned based on the course selection.
                           </p>
                         </div>
                       </div>
@@ -458,10 +465,10 @@ const EditTimeTablePage = ({
                         <AlertCircle className="w-4 h-4 text-amber-600 mr-2" />
                         <div>
                           <p className="text-sm font-medium text-amber-800">
-                            No teacher assigned to this course
+                            No staff member assigned to this course
                           </p>
                           <p className="text-xs text-amber-600">
-                            You can assign a teacher to this course from the course management page.
+                            You can assign a staff member to this course from the course management page.
                           </p>
                         </div>
                       </div>
@@ -471,15 +478,15 @@ const EditTimeTablePage = ({
               </div>
               )}
 
-              {/* Class Room */}
+              {/* Venue */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Class Room *
+                  Venue *
                 </label>
                 <div>
                   <ComboBox
                     options={classRooms}
-                    label="Select Class Room"
+                    label="Select Venue"
                     externalValue={handleValueChange('class_room_id')}
                     defaultValue={currentClassRoom}
                   />
@@ -578,26 +585,26 @@ const EditTimeTablePage = ({
                       <p className="text-red-800 font-medium">Time Conflict Detected!</p>
                       <p className="text-red-700 text-sm mt-1">{conflictMessage}</p>
                       <p className="text-red-600 text-xs mt-2">
-                        Please adjust the time, classroom, or day to resolve the conflict.
+                        Please adjust the time, venue, or day to resolve the conflict.
                       </p>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Teacher Assignment Info */}
+              {/* Staff Assignment Info */}
               {selectedTeacher && !hasConflict && (
                 <div className="p-4 bg-green-50 border border-green-200 rounded-xl">
                   <div className="flex items-center">
                     <Users className="w-5 h-5 text-green-600 mr-3 flex-shrink-0" />
                     <div className="flex-1">
-                      <p className="text-green-800 font-medium">Teacher Assignment</p>
+                      <p className="text-green-800 font-medium">Staff Assignment</p>
                       <p className="text-green-700 text-sm mt-1">
                         This time slot will be assigned to: {selectedTeacher.full_name || `${selectedTeacher.first_name} ${selectedTeacher.last_name}`}
                       </p>
                       <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
                         <div className="text-green-600">
-                          <span className="font-medium">Employee ID:</span> {selectedTeacher.employee_id}
+                          <span className="font-medium">Employee ID:</span> {selectedTeacher.employee_id || '—'}
                         </div>
                         <div className="text-green-600">
                           <span className="font-medium">Course:</span> {selectedCourse?.label?.split('(')[0]?.trim()}
@@ -637,7 +644,7 @@ const EditTimeTablePage = ({
                       </div>
                       {!selectedTeacher && (
                         <div className="text-blue-500 text-xs mt-1">
-                          No teacher assigned to this course
+                          No staff member assigned to this course
                         </div>
                       )}
                     </div>

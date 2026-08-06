@@ -8,6 +8,7 @@ use App\Models\Faculty;
 use App\Models\Teacher;
 use App\Models\TeacherAttendance;
 use App\Models\TimeTable;
+use App\Support\AttendanceExceptionCategory;
 use App\Support\AttendanceRecordSource;
 use App\Services\RescheduledAttendanceService;
 use App\Services\Concerns\BuildsAttendanceAnalytics;
@@ -95,6 +96,17 @@ class AdminTeacherAttendanceReportService
 
         if ($request->filled('attendance_status') && $request->attendance_status !== 'all') {
             $query->where(self::STATUS_COLUMN, $request->attendance_status);
+        }
+
+        if ($request->filled('exception_category') && $request->exception_category !== 'all') {
+            if ($request->exception_category === AttendanceExceptionCategory::NORMAL) {
+                $query->where(function (Builder $exceptionQuery) {
+                    $exceptionQuery->whereNull('exception_category')
+                        ->orWhere('exception_category', AttendanceExceptionCategory::NORMAL);
+                });
+            } else {
+                $query->where('exception_category', $request->exception_category);
+            }
         }
 
         if ($request->filled('attendance_source') && $request->attendance_source !== 'all') {
@@ -392,6 +404,10 @@ class AdminTeacherAttendanceReportService
             'departments' => Department::orderBy('name')->get(['id', 'name', 'faculty_id'])->values()->all(),
             'courses' => Course::orderBy('name')->get(['id', 'name', 'program_id'])->values()->all(),
             'attendanceStatuses' => ['pending', 'present', 'absent', 'completed', 'incomplete', 'late', 'checked_in', 'early_leave', 'overtime'],
+            'exceptionCategories' => collect(AttendanceExceptionCategory::labels())
+                ->map(fn (string $label, string $value) => ['value' => $value, 'label' => $label])
+                ->values()
+                ->all(),
             'attendanceSources' => [
                 ['value' => AttendanceRecordSource::MANUAL, 'label' => 'Manual Attendance'],
                 ['value' => AttendanceRecordSource::SYSTEM, 'label' => 'System Generated'],
@@ -410,12 +426,13 @@ class AdminTeacherAttendanceReportService
                 'Teacher Name' => $record['teacher_name'],
                 'Staff ID' => $record['staff_id'],
                 'Department' => $record['department'],
-                'Course/Class' => $record['course_class'],
+                'Course/Venue' => $record['course_class'],
                 'Date' => $record['date'],
                 'Check-in Time' => $record['check_in_time'],
                 'Check-out Time' => $record['check_out_time'],
                 'Total Working Hours' => $record['working_hours'],
                 'Attendance Status' => $record['attendance_status'],
+                'Exception Category' => $record['exception_category_label'],
                 'Arrival Category' => $record['arrival_category_label'] ?? '—',
                 'Minutes Early' => $record['minutes_early'] ?? '—',
                 'Minutes Late' => $record['minutes_late'] ?? '—',
@@ -481,6 +498,8 @@ class AdminTeacherAttendanceReportService
             'check_out_time' => $this->formatTime($record->check_out_time),
             'working_hours' => $this->calculateWorkingHours($record->check_in_time, $record->check_out_time),
             'attendance_status' => $record->status,
+            'exception_category' => $record->exception_category ?: AttendanceExceptionCategory::NORMAL,
+            'exception_category_label' => AttendanceExceptionCategory::label($record->exception_category),
             'arrival_category' => $arrival['arrival_category'],
             'arrival_category_label' => $arrival['arrival_category_label'],
             'minutes_early' => $arrival['minutes_early'],

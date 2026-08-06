@@ -14,10 +14,13 @@ class SystemSettingsSeeder extends Seeder
     {
         $defaults = [
             // General
-            ['key' => 'institution_name', 'value' => config('app.name', 'Teacher Attendance'), 'group' => 'general', 'type' => 'string', 'description' => 'Institution / School name'],
+            ['key' => 'app_name', 'value' => 'UBIDS ATTENDANCE', 'group' => 'general', 'type' => 'string', 'description' => 'Application display name shown in the header, login screens, and browser title.'],
+            ['key' => 'app_logo', 'value' => '/images/ubids-logo.png', 'group' => 'general', 'type' => 'string', 'description' => 'Application logo image. Upload a new image below to replace the current logo.'],
+            ['key' => 'institution_name', 'value' => 'University of Business and Integrated Development Studies', 'group' => 'general', 'type' => 'string', 'description' => 'Institution / School name (optional organizational label).'],
             ['key' => 'timezone', 'value' => config('app.timezone', 'UTC'), 'group' => 'general', 'type' => 'string', 'description' => 'Default time zone'],
             ['key' => 'date_format', 'value' => 'Y-m-d', 'group' => 'general', 'type' => 'string', 'description' => 'System date format'],
             ['key' => 'time_format', 'value' => 'H:i', 'group' => 'general', 'type' => 'string', 'description' => 'System time format'],
+            ['key' => 'log_retention_days', 'value' => '90', 'group' => 'general', 'type' => 'integer', 'description' => 'Number of days to retain activity logs'],
 
             // Attendance
             ['key' => 'gps_radius_meters', 'value' => '50', 'group' => 'attendance', 'type' => 'integer', 'description' => 'Default allowed GPS radius (meters) for attendance'],
@@ -33,6 +36,7 @@ class SystemSettingsSeeder extends Seeder
             ['key' => 'face_match_threshold', 'value' => '0.45', 'group' => 'attendance', 'type' => 'string', 'description' => 'Maximum descriptor distance accepted for a face match.'],
             ['key' => 'face_verification_timeout', 'value' => '120', 'group' => 'attendance', 'type' => 'integer', 'description' => 'Face verification token lifetime in seconds.'],
             ['key' => 'face_enrollment_required', 'value' => '0', 'group' => 'attendance', 'type' => 'boolean', 'description' => 'Block attendance when a lecturer has no enrolled face descriptor.'],
+            ['key' => 'administrator_venue_change_requests_enabled', 'value' => '1', 'group' => 'attendance', 'type' => 'boolean', 'description' => 'When enabled, administrator staff can submit venue change requests for approval. When disabled, the request option is hidden and new submissions are blocked. Existing approved authorizations still work. Direct admin authorizations are unaffected.'],
 
             // Map & Location
             ['key' => 'google_maps_api_key', 'value' => '', 'group' => 'map', 'type' => 'string', 'description' => 'Google Maps API key (optional)'],
@@ -45,6 +49,13 @@ class SystemSettingsSeeder extends Seeder
             ['key' => 'attendance_logs_enabled', 'value' => '1', 'group' => 'notifications', 'type' => 'boolean', 'description' => 'Enable attendance activity logs'],
             ['key' => 'log_gps_attempts', 'value' => '1', 'group' => 'notifications', 'type' => 'boolean', 'description' => 'Log GPS check-in/check-out attempts'],
             ['key' => 'log_failed_attempts', 'value' => '1', 'group' => 'notifications', 'type' => 'boolean', 'description' => 'Log failed attendance attempts'],
+            ['key' => 'notify_venue_change_authorized', 'value' => '1', 'group' => 'notifications', 'type' => 'boolean', 'description' => 'Notify staff when a venue change authorization is approved'],
+            ['key' => 'notify_admin_venue_change_request_submitted', 'value' => '1', 'group' => 'notifications', 'type' => 'boolean', 'description' => 'Notify admins when an administrator submits a venue change request'],
+            ['key' => 'notify_venue_change_request_approved', 'value' => '1', 'group' => 'notifications', 'type' => 'boolean', 'description' => 'Notify staff when their venue change request is approved'],
+            ['key' => 'notify_venue_change_request_rejected', 'value' => '1', 'group' => 'notifications', 'type' => 'boolean', 'description' => 'Notify staff when their venue change request is rejected'],
+            ['key' => 'notify_admin_explanation_submitted', 'value' => '1', 'group' => 'notifications', 'type' => 'boolean', 'description' => 'Notify admins when an absence or early departure explanation is submitted'],
+            ['key' => 'notify_explanation_approved', 'value' => '1', 'group' => 'notifications', 'type' => 'boolean', 'description' => 'Notify staff when their attendance explanation is approved'],
+            ['key' => 'notify_explanation_rejected', 'value' => '1', 'group' => 'notifications', 'type' => 'boolean', 'description' => 'Notify staff when their attendance explanation is rejected'],
 
             // Security
             ['key' => 'forgot_password_enabled', 'value' => '1', 'group' => 'security', 'type' => 'boolean', 'description' => 'Allow admin users and lecturers to request a password reset link from the login page.'],

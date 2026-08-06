@@ -40,6 +40,7 @@ class TeacherAttendance extends Model
         'auto_generated',
         'auto_generated_at',
         'auto_absence_reason',
+        'exception_category',
     ];
 
     protected function casts(): array

@@ -200,8 +200,8 @@ class TimeTableController extends Controller
                 'Staff Type',
                 'Program',
                 'Program Code',
-                'Classroom',
-                'Classroom Capacity',
+                'Venue',
+                'Venue Capacity',
                 'Teacher',
                 'Teacher ID',
                 'Academic Year',
@@ -221,8 +221,8 @@ class TimeTableController extends Controller
                     'Staff Type' => ucfirst($timetable->staff_type ?? Teacher::STAFF_TYPE_LECTURER),
                     'Program' => $timetable->course->program->name ?? 'N/A',
                     'Program Code' => $timetable->course->program->program_code ?? 'N/A',
-                    'Classroom' => $timetable->classRoom->name ?? 'N/A',
-                    'Classroom Capacity' => $timetable->classRoom->capacity ?? 'N/A',
+                    'Venue' => $timetable->classRoom->name ?? 'N/A',
+                    'Venue Capacity' => $timetable->classRoom->capacity ?? 'N/A',
                     'Teacher' => $timetable->teacher ? 
                         $timetable->teacher->title . ' ' . 
                         $timetable->teacher->first_name . ' ' . 
@@ -356,6 +356,7 @@ class TimeTableController extends Controller
                     'value' => $teacher->id,
                     'label' => trim("{$teacher->title} {$teacher->first_name} {$teacher->last_name}") . ' (' . ucfirst($teacher->staff_type) . ')',
                     'staff_type' => $teacher->staff_type,
+                    'employee_id' => $teacher->employee_id,
                 ];
             }),
             'staffTypeOptions' => [
@@ -421,7 +422,7 @@ class TimeTableController extends Controller
 
                 if ($classroomConflict) {
                     return back()->withErrors([
-                        'start_time' => "Time slot conflicts with existing schedule for this classroom on {$day}."
+                        'start_time' => "Time slot conflicts with existing schedule for this venue on {$day}."
                     ]);
                 }
 
@@ -460,8 +461,8 @@ class TimeTableController extends Controller
 
             return back()
                 ->withInput()
-                ->withErrors(['error' => 'Unable to create the time slot. Please check the selected staff, class room, and time, then try again.'])
-                ->with('error', 'Unable to create the time slot. Please check the selected staff, class room, and time, then try again.');
+                ->withErrors(['error' => 'Unable to create the time slot. Please check the selected staff, venue, and time, then try again.'])
+                ->with('error', 'Unable to create the time slot. Please check the selected staff, venue, and time, then try again.');
         }
 
         $createAnother = $request->boolean('create_another', false);
@@ -546,6 +547,7 @@ class TimeTableController extends Controller
                     'value' => $teacher->id,
                     'label' => trim("{$teacher->title} {$teacher->first_name} {$teacher->last_name}") . ' (' . ucfirst($teacher->staff_type) . ')',
                     'staff_type' => $teacher->staff_type,
+                    'employee_id' => $teacher->employee_id,
                 ];
             }),
             'staffTypeOptions' => [
@@ -606,7 +608,7 @@ class TimeTableController extends Controller
 
             if ($classroomConflict) {
                 return back()->withErrors([
-                    'start_time' => 'Time slot conflicts with existing schedule for this classroom on the selected day.'
+                    'start_time' => 'Time slot conflicts with existing schedule for this venue on the selected day.'
                 ]);
             }
 

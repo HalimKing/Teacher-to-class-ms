@@ -39,6 +39,8 @@ interface TeacherRecord {
     check_out_time: string | null;
     working_hours: string | null;
     attendance_status: string;
+    exception_category?: string | null;
+    exception_category_label?: string;
     geolocation_status: string;
     face_verification_status: string;
     face_match_score: number | null;
@@ -65,6 +67,7 @@ interface FilterOptions {
     departments: Array<{ id: number; name: string; faculty_id: number }>;
     courses: Array<{ id: number; name: string }>;
     attendanceStatuses: string[];
+    exceptionCategories?: Array<{ value: string; label: string }>;
     attendanceSources: Array<{ value: string; label: string }>;
     sessionTypes: Array<{ value: string; label: string }>;
 }
@@ -85,6 +88,7 @@ export default function TeacherAttendanceReportsIndex({ filterOptions, initialFi
         department_id: 'all',
         course_id: 'all',
         attendance_status: 'all',
+        exception_category: 'all',
         attendance_source: 'all',
         session_type: 'all',
         face_verification_status: 'all',
@@ -155,12 +159,18 @@ export default function TeacherAttendanceReportsIndex({ filterOptions, initialFi
         { key: 'teacher_name', label: 'Teacher Name' },
         { key: 'staff_id', label: 'Staff ID', sortable: false },
         { key: 'department', label: 'Department', sortable: false },
-        { key: 'course_class', label: 'Course/Class', sortable: false },
+        { key: 'course_class', label: 'Course/Venue', sortable: false },
         { key: 'date', label: 'Date' },
         { key: 'check_in_time', label: 'Check-in' },
         { key: 'check_out_time', label: 'Check-out' },
         { key: 'working_hours', label: 'Hours', sortable: false },
         { key: 'attendance_status', label: 'Status', render: (r: TeacherRecord) => <StatusBadge status={r.attendance_status} /> },
+        {
+            key: 'exception_category_label',
+            label: 'Exception',
+            sortable: false,
+            render: (r: TeacherRecord) => <span className="text-xs">{r.exception_category_label || 'Normal attendance'}</span>,
+        },
         {
             key: 'reschedule_status',
             label: 'Session',
@@ -242,6 +252,7 @@ export default function TeacherAttendanceReportsIndex({ filterOptions, initialFi
                         <ReportFilterField label="Department"><select value={filters.department_id} onChange={(e) => setFilters((p) => ({ ...p, department_id: e.target.value }))} className={filterInputClass}><option value="all">All Departments</option>{filteredDepartments.map((d) => <option key={d.id} value={String(d.id)}>{d.name}</option>)}</select></ReportFilterField>
                         <ReportFilterField label="Course"><select value={filters.course_id} onChange={(e) => setFilters((p) => ({ ...p, course_id: e.target.value }))} className={filterInputClass}><option value="all">All Courses</option>{filterOptions.courses.map((c) => <option key={c.id} value={String(c.id)}>{c.name}</option>)}</select></ReportFilterField>
                         <ReportFilterField label="Attendance Status"><select value={filters.attendance_status} onChange={(e) => setFilters((p) => ({ ...p, attendance_status: e.target.value }))} className={filterInputClass}><option value="all">All Statuses</option>{filterOptions.attendanceStatuses.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}</select></ReportFilterField>
+                        <ReportFilterField label="Exception Category"><select value={filters.exception_category} onChange={(e) => setFilters((p) => ({ ...p, exception_category: e.target.value }))} className={filterInputClass}><option value="all">All Exceptions</option>{(filterOptions.exceptionCategories || []).map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}</select></ReportFilterField>
                         <ReportFilterField label="Attendance Source"><select value={filters.attendance_source} onChange={(e) => setFilters((p) => ({ ...p, attendance_source: e.target.value }))} className={filterInputClass}><option value="all">All Sources</option>{filterOptions.attendanceSources?.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select></ReportFilterField>
                         <ReportFilterField label="Session Type"><select value={filters.session_type} onChange={(e) => setFilters((p) => ({ ...p, session_type: e.target.value }))} className={filterInputClass}><option value="all">All Sessions</option>{filterOptions.sessionTypes?.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select></ReportFilterField>
                         <ReportFilterField label="Face Verification"><select value={filters.face_verification_status} onChange={(e) => setFilters((p) => ({ ...p, face_verification_status: e.target.value }))} className={filterInputClass}><option value="all">All</option><option value="verified">Verified</option><option value="unverified">Unverified</option></select></ReportFilterField>

@@ -193,11 +193,11 @@ const EditTeacherPage = ({ facultyOptions, teacher }: EditTeacherPageProps) => {
       href: '/admin/dashboard',
     },
     {
-      title: 'Teachers',
+      title: 'Staff Management',
       href: '/admin/teachers',
     },
     {
-      title: 'Edit Teacher',
+      title: 'Edit Staff Member',
       href: `/admin/teachers/${teacher.id}/edit`,
     }
   ];
@@ -217,10 +217,10 @@ const EditTeacherPage = ({ facultyOptions, teacher }: EditTeacherPageProps) => {
                     className="flex items-center text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 mb-4 transition-colors"
                   >
                     <ChevronDown className="w-5 h-5 mr-1 rotate-90" />
-                    Back to Teachers
+                    Back to Staff
                   </button>
-                  <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">Edit Teacher</h2>
-                  <p className="text-slate-600 dark:text-slate-400">Update the information below to modify the teacher profile</p>
+                  <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">Edit Staff Member</h2>
+                  <p className="text-slate-600 dark:text-slate-400">Update the information below to modify the staff member profile</p>
                 </div>
 
                 <form onSubmit={handleSubmit}>
@@ -244,7 +244,7 @@ const EditTeacherPage = ({ facultyOptions, teacher }: EditTeacherPageProps) => {
                           required
                           error={!!errors.email}
                           helperText={errors.email}
-                          placeholder="teacher@school.com"
+                          placeholder="staff@school.com"
                           variant="outlined"
                         />
                       </div>
@@ -359,7 +359,7 @@ const EditTeacherPage = ({ facultyOptions, teacher }: EditTeacherPageProps) => {
                       }`}
                       disabled={processing}
                     >
-                      {processing ? 'Updating...' : 'Update Teacher Profile'}
+                      {processing ? 'Updating...' : 'Update Staff Profile'}
                     </Button>
                   </div>
                 </form>

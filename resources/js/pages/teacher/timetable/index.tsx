@@ -349,7 +349,7 @@ export default function TeacherTimeTableIndex() {
                                     <Search className="pointer-events-none absolute top-2.5 left-3 h-4 w-4 text-sidebar-foreground/40" />
                                     <input
                                         type="text"
-                                        placeholder="Search course, code, classroom, program..."
+                                        placeholder="Search course, code, venue, program..."
                                         value={query}
                                         onChange={(e) => setQuery(e.target.value)}
                                         className={`${filterInputClass} pl-9`}
@@ -471,7 +471,7 @@ export default function TeacherTimeTableIndex() {
                                                 <th className="px-4 py-3">Time</th>
                                                 <th className="px-4 py-3">Course</th>
                                                 <th className="px-4 py-3">Program</th>
-                                                <th className="px-4 py-3">Classroom</th>
+                                                <th className="px-4 py-3">Venue</th>
                                                 <th className="px-4 py-3">Academic Year</th>
                                                 <th className="px-4 py-3 text-right">Action</th>
                                             </tr>
@@ -633,7 +633,7 @@ export function RescheduleDialog({
                     <div className="rounded-lg border border-sidebar-border/40 bg-sidebar-accent/30 p-3 text-sm">
                         <p className="font-medium text-sidebar-foreground">{selected.day}</p>
                         <p className="text-sidebar-foreground/70">
-                            {formatTime12(selected.start_time)} – {formatTime12(selected.end_time)} · {selected.classroom?.name ?? 'Default room'}
+                            {formatTime12(selected.start_time)} – {formatTime12(selected.end_time)} · {selected.classroom?.name ?? 'Default venue'}
                         </p>
                     </div>
 
@@ -670,9 +670,9 @@ export function RescheduleDialog({
                     </div>
 
                     <div>
-                        <label className="mb-1.5 block text-xs font-semibold tracking-wider text-sidebar-foreground/60 uppercase">Classroom</label>
+                        <label className="mb-1.5 block text-xs font-semibold tracking-wider text-sidebar-foreground/60 uppercase">Venue</label>
                         <select required className={filterInputClass} value={form.data.classroom_id || ''} onChange={(e) => form.setData('classroom_id', e.target.value)}>
-                            <option value="">Select classroom</option>
+                            <option value="">Select venue</option>
                             {classrooms.map((c) => (
                                 <option key={c.id} value={c.id}>
                                     {c.name}
@@ -714,7 +714,7 @@ export function RescheduleDialog({
                         type="button"
                         onClick={() => {
                             if (!form.data.classroom_id) {
-                                form.setError('classroom_id', 'Please select a classroom');
+                                form.setError('classroom_id', 'Please select a venue');
                                 return;
                             }
                             if (form.data.new_start_time >= form.data.new_end_time) {

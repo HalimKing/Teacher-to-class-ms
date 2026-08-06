@@ -47,7 +47,17 @@ class HandleInertiaRequests extends Middleware
         return [
             ...parent::share($request),
 
-            'name' => 'Teacher-to-Class MS', // Can be used in frontend for display or title
+            'name' => fn () => rescue(
+                fn () => SystemSetting::appName(),
+                fn () => config('app.name', 'UBIDS ATTENDANCE'),
+                report: false,
+            ),
+
+            'app_logo' => fn () => rescue(
+                fn () => SystemSetting::appLogoUrl(),
+                fn () => '/images/ubids-logo.png',
+                report: false,
+            ),
 
             'quote' => [
                 'message' => trim($message),
@@ -112,6 +122,8 @@ class HandleInertiaRequests extends Middleware
             ),
 
             'attendancePortal' => fn () => app(AttendancePortalService::class)->shareData($request),
+
+            'csrf_token' => fn () => csrf_token(),
         ];
     }
 }

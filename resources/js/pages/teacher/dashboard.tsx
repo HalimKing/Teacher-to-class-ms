@@ -386,7 +386,7 @@ export default function TeacherDashboard({
                                                     Time
                                                 </th>
                                                 <th className="px-3 py-3 text-left text-xs font-semibold tracking-wider text-sidebar-foreground/60 uppercase">
-                                                    Class Room
+                                                    Venue
                                                 </th>
                                                 <th className="px-3 py-3 text-right text-xs font-semibold tracking-wider text-sidebar-foreground/60 uppercase">
                                                     Status

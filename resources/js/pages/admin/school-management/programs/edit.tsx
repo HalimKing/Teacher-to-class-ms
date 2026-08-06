@@ -155,8 +155,8 @@ const CreateTeacherPage = ({ program, facultyOptions }: ProgramsIndexPageProps) 
 
   const breadcrumbs = [
     {
-      title: 'Admin',
-      href: '/admin/dashboard',
+      title: 'Settings',
+      href: '/admin/settings-reports/settings',
     },
     {
       title: 'Programs',

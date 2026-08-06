@@ -49,6 +49,7 @@ interface FilterOptions {
     faculties: Array<{ id: number; name: string }>;
     departments: Array<{ id: number; name: string; faculty_id: number }>;
     attendanceStatuses: string[];
+    exceptionCategories?: Array<{ value: string; label: string }>;
     attendanceSources: Array<{ value: string; label: string }>;
     arrivalCategories: Array<{ value: string; label: string }>;
 }
@@ -73,6 +74,11 @@ interface AttendanceRecord {
     check_out_time: string | null;
     working_hours: string | null;
     attendance_status: string;
+    exception_category?: string | null;
+    exception_category_label?: string;
+    authorized_venue_used?: boolean;
+    original_venue?: string | null;
+    authorized_venue?: string | null;
     arrival_category?: string | null;
     arrival_category_label?: string;
     minutes_early?: number | null;
@@ -146,6 +152,7 @@ const statusColors: Record<string, string> = {
     late: 'bg-amber-100 text-amber-700',
     early_leave: 'bg-orange-100 text-orange-700',
     absent: 'bg-red-100 text-red-700',
+    excused_absence: 'bg-teal-100 text-teal-700',
     incomplete: 'bg-purple-100 text-purple-700',
 };
 
@@ -159,6 +166,7 @@ export default function StaffAttendanceReportsIndex({ filterOptions, initialFilt
         faculty_id: 'all',
         department_id: 'all',
         attendance_status: 'all',
+        exception_category: 'all',
         attendance_source: 'all',
         arrival_category: 'all',
         face_verification_status: 'all',
@@ -445,6 +453,16 @@ export default function StaffAttendanceReportsIndex({ filterOptions, initialFilt
                                 ))}
                             </select>
                         </FilterField>
+                        <FilterField label="Exception Category">
+                            <select value={filters.exception_category} onChange={(e) => setFilters((prev) => ({ ...prev, exception_category: e.target.value }))} className="filter-input">
+                                <option value="all">All Exceptions</option>
+                                {(filterOptions.exceptionCategories || []).map((category) => (
+                                    <option key={category.value} value={category.value}>
+                                        {category.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </FilterField>
                         <FilterField label="Attendance Source">
                             <select value={filters.attendance_source} onChange={(e) => setFilters((prev) => ({ ...prev, attendance_source: e.target.value }))} className="filter-input">
                                 <option value="all">All Sources</option>
@@ -651,6 +669,7 @@ export default function StaffAttendanceReportsIndex({ filterOptions, initialFilt
                                             ['check_out_time', 'Check-out'],
                                             ['working_hours', 'Hours'],
                                             ['attendance_status', 'Status'],
+                                            ['exception_category_label', 'Exception'],
                                             ['arrival_category_label', 'Arrival'],
                                             ['minutes_early', 'Min Early'],
                                             ['minutes_late', 'Min Late'],
@@ -683,6 +702,14 @@ export default function StaffAttendanceReportsIndex({ filterOptions, initialFilt
                                             <td className="px-4 py-3">
                                                 <span className={`rounded-full px-2 py-1 text-xs capitalize ${statusColors[record.attendance_status] ?? 'bg-gray-100 text-gray-700'}`}>
                                                     {record.attendance_status.replace('_', ' ')}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <span className="text-xs">
+                                                    {record.exception_category_label || 'Normal attendance'}
+                                                    {record.authorized_venue_used && record.authorized_venue
+                                                        ? ` · ${record.authorized_venue}`
+                                                        : ''}
                                                 </span>
                                             </td>
                                             <td className="px-4 py-3">{record.arrival_category_label ?? '—'}</td>

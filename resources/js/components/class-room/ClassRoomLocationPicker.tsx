@@ -133,7 +133,7 @@ export default function ClassRoomLocationPicker({
                                     position={selectedPosition}
                                     draggable
                                     onDragEnd={handleMarkerDragEnd}
-                                    title="Class room location"
+                                    title="Venue location"
                                 />
                                 {radiusMeters && radiusMeters > 0 && (
                                     <Circle

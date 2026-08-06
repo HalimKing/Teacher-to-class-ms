@@ -170,7 +170,7 @@ export default function TeacherDataTable({
                         <DropdownMenuItem asChild>
                             <Link href={route('admin.teachers.edit', teacher.id)}>
                                 <Edit className="size-4" />
-                                Edit Teacher
+                                Edit Staff Member
                             </Link>
                         </DropdownMenuItem>
                     </>
@@ -180,7 +180,7 @@ export default function TeacherDataTable({
                         <DropdownMenuSeparator />
                         <DropdownMenuItem variant="destructive" onClick={() => onDelete(teacher.id)}>
                             <Trash2 className="size-4" />
-                            Delete Teacher
+                            Delete Staff Member
                         </DropdownMenuItem>
                     </>
                 )}
@@ -269,9 +269,9 @@ export default function TeacherDataTable({
             )}
             <div className="flex flex-col gap-3 border-b border-sidebar-border/60 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h2 className="text-lg font-semibold text-sidebar-foreground">Teacher Directory</h2>
+                    <h2 className="text-lg font-semibold text-sidebar-foreground">Staff Directory</h2>
                     <p className="text-sm text-sidebar-foreground/60">
-                        Showing {teachers.from ?? 0}-{teachers.to ?? 0} of {teachers.total} teachers
+                        Showing {teachers.from ?? 0}-{teachers.to ?? 0} of {teachers.total} staff members
                     </p>
                 </div>
 
@@ -372,7 +372,7 @@ export default function TeacherDataTable({
                         <tr>
                             {bulkMode && (
                                 <th className="px-4 py-3">
-                                    <input type="checkbox" checked={allSelected} onChange={() => onToggleSelectAll(pageIds)} aria-label="Select all teachers" />
+                                    <input type="checkbox" checked={allSelected} onChange={() => onToggleSelectAll(pageIds)} aria-label="Select all staff members" />
                                 </th>
                             )}
                             {visibleColumns.map((column) => (
@@ -403,8 +403,8 @@ export default function TeacherDataTable({
                             <tr>
                                 <td colSpan={visibleColumns.length + (bulkMode ? 1 : 0)} className="px-6 py-16 text-center">
                                     <div className="mx-auto max-w-md space-y-2">
-                                        <p className="text-lg font-medium text-sidebar-foreground">No teachers found</p>
-                                        <p className="text-sm text-sidebar-foreground/60">Try adjusting your search or filters to find the teacher you need.</p>
+                                        <p className="text-lg font-medium text-sidebar-foreground">No staff members found</p>
+                                        <p className="text-sm text-sidebar-foreground/60">Try adjusting your search or filters to find the administrator or lecturer you need.</p>
                                     </div>
                                 </td>
                             </tr>

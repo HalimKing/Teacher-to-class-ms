@@ -213,7 +213,7 @@ export default function LecturerAttendanceReportPage({ filterOptions, initialFil
         () => [
             { key: 'date', label: 'Date' },
             { key: 'course', label: 'Course', sortable: false },
-            { key: 'classroom', label: 'Class', sortable: false, render: (record) => record.classroom ?? '—' },
+            { key: 'classroom', label: 'Venue', sortable: false, render: (record) => record.classroom ?? '—' },
             {
                 key: 'reschedule',
                 label: 'Original Schedule',

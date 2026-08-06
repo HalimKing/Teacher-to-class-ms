@@ -144,12 +144,12 @@ const TeachersIndexPage = ({ facultiesData, search }: TeachersIndexPageProps) =>
 
     const breadcrumbs = [
         {
-            title: 'Dashboard',
-            href: '/admin/dashboard',
+            title: 'Settings',
+            href: '/admin/settings-reports/settings',
         },
         {
             title: 'Faculties',
-            href: '/admin/teachers',
+            href: '/admin/school-management/faculties',
         },
     ];
 

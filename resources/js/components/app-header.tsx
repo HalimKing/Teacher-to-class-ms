@@ -16,7 +16,7 @@ import { useInitials } from '@/hooks/use-initials';
 import { cn } from '@/lib/utils';
 import { type BreadcrumbItem, type NavItem, type SharedData } from '@/types';
 import { Link, router, usePage } from '@inertiajs/react';
-import { LayoutGrid, Menu, Search, ChevronDown, ChevronRight, Users, Book, Settings, LogOut, BookOpen, UserCheck, ClipboardList, BarChart, Folder, Bell, ScrollText } from 'lucide-react';
+import { LayoutGrid, Menu, Search, ChevronDown, ChevronRight, Users, Book, Settings, LogOut, BookOpen, UserCheck, ClipboardList, BarChart, Folder, Bell, ScrollText, MapPin } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import AppLogo from './app-logo';
 import AppLogoIcon from './app-logo-icon';
@@ -43,6 +43,19 @@ const teacherNavItems: NavItem[] = [
         title: 'Staff Attendance',
         href: '/teacher/staff-attendance',
         icon: UserCheck,
+        permission: 'teacher.staff-attendance.view',
+        staffTypes: ['administrator'],
+    },
+    {
+        title: 'Explanations',
+        href: '/teacher/attendance-explanations',
+        icon: ClipboardList,
+        permission: 'admin.teachers.view',
+    },
+    {
+        title: 'Venue Change Requests',
+        href: '/teacher/venue-change-requests',
+        icon: MapPin,
         permission: 'teacher.staff-attendance.view',
         staffTypes: ['administrator'],
     },
@@ -100,7 +113,7 @@ const mainNavItems: NavItem[] = [
         permission: 'admin.dashboard.view',
     },
     {
-        title: 'Staffs',
+        title: 'Staff',
         href: '/admin/teachers',
         icon: LayoutGrid,
         permission: 'admin.teachers.view',
@@ -124,11 +137,113 @@ const mainNavItems: NavItem[] = [
         ]
     },
     {
-        title: 'School Mg',
-        href: '/admin/school-management',
-        icon: LayoutGrid,
-        permission: 'admin.school-management.faculties.view',
+        title: 'Academics',
+        href: '/admin/academics',
+        icon: Book,
+        permission: 'admin.academics.view',
         subItems: [
+            {
+                title: 'Time Table',
+                href: '/admin/academics/time-tables',
+                permission: 'admin.academics.time-tables.view',
+            },
+            {
+                title: 'Add Time Table',
+                href: '/admin/academics/time-tables/create',
+                permission: 'admin.academics.time-tables.create',
+            },
+            {
+                title: 'Generate Time Table',
+                href: '/admin/academics/time-tables/generate',
+                permission: 'admin.academics.time-tables.generate',
+            }
+            ,
+            {
+                title: 'Schedules',
+                href: '/admin/school-management/schedules',
+                permission: 'admin.schedules.view',
+            },
+            {
+                title: 'Venue Change Authorizations',
+                href: '/admin/venue-change-authorizations',
+                permission: 'admin.venue-change-authorizations.view',
+            },
+            {
+                title: 'Venue Change Requests',
+                href: '/admin/venue-change-requests',
+                permission: 'admin.venue-change-requests.view',
+            },
+        ]
+    },
+    {
+        title: 'Users',
+        href: '/admin/user-management',
+        icon: Users,
+        permission: 'admin.user-management.users.view',
+        subItems: [
+            {
+                title: 'All Users',
+                href: '/admin/user-management/users',
+                permission: 'admin.user-management.users.view',
+            },
+            {
+                title: 'Add User',
+                href: '/admin/user-management/users/create',
+                permission: 'admin.user-management.users.create',
+            },
+            {
+                title: 'User Roles',
+                href: '/admin/user-management/roles',
+                permission: 'admin.user-management.roles.view',
+            }
+        ]
+    },
+    {
+        title: 'Attendance Reports',
+        href: '/admin/attendance',
+        icon: BarChart,
+        permission: 'admin.attendance.view',
+        subItems: [
+            {
+                title: 'Teacher Attendance',
+                href: '/admin/attendance',
+                permission: 'admin.attendance.view',
+            },
+            {
+                title: 'Administrator Attendance',
+                href: '/admin/settings-reports/staff-attendance-reports',
+                permission: 'admin.staff-attendance.view',
+            },
+            {
+                title: 'Attendance Explanations',
+                href: '/admin/attendance-explanations',
+                permission: 'admin.attendance-explanations.view',
+            },
+            // {
+            //     title: 'Attendance Analysis',
+            //     href: '/admin/settings-reports/attendance-analysis',
+            //     permission: 'admin.attendance.view',
+            // },
+        ],
+    },
+    {
+        title: 'Settings',
+        href: '/admin/settings-reports/settings',
+        icon: Settings,
+        permission: 'admin.settings.view',
+        subItems: [
+            {
+                title: 'System Settings',
+                href: '/admin/settings-reports/settings',
+                icon: Settings,
+                permission: 'admin.settings.view',
+            },
+            {
+                title: 'System Logs',
+                href: '/admin/system-logs',
+                icon: ScrollText,
+                permission: 'admin.system-logs.view',
+            },
             {
                 title: 'Faculty List',
                 href: '/admin/school-management/faculties',
@@ -198,101 +313,6 @@ const mainNavItems: NavItem[] = [
                 title: 'Add Academic Period',
                 href: '/admin/school-management/academic-periods/create',
                 permission: 'admin.school-management.academic-periods.create',
-            }
-        ]
-    },
-    {
-        title: 'Academics',
-        href: '/admin/academics',
-        icon: Book,
-        permission: 'admin.academics.view',
-        subItems: [
-            {
-                title: 'Time Table',
-                href: '/admin/academics/time-tables',
-                permission: 'admin.academics.time-tables.view',
-            },
-            {
-                title: 'Add Time Table',
-                href: '/admin/academics/time-tables/create',
-                permission: 'admin.academics.time-tables.create',
-            },
-            {
-                title: 'Generate Time Table',
-                href: '/admin/academics/time-tables/generate',
-                permission: 'admin.academics.time-tables.generate',
-            }
-            ,
-            {
-                title: 'Schedules',
-                href: '/admin/school-management/schedules',
-                permission: 'admin.schedules.view',
-            }
-        ]
-    },
-    {
-        title: 'Users',
-        href: '/admin/user-management',
-        icon: Users,
-        permission: 'admin.user-management.users.view',
-        subItems: [
-            {
-                title: 'All Users',
-                href: '/admin/user-management/users',
-                permission: 'admin.user-management.users.view',
-            },
-            {
-                title: 'Add User',
-                href: '/admin/user-management/users/create',
-                permission: 'admin.user-management.users.create',
-            },
-            {
-                title: 'User Roles',
-                href: '/admin/user-management/roles',
-                permission: 'admin.user-management.roles.view',
-            }
-        ]
-    },
-    {
-        title: 'Attendance Reports',
-        href: '/admin/attendance',
-        icon: BarChart,
-        permission: 'admin.attendance.view',
-        subItems: [
-            {
-                title: 'Teacher Attendance',
-                href: '/admin/attendance',
-                permission: 'admin.attendance.view',
-            },
-            {
-                title: 'Administrator Attendance',
-                href: '/admin/settings-reports/staff-attendance-reports',
-                permission: 'admin.staff-attendance.view',
-            },
-            // {
-            //     title: 'Attendance Analysis',
-            //     href: '/admin/settings-reports/attendance-analysis',
-            //     permission: 'admin.attendance.view',
-            // },
-        ],
-    },
-    {
-        title: 'Settings',
-        href: '/admin/settings-reports/settings',
-        icon: Settings,
-        permission: 'admin.settings.view',
-        subItems: [
-            {
-                title: 'System Settings',
-                href: '/admin/settings-reports/settings',
-                icon: Settings,
-                permission: 'admin.settings.view',
-            },
-            {
-                title: 'System Logs',
-                href: '/admin/system-logs',
-                icon: ScrollText,
-                permission: 'admin.system-logs.view',
             },
         ],
     },
@@ -309,6 +329,9 @@ interface AppHeaderProps {
 export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
     const page = usePage<SharedData>();
     const { auth } = page.props;
+    const systemSettings = (page.props as SharedData & {
+        system_settings?: Record<string, Record<string, { value?: boolean | string | number }>>;
+    }).system_settings;
     const getInitials = useInitials();
     const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
     const [navItems, setNavItems] = useState<NavItem[]>(auth.user && auth.guard === 'teacher' ? teacherNavItems : mainNavItems);
@@ -316,7 +339,8 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
     const isTeacher = auth.user && auth.guard === 'teacher';
     const teacherStaffType = isTeacher ? String(auth.user.staff_type || 'lecturer') : null;
     const isLecturer = teacherStaffType === 'lecturer';
-
+    const venueChangeRequestsEnabled =
+        systemSettings?.attendance?.administrator_venue_change_requests_enabled?.value !== false;
     const userDisplayName = useMemo(() => {
         if (!auth.user) {
             return '';
@@ -339,7 +363,17 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
     // Filter navigation items based on permissions
     const filteredNavItems = useMemo(() => {
         if (isTeacher) {
-            return teacherNavItems.filter((item) => !item.staffTypes || item.staffTypes.includes(teacherStaffType || 'lecturer'));
+            return teacherNavItems.filter((item) => {
+                if (item.staffTypes && !item.staffTypes.includes(teacherStaffType || 'lecturer')) {
+                    return false;
+                }
+
+                if (item.href === '/teacher/venue-change-requests' && !venueChangeRequestsEnabled) {
+                    return false;
+                }
+
+                return true;
+            });
         }
         return mainNavItems.filter(item => {
             // Check if user has permission for the main item
@@ -372,10 +406,26 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
             }
             return true;
         });
-    }, [auth.user, teacherStaffType]);
+    }, [auth.user, teacherStaffType, venueChangeRequestsEnabled]);
 
 
     console.log('Filtered Nav Items:', filteredNavItems);
+
+    const isNavItemActive = (item: NavItem) => {
+        const current = page.url.split('?')[0];
+        const href = item.href.split('?')[0];
+
+        if (current === href || (href !== '/' && current.startsWith(`${href}/`))) {
+            return true;
+        }
+
+        return Boolean(
+            item.subItems?.some((subItem) => {
+                const subHref = subItem.href.split('?')[0];
+                return current === subHref || current.startsWith(`${subHref}/`);
+            }),
+        );
+    };
 
     const toggleMobileSubmenu = (itemTitle: string) => {
         setExpandedItems((prev) => ({
@@ -406,7 +456,7 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                             <SheetContent side="left" className="w-72 flex h-full flex-col items-stretch justify-between bg-sidebar overflow-y-auto">
                                 <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
                                 <SheetHeader className="flex justify-start text-left">
-                                    <AppLogoIcon className="h-6 w-6 fill-current text-black dark:text-white" />
+                                    <AppLogoIcon className="h-10 w-10" />
                                 </SheetHeader>
                                 <div className="flex h-full flex-1 flex-col space-y-4 p-4">
                                     <div className="flex h-full flex-col justify-between text-sm">
@@ -488,7 +538,7 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                                                     variant="ghost"
                                                     className={cn(
                                                         'h-9 cursor-pointer px-3 flex items-center justify-center font-medium transition-colors hover:bg-neutral-100 hover:text-neutral-900 data-[state=open]:bg-neutral-100 dark:hover:bg-neutral-800 dark:hover:text-neutral-50 dark:data-[state=open]:bg-neutral-800 dark:text-neutral-300 dark:hover:text-neutral-50',
-                                                        (page.url === item.href || page.url.startsWith(item.href)) && activeItemStyles
+                                                        isNavItemActive(item) && activeItemStyles
                                                     )}
                                                 >
                                                     {item.icon && <Icon iconNode={item.icon} className="mr-2 h-4 w-4" />}
@@ -499,13 +549,13 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                                             <DropdownMenuContent 
                                                 className={cn(
                                                     'align-start side-bottom sideOffset-8', 
-                                                    item.title === 'School Management' ? 'w-[500px]' : 'w-56 max-h-[400px] overflow-y-auto'
+                                                    item.title === 'Settings' ? 'w-[520px]' : 'w-56 max-h-[400px] overflow-y-auto'
                                                 )} 
                                                 align="start" 
                                                 side="bottom" 
                                                 sideOffset={8}
                                             >
-                                                {item.title === 'School Management' ? (
+                                                {item.title === 'Settings' ? (
                                                     <div className="grid grid-cols-2 gap-2 p-2 max-h-[500px] overflow-y-auto">
                                                         {item.subItems.map((subItem, subIndex) => (
                                                             <Link
@@ -544,7 +594,7 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                                             href={item.href}
                                             className={cn(
                                                 'inline-flex h-9 items-center justify-center rounded-md px-3 py-1 text-sm font-medium transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-800 dark:text-neutral-300 dark:hover:text-neutral-50',
-                                                page.url === item.href && activeItemStyles,
+                                                isNavItemActive(item) && activeItemStyles,
                                                 'cursor-pointer',
                                             )}
                                         >
@@ -553,10 +603,10 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                                         </Link>
                                     )}
                                     {/* Active indicator bar */}
-                                    {page.url === item.href && !item.subItems && (
+                                    {isNavItemActive(item) && !item.subItems && (
                                         <div className="absolute bottom-0 left-0 h-0.5 w-full translate-y-px bg-black dark:bg-white"></div>
                                     )}
-                                    {(page.url === item.href || page.url.startsWith(item.href)) && item.subItems && item.subItems.length > 0 && (
+                                    {isNavItemActive(item) && item.subItems && item.subItems.length > 0 && (
                                         <div className="absolute bottom-0 left-0 h-0.5 w-full translate-y-px bg-black dark:bg-white"></div>
                                     )}
                                 </div>

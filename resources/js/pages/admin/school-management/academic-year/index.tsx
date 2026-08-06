@@ -126,8 +126,8 @@ const AcademicYearIndexPage = ({ academicYearData }: TeachersIndexPageProps) => 
 
   const breadcrumbs = [
     {
-      title: 'School Management',
-      href: '/admin/dashboard',
+      title: 'Settings',
+      href: '/admin/settings-reports/settings',
     },
     {
       title: 'Academic Years',

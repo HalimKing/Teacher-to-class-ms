@@ -1,5 +1,5 @@
-import { Head, useForm, usePage } from '@inertiajs/react';
-import { Loader2, ScanLine } from 'lucide-react';
+import { Head, Link, useForm, usePage } from '@inertiajs/react';
+import { ArrowLeft, Loader2, ScanLine } from 'lucide-react';
 
 interface LoginPageProps {
     timeoutMinutes: number;
@@ -21,6 +21,16 @@ export default function AttendancePortalLoginPage({ timeoutMinutes }: LoginPageP
             <Head title="Attendance Portal" />
 
             <div className="w-full max-w-md">
+                <div className="mb-6">
+                    <Link
+                        href={route('login')}
+                        className="inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-emerald-100/80 transition-colors hover:bg-white/10 hover:text-white"
+                    >
+                        <ArrowLeft className="size-4" aria-hidden="true" />
+                        Back to login
+                    </Link>
+                </div>
+
                 <div className="mb-8 text-center text-white">
                     <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-2xl bg-emerald-500/20 ring-1 ring-emerald-400/30">
                         <ScanLine className="size-8 text-emerald-300" />

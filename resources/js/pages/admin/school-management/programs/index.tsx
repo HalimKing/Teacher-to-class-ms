@@ -313,8 +313,8 @@ const ProgramsIndexPage = ({
   // Breadcrumbs for the layout
   const breadcrumbs = [
     {
-      title: 'Dashboard',
-      href: '/admin/dashboard',
+      title: 'Settings',
+      href: '/admin/settings-reports/settings',
     },
     {
       title: 'Programs',

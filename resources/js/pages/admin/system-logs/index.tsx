@@ -44,6 +44,7 @@ const EXPORT_FILTER_KEYS = [
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Dashboard', href: '/admin/dashboard' },
+    { title: 'Settings', href: '/admin/settings-reports/settings' },
     { title: 'System Logs', href: '/admin/system-logs' },
 ];
 

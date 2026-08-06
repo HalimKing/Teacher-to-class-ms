@@ -127,8 +127,8 @@ const ClassRoomIndexPage = ({ classRoomData, search }: TeachersIndexPageProps) =
 
   const breadcrumbs = [
     {
-      title: 'Dashboard',
-      href: '/admin/dashboard',
+      title: 'Settings',
+      href: '/admin/settings-reports/settings',
     },
     {
       title: 'Venues',
@@ -289,7 +289,7 @@ const ClassRoomIndexPage = ({ classRoomData, search }: TeachersIndexPageProps) =
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
               <div>
                 <h1 className="text-3xl font-extrabold text-slate-900 mb-2">Venues</h1>
-                <p className="text-slate-600">Manage classroom information, locations, and attendance boundaries</p>
+                <p className="text-slate-600">Manage venue information, locations, and attendance boundaries</p>
               </div>
               {can('admin.school-management.class-rooms.create') && (
               <Link

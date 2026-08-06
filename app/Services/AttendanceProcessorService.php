@@ -8,6 +8,7 @@ use App\Models\SystemSetting;
 use App\Models\Teacher;
 use App\Models\TeacherAttendance;
 use App\Models\TimeTable;
+use App\Support\AttendanceExceptionCategory;
 use App\Support\AttendanceRecordSource;
 use App\Support\LecturerNotificationPayload;
 use Carbon\Carbon;
@@ -341,6 +342,7 @@ class AttendanceProcessorService
                 'academic_year_id' => $schedule->academic_year_id,
                 'course_id' => $schedule->course_id,
                 'status' => 'absent',
+                'exception_category' => AttendanceExceptionCategory::UNEXCUSED_ABSENCE,
                 'attendance_source' => AttendanceRecordSource::SYSTEM,
                 'auto_generated' => true,
                 'auto_generated_at' => $now,
@@ -386,6 +388,7 @@ class AttendanceProcessorService
                 'classroom_id' => $rescheduledSession?->classroom_id ?? $schedule->class_room_id,
                 'academic_year_id' => $schedule->academic_year_id,
                 'attendance_status' => 'absent',
+                'exception_category' => AttendanceExceptionCategory::UNEXCUSED_ABSENCE,
                 'attendance_source' => AttendanceRecordSource::SYSTEM,
                 'auto_generated' => true,
                 'auto_generated_at' => $now,

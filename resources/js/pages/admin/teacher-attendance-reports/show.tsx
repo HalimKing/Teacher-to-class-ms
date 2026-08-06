@@ -199,7 +199,7 @@ export default function TeacherAttendanceReportShow({ teacher, initialFilters }:
                         <table className="min-w-full text-sm">
                             <thead className="bg-sidebar-accent/50 text-left text-xs uppercase tracking-wider text-sidebar-foreground/60">
                                 <tr>
-                                    <th className="px-4 py-3">Date</th><th className="px-4 py-3">Course/Class</th><th className="px-4 py-3">Check-in</th><th className="px-4 py-3">Check-out</th><th className="px-4 py-3">Hours</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Geo</th><th className="px-4 py-3">Face</th><th className="px-4 py-3">Source</th>
+                                    <th className="px-4 py-3">Date</th><th className="px-4 py-3">Course/Venue</th><th className="px-4 py-3">Check-in</th><th className="px-4 py-3">Check-out</th><th className="px-4 py-3">Hours</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Geo</th><th className="px-4 py-3">Face</th><th className="px-4 py-3">Source</th>
                                 </tr>
                             </thead>
                             <tbody>

@@ -1,6 +1,7 @@
 import FaceCaptureModal from '@/components/face/FaceCaptureModal';
 import { RescheduleSessionBanner, type RescheduleBannerInfo } from '@/components/attendance/RescheduleSessionBanner';
 import { buildFaceVerificationPayload } from '@/lib/teacher-api';
+import { apiJsonRequest } from '@/lib/http';
 import { type FaceCaptureResult } from '@/lib/face-recognition';
 import { getBooleanSetting } from '@/lib/system-settings';
 import AttendancePortalLayout from '@/layouts/attendance-portal-layout';
@@ -62,23 +63,8 @@ interface MarkPageProps {
     facialRecognitionEnabled?: boolean;
 }
 
-const csrfToken = () => (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '';
-
 async function requestJson<T>(url: string, options: RequestInit = {}): Promise<T> {
-    const response = await fetch(url, {
-        ...options,
-        headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': csrfToken(),
-            ...(options.headers || {}),
-        },
-    });
-    const payload = await response.json();
-    if (!response.ok) {
-        throw new Error(payload.message || 'Something went wrong. Please try again.');
-    }
-    return payload;
+    return apiJsonRequest<T>(url, options);
 }
 
 function formatTime(time: string) {

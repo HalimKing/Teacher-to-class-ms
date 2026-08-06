@@ -89,10 +89,10 @@ class TeacherController extends Controller
             );
 
             return redirect()->route('admin.teachers.index')
-            ->with('success', 'Teacher created successfully!');
+            ->with('success', 'Staff member created successfully!');
         } catch(\Throwable $e) {
             return redirect()->route('admin.teachers.create')
-                ->with('error', 'Error creating teacher: ' . $e->getMessage());
+                ->with('error', 'Error creating staff member: ' . $e->getMessage());
         }
     }
 
@@ -173,10 +173,10 @@ class TeacherController extends Controller
         );
         
         return redirect()->route('admin.teachers.index')
-            ->with('success', 'Teacher updated successfully!');
+            ->with('success', 'Staff member updated successfully!');
     } catch(\Throwable $e) {
         return redirect()->back()
-            ->with('error', 'Error updating teacher: ' . $e->getMessage());
+            ->with('error', 'Error updating staff member: ' . $e->getMessage());
     }
 }
 
@@ -198,7 +198,7 @@ class TeacherController extends Controller
         );
 
         return redirect()->route('admin.teachers.index')
-            ->with('success', 'Teacher deleted successfully!');
+            ->with('success', 'Staff member deleted successfully!');
     }
 
         public function passwordManagement(Request $request)
@@ -214,7 +214,7 @@ class TeacherController extends Controller
             if (!$teacher) {
                 return Inertia::render('admin/teacher/password-management', [
                     'teacher' => null,
-                ])->with('error', 'No teacher found with this employee ID.');
+                ])->with('error', 'No staff member found with this employee ID.');
             }
         }
 
@@ -251,7 +251,7 @@ class TeacherController extends Controller
             return Inertia::render('admin/teacher/password-management', [
                 'teacher' => $teacher,
                 'generatedPassword' => $newPassword,
-            ])->with('success', 'Password reset successfully! Please provide the new password to the teacher.');
+            ])->with('success', 'Password reset successfully! Please provide the new password to the staff member.');
             
         } catch (\Exception $e) {
             Log::error('Password reset failed', [
