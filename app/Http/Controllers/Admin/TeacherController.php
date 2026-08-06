@@ -357,7 +357,7 @@ class TeacherController extends Controller
             fputcsv($out, ['# 2. faculty and department must match existing names exactly. Department must belong to faculty']);
             fputcsv($out, ['# 3. title must be one of: Prof., Dr., Mr., Ms.']);
             fputcsv($out, ['# 4. staff_type is optional and must be one of: lecturer, administrator. Defaults to lecturer']);
-            fputcsv($out, ['# 5. employment_status is optional and must be one of: permanent, nss, intern, volunteer, other. Defaults to permanent']);
+            fputcsv($out, ['# 5. employment_status is optional and must be one of: permanent, nss, intern, volunteer, casual, other. Defaults to permanent']);
             fputcsv($out, ['# 6. email and employee_id must be unique']);
             fputcsv($out, ['# 7. Do not modify the header row. Remove instruction rows before uploading']);
             fputcsv($out, ['# 8. Duplicate employee_id will update existing teacher']);
@@ -805,6 +805,7 @@ class TeacherController extends Controller
             'nss' => Teacher::EMPLOYMENT_STATUS_NSS,
             'intern' => Teacher::EMPLOYMENT_STATUS_INTERN,
             'volunteer' => Teacher::EMPLOYMENT_STATUS_VOLUNTEER,
+            'casual' => Teacher::EMPLOYMENT_STATUS_CASUAL,
             'other' => Teacher::EMPLOYMENT_STATUS_OTHER,
             'permanent' => Teacher::EMPLOYMENT_STATUS_PERMANENT,
         ];
@@ -821,7 +822,7 @@ class TeacherController extends Controller
         $normalized = $this->normalizeEmploymentStatus($employmentStatus);
 
         if (! in_array($normalized, Teacher::EMPLOYMENT_STATUSES, true)) {
-            return 'Employment status must be permanent, nss, intern, volunteer, or other.';
+            return 'Employment status must be permanent, nss, intern, volunteer, casual, or other.';
         }
 
         return null;

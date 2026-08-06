@@ -16,8 +16,8 @@ import { useInitials } from '@/hooks/use-initials';
 import { cn } from '@/lib/utils';
 import { type BreadcrumbItem, type NavItem, type SharedData } from '@/types';
 import { Link, router, usePage } from '@inertiajs/react';
-import { LayoutGrid, Menu, Search, ChevronDown, ChevronRight, Users, Book, Settings, LogOut, BookOpen, UserCheck, ClipboardList, BarChart, Folder, Bell, ScrollText, MapPin } from 'lucide-react';
-import { useState, useMemo } from 'react';
+import { LayoutGrid, Menu, Search, ChevronDown, ChevronRight, Users, Book, Settings, LogOut, BookOpen, UserCheck, ClipboardList, BarChart, Folder, Bell, ScrollText, MapPin, LifeBuoy, GraduationCap, CalendarDays } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
 import AppLogo from './app-logo';
 import AppLogoIcon from './app-logo-icon';
 import NotificationBell from '@/components/notifications/NotificationBell';
@@ -53,6 +53,12 @@ const teacherNavItems: NavItem[] = [
         permission: 'admin.teachers.view',
     },
     {
+        title: 'Help Desk',
+        href: '/teacher/help-desk',
+        icon: LifeBuoy,
+        permission: 'admin.teachers.view',
+    },
+    {
         title: 'Venue Change Requests',
         href: '/teacher/venue-change-requests',
         icon: MapPin,
@@ -67,24 +73,33 @@ const teacherNavItems: NavItem[] = [
         staffTypes: ['administrator'],
     },
     {
-        title: 'My Courses',
-        href: '/teacher/my-courses',
-        icon: BookOpen,
-        permission: 'teacher.my-courses.view',
+        title: 'Academic',
+        href: '/teacher/timetable',
+        icon: GraduationCap,
+        permission: 'teacher.timetable.view',
         staffTypes: ['lecturer'],
+        subItems: [
+            {
+                title: 'My Schedules',
+                href: '/teacher/timetable',
+                icon: CalendarDays,
+                permission: 'teacher.timetable.view',
+                staffTypes: ['lecturer'],
+            },
+            {
+                title: 'My Courses',
+                href: '/teacher/my-courses',
+                icon: BookOpen,
+                permission: 'teacher.my-courses.view',
+                staffTypes: ['lecturer'],
+            },
+        ],
     },
     {
         title: 'Records',
         href: '/teacher/records',
         icon: Folder,
         permission: 'teacher.records.view',
-        staffTypes: ['lecturer'],
-    },
-    {
-        title: 'My Timetable',
-        href: '/teacher/timetable',
-        icon: ClipboardList,
-        permission: 'teacher.timetable.view',
         staffTypes: ['lecturer'],
     },
     {
@@ -232,6 +247,12 @@ const mainNavItems: NavItem[] = [
         ],
     },
     {
+        title: 'Help Desk',
+        href: '/admin/help-desk',
+        icon: LifeBuoy,
+        permission: 'admin.help-desk.view',
+    },
+    {
         title: 'Settings',
         href: '/admin/settings-reports/settings',
         icon: Settings,
@@ -368,17 +389,35 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
     // Filter navigation items based on permissions
     const filteredNavItems = useMemo(() => {
         if (isTeacher) {
-            return teacherNavItems.filter((item) => {
-                if (item.staffTypes && !item.staffTypes.includes(teacherStaffType || 'lecturer')) {
-                    return false;
-                }
+            return teacherNavItems
+                .filter((item) => {
+                    if (item.staffTypes && !item.staffTypes.includes(teacherStaffType || 'lecturer')) {
+                        return false;
+                    }
 
-                if (item.href === '/teacher/venue-change-requests' && !venueChangeRequestsEnabled) {
-                    return false;
-                }
+                    if (item.href === '/teacher/venue-change-requests' && !venueChangeRequestsEnabled) {
+                        return false;
+                    }
 
-                return true;
-            });
+                    return true;
+                })
+                .map((item) => {
+                    if (!item.subItems?.length) {
+                        return item;
+                    }
+
+                    return {
+                        ...item,
+                        subItems: item.subItems.filter((subItem) => {
+                            if (subItem.staffTypes && !subItem.staffTypes.includes(teacherStaffType || 'lecturer')) {
+                                return false;
+                            }
+
+                            return true;
+                        }),
+                    };
+                })
+                .filter((item) => !(item.subItems && item.subItems.length === 0));
         }
         return mainNavItems.filter(item => {
             // Check if user has permission for the main item
@@ -431,6 +470,23 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
             }),
         );
     };
+
+    // Keep relevant mobile submenus expanded when viewing a child page
+    useEffect(() => {
+        if (!isTeacher) {
+            return;
+        }
+
+        setExpandedItems((prev) => {
+            const next = { ...prev };
+            filteredNavItems.forEach((item) => {
+                if (item.subItems?.length && isNavItemActive(item)) {
+                    next[item.title] = true;
+                }
+            });
+            return next;
+        });
+    }, [isTeacher, page.url, filteredNavItems]);
 
     const toggleMobileSubmenu = (itemTitle: string) => {
         setExpandedItems((prev) => ({
@@ -487,19 +543,25 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                                                             </button>
                                                             {expandedItems[item.title] && (
                                                                 <div className="ml-6 mt-2 flex flex-col space-y-2">
-                                                                    {item.subItems.map((subItem) => (
+                                                                    {item.subItems.map((subItem) => {
+                                                                        const subHref = subItem.href.split('?')[0];
+                                                                        const current = page.url.split('?')[0];
+                                                                        const isActive = current === subHref || current.startsWith(`${subHref}/`);
+
+                                                                        return (
                                                                         <Link
                                                                             key={subItem.title}
                                                                             href={subItem.href}
                                                                             className={cn(
                                                                                 'text-sm rounded px-2 py-1.5 transition-colors',
                                                                                 'text-slate-600 dark:text-slate-400 hover:text-slate-900 hover:bg-neutral-100 dark:hover:text-slate-200 dark:hover:bg-neutral-800',
-                                                                                page.url === subItem.href && 'bg-neutral-100 text-slate-900 dark:bg-neutral-800 dark:text-slate-100'
+                                                                                isActive && 'bg-neutral-100 text-slate-900 dark:bg-neutral-800 dark:text-slate-100'
                                                                             )}
                                                                         >
                                                                             {subItem.title}
                                                                         </Link>
-                                                                    ))}
+                                                                        );
+                                                                    })}
                                                                 </div>
                                                             )}
                                                         </>
@@ -577,19 +639,25 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                                                     </div>
                                                 ) : (
                                                     <>
-                                                        {item.subItems.map((subItem, subIndex) => (
+                                                        {item.subItems.map((subItem, subIndex) => {
+                                                            const subHref = subItem.href.split('?')[0];
+                                                            const current = page.url.split('?')[0];
+                                                            const isActive = current === subHref || current.startsWith(`${subHref}/`);
+
+                                                            return (
                                                             <DropdownMenuItem key={subIndex} asChild>
                                                                 <Link
                                                                     href={subItem.href}
                                                                     className={cn(
                                                                         'text-sm cursor-pointer px-2 py-1.5 rounded transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-700',
-                                                                        page.url === subItem.href && 'bg-neutral-100 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-50'
+                                                                        isActive && 'bg-neutral-100 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-50'
                                                                     )}
                                                                 >
                                                                     {subItem.title}
                                                                 </Link>
                                                             </DropdownMenuItem>
-                                                        ))}
+                                                            );
+                                                        })}
                                                     </>
                                                 )}
                                             </DropdownMenuContent>

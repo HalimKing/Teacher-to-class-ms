@@ -245,15 +245,19 @@ export default function TeacherTimeTableIndex() {
     const printUrl = route('teacher.timetable.print') + '?format=print';
 
     return (
-        <AppLayout breadcrumbs={[{ title: 'My Timetable', href: '/teacher/timetable' }]}>
-            <Head title="My Timetable" />
+        <AppLayout breadcrumbs={[
+            { title: 'Dashboard', href: '/teacher/dashboard' },
+            { title: 'Academic', href: '/teacher/timetable' },
+            { title: 'My Schedules', href: '/teacher/timetable' },
+        ]}>
+            <Head title="My Schedules" />
             <ToastContainer />
 
             <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto rounded-xl p-4 md:p-6">
                 {/* Header */}
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div>
-                        <h1 className="text-2xl font-bold text-sidebar-foreground">My Timetable</h1>
+                        <h1 className="text-2xl font-bold text-sidebar-foreground">My Schedules</h1>
                         <p className="mt-1 text-sm text-sidebar-foreground/60">
                             View your weekly teaching schedule, manage sessions, and track reschedule requests
                         </p>

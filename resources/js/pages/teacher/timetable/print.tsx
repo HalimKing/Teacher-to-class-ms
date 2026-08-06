@@ -13,9 +13,9 @@ export default function TeacherTimeTablePrint() {
 
     return (
         <Box sx={{ p: 2 }}>
-            <Head title="My Timetable - Print" />
+            <Head title="My Schedules - Print" />
             <Typography variant="h5" sx={{ mb: 2, textAlign: 'center' }}>
-                My Timetable
+                My Schedules
             </Typography>
             <TableContainer component={Paper}>
                 <Table>

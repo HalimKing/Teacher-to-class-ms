@@ -99,6 +99,7 @@ export default function TeacherFiltersPanel({ filters, faculties, departments, o
                         <option value="nss">NSS Personnel</option>
                         <option value="intern">Intern</option>
                         <option value="volunteer">Volunteer</option>
+                        <option value="casual">Casual</option>
                         <option value="other">Other</option>
                     </select>
 

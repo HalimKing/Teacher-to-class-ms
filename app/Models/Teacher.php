@@ -28,6 +28,7 @@ class Teacher extends Authenticatable
     public const EMPLOYMENT_STATUS_NSS = 'nss';
     public const EMPLOYMENT_STATUS_INTERN = 'intern';
     public const EMPLOYMENT_STATUS_VOLUNTEER = 'volunteer';
+    public const EMPLOYMENT_STATUS_CASUAL = 'casual';
     public const EMPLOYMENT_STATUS_OTHER = 'other';
 
     public const EMPLOYMENT_STATUSES = [
@@ -35,6 +36,7 @@ class Teacher extends Authenticatable
         self::EMPLOYMENT_STATUS_NSS,
         self::EMPLOYMENT_STATUS_INTERN,
         self::EMPLOYMENT_STATUS_VOLUNTEER,
+        self::EMPLOYMENT_STATUS_CASUAL,
         self::EMPLOYMENT_STATUS_OTHER,
     ];
 
@@ -43,6 +45,7 @@ class Teacher extends Authenticatable
         self::EMPLOYMENT_STATUS_NSS => 'NSS Personnel',
         self::EMPLOYMENT_STATUS_INTERN => 'Intern',
         self::EMPLOYMENT_STATUS_VOLUNTEER => 'Volunteer',
+        self::EMPLOYMENT_STATUS_CASUAL => 'Casual',
         self::EMPLOYMENT_STATUS_OTHER => 'Other',
     ];
 

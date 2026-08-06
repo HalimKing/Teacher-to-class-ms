@@ -85,6 +85,8 @@ class PermissionSeeder extends Seeder
             'admin.venue-change-requests.manage',
             'admin.attendance-explanations.view',
             'admin.attendance-explanations.manage',
+            'admin.help-desk.view',
+            'admin.help-desk.manage',
         ];
         foreach ($permissions as $permission) {
             Permission::firstOrCreate([

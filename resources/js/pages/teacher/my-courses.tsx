@@ -18,11 +18,15 @@ import { X } from 'lucide-react';
 const breadcrumbs: BreadcrumbItem[] = [
   {
     title: 'Dashboard',
-    href: '/dashboard',
+    href: '/teacher/dashboard',
+  },
+  {
+    title: 'Academic',
+    href: '/teacher/timetable',
   },
   {
     title: 'My Courses',
-    href: '/courses',
+    href: '/teacher/my-courses',
   },
 ];
 

@@ -63,6 +63,28 @@ it('requires a valid employment status', function () {
     ])->assertSessionHasErrors('employmentStatus');
 });
 
+it('accepts casual as a valid employment status', function () {
+    $response = $this->actingAs($this->admin)->post(route('admin.teachers.store'), [
+        'firstName' => 'Yaw',
+        'lastName' => 'Boateng',
+        'email' => 'yaw.boateng.' . uniqid() . '@example.com',
+        'phone' => '0244333333',
+        'faculty' => $this->faculty->id,
+        'department' => $this->department->id,
+        'employeeId' => 'EMP' . uniqid(),
+        'title' => 'Mr.',
+        'staffType' => 'lecturer',
+        'employmentStatus' => 'casual',
+    ]);
+
+    $response->assertRedirect(route('admin.teachers.index'));
+
+    $teacher = Teacher::where('email', 'like', 'yaw.boateng.%')->first();
+    expect($teacher)->not->toBeNull();
+    expect($teacher->employment_status)->toBe('casual');
+    expect($teacher->employmentStatusLabel())->toBe('Casual');
+});
+
 it('defaults existing staff employment status to permanent', function () {
     $teacher = Teacher::create([
         'first_name' => 'Existing',

@@ -38,7 +38,7 @@
 
 <body>
     <div class="header">
-        <h2>My Timetable</h2>
+        <h2>My Schedules</h2>
         <p>{{ now()->toDayDateTimeString() }}</p>
     </div>
 

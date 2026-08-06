@@ -58,6 +58,7 @@ const employmentStatusData = [
   { label: 'NSS Personnel', value: 'nss' },
   { label: 'Intern', value: 'intern' },
   { label: 'Volunteer', value: 'volunteer' },
+  { label: 'Casual', value: 'casual' },
   { label: 'Other', value: 'other' },
 ];
 

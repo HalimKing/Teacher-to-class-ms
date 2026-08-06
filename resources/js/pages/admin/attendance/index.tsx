@@ -75,6 +75,7 @@ export default function TeacherAttendanceRecordsAdmin({
         { value: 'nss', label: 'NSS Personnel' },
         { value: 'intern', label: 'Intern' },
         { value: 'volunteer', label: 'Volunteer' },
+        { value: 'casual', label: 'Casual' },
         { value: 'other', label: 'Other' },
     ],
     staffTypeOptions = [

@@ -150,6 +150,23 @@ Route::middleware(['auth:teacher', 'attendance.portal.restrict'])->group(functio
     Route::post('/teacher/attendance-explanations', [\App\Http\Controllers\Teacher\AttendanceExplanationController::class, 'store'])
         ->name('teacher.attendance-explanations.store');
 
+    Route::get('/teacher/help-desk', [\App\Http\Controllers\Teacher\HelpDeskController::class, 'index'])
+        ->name('teacher.help-desk.index');
+    Route::get('/teacher/help-desk/create', [\App\Http\Controllers\Teacher\HelpDeskController::class, 'create'])
+        ->name('teacher.help-desk.create');
+    Route::post('/teacher/help-desk', [\App\Http\Controllers\Teacher\HelpDeskController::class, 'store'])
+        ->name('teacher.help-desk.store');
+    Route::get('/teacher/help-desk/{helpDesk}', [\App\Http\Controllers\Teacher\HelpDeskController::class, 'show'])
+        ->name('teacher.help-desk.show');
+    Route::post('/teacher/help-desk/{helpDesk}/comment', [\App\Http\Controllers\Teacher\HelpDeskController::class, 'comment'])
+        ->name('teacher.help-desk.comment');
+    Route::post('/teacher/help-desk/{helpDesk}/close', [\App\Http\Controllers\Teacher\HelpDeskController::class, 'close'])
+        ->name('teacher.help-desk.close');
+    Route::get('/teacher/help-desk/{helpDesk}/attachment', [\App\Http\Controllers\Teacher\HelpDeskController::class, 'attachment'])
+        ->name('teacher.help-desk.attachment');
+    Route::get('/teacher/help-desk/{helpDesk}/comments/{comment}/attachment', [\App\Http\Controllers\Teacher\HelpDeskController::class, 'commentAttachment'])
+        ->name('teacher.help-desk.comment-attachment');
+
     Route::middleware('teacher.staff_type:administrator')->group(function () {
         Route::get('/teacher/venue-change-requests', [\App\Http\Controllers\Teacher\VenueChangeRequestController::class, 'index'])
             ->name('teacher.venue-change-requests.index');
@@ -258,6 +275,29 @@ Route::middleware(['auth:web', 'verified', 'password.changed'])->group(function 
             Route::get('attendance-explanations/{attendanceExplanation}/document', [\App\Http\Controllers\Admin\AttendanceExplanationController::class, 'document'])
                 ->name('attendance-explanations.document')
                 ->middleware('permission:admin.attendance-explanations.view');
+
+            // Help Desk
+            Route::get('help-desk', [\App\Http\Controllers\Admin\HelpDeskController::class, 'index'])
+                ->name('help-desk.index')
+                ->middleware('permission:admin.help-desk.view');
+            Route::get('help-desk/{helpDesk}', [\App\Http\Controllers\Admin\HelpDeskController::class, 'show'])
+                ->name('help-desk.show')
+                ->middleware('permission:admin.help-desk.view');
+            Route::post('help-desk/{helpDesk}/assign', [\App\Http\Controllers\Admin\HelpDeskController::class, 'assign'])
+                ->name('help-desk.assign')
+                ->middleware('permission:admin.help-desk.manage');
+            Route::post('help-desk/{helpDesk}/status', [\App\Http\Controllers\Admin\HelpDeskController::class, 'updateStatus'])
+                ->name('help-desk.status')
+                ->middleware('permission:admin.help-desk.manage');
+            Route::post('help-desk/{helpDesk}/comment', [\App\Http\Controllers\Admin\HelpDeskController::class, 'comment'])
+                ->name('help-desk.comment')
+                ->middleware('permission:admin.help-desk.manage');
+            Route::get('help-desk/{helpDesk}/attachment', [\App\Http\Controllers\Admin\HelpDeskController::class, 'attachment'])
+                ->name('help-desk.attachment')
+                ->middleware('permission:admin.help-desk.view');
+            Route::get('help-desk/{helpDesk}/comments/{comment}/attachment', [\App\Http\Controllers\Admin\HelpDeskController::class, 'commentAttachment'])
+                ->name('help-desk.comment-attachment')
+                ->middleware('permission:admin.help-desk.view');
 
             Route::prefix('system-logs')->name('system-logs.')->group(function () {
                 Route::get('/', [SystemLogController::class, 'index'])

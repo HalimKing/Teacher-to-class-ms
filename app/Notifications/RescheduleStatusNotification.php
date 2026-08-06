@@ -62,7 +62,7 @@ class RescheduleStatusNotification extends Notification
         }
 
         return $message
-            ->action('View My Timetable', url('/teacher/timetable'))
+            ->action('View My Schedules', url('/teacher/timetable'))
             ->line('Thank you for using ' . config('app.name') . '!');
     }
 
