@@ -1,6 +1,7 @@
 
 <?php
 
+use App\Http\Controllers\GlobalSearchController;
 use App\Http\Controllers\Admin\SchoolManagement\AcademicPeriodController;
 use App\Http\Controllers\Admin\SchoolManagement\AcademicYearController;
 use App\Http\Controllers\Admin\SchoolManagement\ClassRoomController;
@@ -46,7 +47,9 @@ Route::get('/', function () {
 Route::get('/deploy-check', DeployCheckController::class)->name('deploy-check');
 Route::get('/csrf-token', CsrfTokenController::class)->name('csrf-token');
 
-
+Route::get('/search', GlobalSearchController::class)
+    ->middleware('auth.any')
+    ->name('search');
 
 Route::get('api/faculties/{faculty}/departments', [DepartmentController::class, 'getByFaculty']);
 Route::post('api/time-tables/check-conflict', [TimeTableController::class, 'checkConflict'])

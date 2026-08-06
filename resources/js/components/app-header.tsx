@@ -16,13 +16,13 @@ import { useInitials } from '@/hooks/use-initials';
 import { cn } from '@/lib/utils';
 import { type BreadcrumbItem, type NavItem, type SharedData } from '@/types';
 import { Link, router, usePage } from '@inertiajs/react';
-import { LayoutGrid, Menu, Search, ChevronDown, ChevronRight, Users, Book, Settings, LogOut, BookOpen, UserCheck, ClipboardList, BarChart, Folder, Bell, ScrollText, MapPin, LifeBuoy, GraduationCap, CalendarDays } from 'lucide-react';
+import { LayoutGrid, Menu, ChevronDown, ChevronRight, Users, Book, Settings, LogOut, BookOpen, UserCheck, ClipboardList, BarChart, Folder, Bell, ScrollText, MapPin, LifeBuoy, GraduationCap, CalendarDays } from 'lucide-react';
 import { useState, useMemo, useEffect } from 'react';
 import AppLogo from './app-logo';
 import AppLogoIcon from './app-logo-icon';
 import NotificationBell from '@/components/notifications/NotificationBell';
+import { GlobalSearchDialog } from '@/components/global-search-dialog';
 import { can } from '@/lib/can';
-import { log } from 'console';
 import { useMobileNavigation } from '@/hooks/use-mobile-navigation';
 
 const teacherNavItems: NavItem[] = [
@@ -688,10 +688,8 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                     </div>
 
                     <div className="ml-auto flex items-center space-x-1 sm:space-x-2">
-    <div className="relative hidden md:flex items-center space-x-1">
-        <Button variant="ghost" size="icon" className="group h-9 w-9 cursor-pointer">
-            <Search className="!size-5 opacity-80 group-hover:opacity-100" />
-        </Button>
+    <div className="relative flex items-center space-x-1">
+        <GlobalSearchDialog />
     </div>
 
     {/* Teacher notifications */}
