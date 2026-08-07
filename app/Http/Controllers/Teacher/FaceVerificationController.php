@@ -64,7 +64,7 @@ class FaceVerificationController extends Controller
             $request->validated('face_descriptor'),
             $request->validated('quality'),
             'Face enrollment is required before attendance can be marked.',
-            'Face verification failed. Face not recognized.',
+            'Face verification failed. A face was detected, but it does not match the enrolled profile.',
         );
     }
 
@@ -104,7 +104,7 @@ class FaceVerificationController extends Controller
             $request->validated('face_descriptor'),
             $request->validated('quality'),
             'Face enrollment is required before staff attendance can be marked.',
-            'Face verification failed. Face not recognized.',
+            'Face verification failed. A face was detected, but it does not match the enrolled profile.',
         );
     }
 

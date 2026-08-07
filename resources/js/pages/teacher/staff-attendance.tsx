@@ -1,7 +1,7 @@
 import AppLayout from '@/layouts/app-layout';
 import FaceCaptureModal from '@/components/face/FaceCaptureModal';
 import { buildFaceVerificationPayload } from '@/lib/teacher-api';
-import { apiJsonRequest } from '@/lib/http';
+import { apiJsonRequest, getApiErrorMessage } from '@/lib/http';
 import { type FaceCaptureResult } from '@/lib/face-recognition';
 import { getBooleanSetting } from '@/lib/system-settings';
 import { type BreadcrumbItem } from '@/types';
@@ -248,7 +248,7 @@ export default function StaffAttendancePage({
         } catch (error) {
             setMessage({
                 type: 'error',
-                text: error instanceof Error ? error.message : 'Unable to load today’s shifts.',
+                text: getApiErrorMessage(error, 'Unable to load today’s shifts.'),
             });
         } finally {
             setIsLoadingSchedules(false);
@@ -404,7 +404,7 @@ export default function StaffAttendancePage({
                 });
             }
         } catch (error) {
-            setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Check-in failed.' });
+            setMessage({ type: 'error', text: getApiErrorMessage(error, 'Check-in failed.') });
         } finally {
             setIsLoadingApi(false);
         }
@@ -436,7 +436,7 @@ export default function StaffAttendancePage({
                 });
             }
         } catch (error) {
-            setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Check-out failed.' });
+            setMessage({ type: 'error', text: getApiErrorMessage(error, 'Check-out failed.') });
         } finally {
             setIsLoadingApi(false);
         }
@@ -493,7 +493,7 @@ export default function StaffAttendancePage({
             setPendingAttendanceAction(null);
             setFaceModalOpen(false);
         } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Face verification failed.';
+            const errorMessage = getApiErrorMessage(error, 'Face verification failed.');
             setMessage({ type: 'error', text: errorMessage });
             throw new Error(errorMessage);
         } finally {

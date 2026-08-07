@@ -1,6 +1,5 @@
 import { Button } from '@/components/ui/button';
 import { apiJsonRequest } from '@/lib/http';
-import { getCsrfToken } from '@/lib/csrf';
 import { type FaceCaptureResult } from '@/lib/face-recognition';
 import { ShieldCheck, ShieldX, Trash2 } from 'lucide-react';
 import { useState } from 'react';
@@ -13,8 +12,6 @@ interface FaceEnrollmentSectionProps {
     faceRegisteredAt?: string | null;
     enrollmentRequired?: boolean;
 }
-
-const csrfToken = () => getCsrfToken();
 
 export default function FaceEnrollmentSection({
     teacherId,
@@ -36,13 +33,11 @@ export default function FaceEnrollmentSection({
 
         setProcessing(true);
         try {
-            const token = csrfToken();
             const payload = await apiJsonRequest<{ message?: string; face_enrollment_status?: string; face_registered_at?: string }>(
                 route('admin.teachers.face-enrollment.store', teacherId),
                 {
                     method: 'POST',
                     body: JSON.stringify({
-                        _token: token,
                         face_descriptor: result.descriptor,
                         quality: result.quality,
                     }),
@@ -54,7 +49,9 @@ export default function FaceEnrollmentSection({
             setModalOpen(false);
             toast.success(payload.message || 'Face enrollment saved successfully.', { theme: 'dark' });
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'Unable to enroll face.', { theme: 'dark' });
+            const message = error instanceof Error ? error.message : 'Unable to enroll face.';
+            toast.error(message, { theme: 'dark' });
+            throw error instanceof Error ? error : new Error(message);
         } finally {
             setProcessing(false);
         }
@@ -67,12 +64,11 @@ export default function FaceEnrollmentSection({
 
         setProcessing(true);
         try {
-            const token = csrfToken();
             const payload = await apiJsonRequest<{ message?: string }>(
                 route('admin.teachers.face-enrollment.destroy', teacherId),
                 {
                     method: 'DELETE',
-                    body: JSON.stringify({ _token: token }),
+                    body: JSON.stringify({}),
                 },
             );
 

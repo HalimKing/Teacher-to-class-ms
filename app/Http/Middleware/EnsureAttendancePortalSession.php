@@ -26,9 +26,18 @@ class EnsureAttendancePortalSession
             $request->session()->invalidate();
             $request->session()->regenerateToken();
 
+            $message = 'Your attendance session expired. Please enter your Staff ID again.';
+
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $message,
+                ], 401);
+            }
+
             return redirect()
                 ->route('attendance.login')
-                ->with('error', 'Your attendance session expired. Please enter your Staff ID again.');
+                ->with('error', $message);
         }
 
         $this->portal->touch($request);

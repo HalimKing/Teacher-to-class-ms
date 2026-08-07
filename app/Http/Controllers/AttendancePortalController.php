@@ -146,12 +146,26 @@ class AttendancePortalController extends Controller
             );
         }
 
+        $successMessage = null;
+        if ($request->filled('success')) {
+            $successMessage = trim(strip_tags((string) $request->input('success')));
+            $successMessage = $successMessage !== '' ? mb_substr($successMessage, 0, 255) : null;
+        }
+
+        // Clear attendance-portal state and teacher guard only — this portal session
+        // is separate from the admin (web) login flow.
         $this->portal->clear($request);
         Auth::guard('teacher')->logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return redirect()->route('attendance.login');
+        $redirect = redirect()->route('attendance.login');
+
+        if ($successMessage) {
+            $redirect->with('success', $successMessage);
+        }
+
+        return $redirect;
     }
 
     /**

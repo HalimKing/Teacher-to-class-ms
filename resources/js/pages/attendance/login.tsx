@@ -6,7 +6,7 @@ interface LoginPageProps {
 }
 
 export default function AttendancePortalLoginPage({ timeoutMinutes }: LoginPageProps) {
-    const { flash } = usePage().props as { flash?: { error?: string } };
+    const { flash } = usePage().props as { flash?: { error?: string; success?: string } };
     const { data, setData, post, processing, errors } = useForm({
         staff_id: '',
     });
@@ -43,6 +43,12 @@ export default function AttendancePortalLoginPage({ timeoutMinutes }: LoginPageP
                     onSubmit={submit}
                     className="rounded-2xl border border-white/10 bg-white p-6 shadow-2xl shadow-black/20 dark:bg-slate-900 md:p-8"
                 >
+                    {flash?.success && (
+                        <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                            {flash.success}
+                        </div>
+                    )}
+
                     {(flash?.error || errors.staff_id) && (
                         <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                             {errors.staff_id || flash?.error}

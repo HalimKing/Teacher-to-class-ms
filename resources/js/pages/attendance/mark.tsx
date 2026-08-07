@@ -1,13 +1,13 @@
 import FaceCaptureModal from '@/components/face/FaceCaptureModal';
 import { RescheduleSessionBanner, type RescheduleBannerInfo } from '@/components/attendance/RescheduleSessionBanner';
 import { buildFaceVerificationPayload } from '@/lib/teacher-api';
-import { apiJsonRequest } from '@/lib/http';
+import { apiJsonRequest, getApiErrorMessage } from '@/lib/http';
 import { type FaceCaptureResult } from '@/lib/face-recognition';
 import { getBooleanSetting } from '@/lib/system-settings';
 import AttendancePortalLayout from '@/layouts/attendance-portal-layout';
-import { Head, Link, usePage } from '@inertiajs/react';
-import { AlertTriangle, ArrowLeft, Clock, Loader2, LogIn, LogOut, MapPin } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, Clock, Loader2, LogIn, LogOut, MapPin } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 interface SessionTiming {
     can_check_in_now?: boolean;
@@ -110,9 +110,12 @@ export default function AttendancePortalMarkPage({
     const [selected, setSelected] = useState<PortalSession | null>(null);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
+    const [checkInComplete, setCheckInComplete] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
     const [faceModalOpen, setFaceModalOpen] = useState(false);
     const [pendingAction, setPendingAction] = useState<'check-in' | 'check-out' | null>(null);
+    const signingOutRef = useRef(false);
+    const signOutTimerRef = useRef<number | null>(null);
 
     const endpoints = useMemo(
         () =>
@@ -203,7 +206,7 @@ export default function AttendancePortalMarkPage({
         } catch (error) {
             setMessage({
                 type: 'error',
-                text: error instanceof Error ? error.message : 'Unable to load today’s sessions.',
+                text: getApiErrorMessage(error, 'Unable to load today’s sessions.'),
             });
         } finally {
             setLoading(false);
@@ -213,6 +216,42 @@ export default function AttendancePortalMarkPage({
     useEffect(() => {
         loadSessions();
     }, [endpoints.list]);
+
+    useEffect(() => {
+        return () => {
+            if (signOutTimerRef.current) {
+                window.clearTimeout(signOutTimerRef.current);
+            }
+        };
+    }, []);
+
+    const signOutAfterSuccessfulCheckIn = (successMessage: string) => {
+        if (signingOutRef.current) {
+            return;
+        }
+
+        signingOutRef.current = true;
+        setCheckInComplete(true);
+        setSubmitting(true);
+        setPendingAction(null);
+        setFaceModalOpen(false);
+        setMessage({
+            type: 'success',
+            text: successMessage || 'Attendance recorded successfully.',
+        });
+
+        if (signOutTimerRef.current) {
+            window.clearTimeout(signOutTimerRef.current);
+        }
+
+        signOutTimerRef.current = window.setTimeout(() => {
+            router.post(route('attendance.logout'), {
+                success:
+                    successMessage ||
+                    'Attendance recorded successfully. You have been checked in.',
+            });
+        }, 1800);
+    };
 
     const getLocationPayload = async (session: PortalSession) => {
         const location = await new Promise<{ lat: number; lng: number; accuracy: number }>((resolve, reject) => {
@@ -266,8 +305,9 @@ export default function AttendancePortalMarkPage({
             method: 'POST',
             body: JSON.stringify(payload),
         });
-        setMessage({ type: 'success', text: response.message || 'Check-in recorded.' });
-        await loadSessions();
+
+        const successMessage = response.message || 'Attendance recorded successfully.';
+        signOutAfterSuccessfulCheckIn(successMessage);
     };
 
     const submitCheckOut = async (payload: Record<string, unknown>) => {
@@ -280,6 +320,10 @@ export default function AttendancePortalMarkPage({
     };
 
     const handleCheckIn = async () => {
+        if (checkInComplete || signingOutRef.current || submitting) {
+            return;
+        }
+
         if (!selected) {
             setMessage({ type: 'error', text: 'Please choose a session first.' });
             return;
@@ -329,13 +373,19 @@ export default function AttendancePortalMarkPage({
                 }
             }
         } catch (error) {
-            setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Check-in failed.' });
+            setMessage({ type: 'error', text: getApiErrorMessage(error, 'Check-in failed.') });
         } finally {
-            setSubmitting(false);
+            if (!signingOutRef.current) {
+                setSubmitting(false);
+            }
         }
     };
 
     const handleCheckOut = async () => {
+        if (checkInComplete || signingOutRef.current) {
+            return;
+        }
+
         if (!activeSession?.attendance_status?.id) {
             setMessage({ type: 'error', text: 'You are not checked in yet.' });
             return;
@@ -356,13 +406,17 @@ export default function AttendancePortalMarkPage({
                 });
             }
         } catch (error) {
-            setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Check-out failed.' });
+            setMessage({ type: 'error', text: getApiErrorMessage(error, 'Check-out failed.') });
         } finally {
             setSubmitting(false);
         }
     };
 
     const handleFaceVerified = async (result: FaceCaptureResult) => {
+        if (checkInComplete || signingOutRef.current) {
+            return;
+        }
+
         const session = pendingAction === 'check-out' && activeSession ? activeSession : selected;
         if (!session || !pendingAction) {
             throw new Error('Please try again.');
@@ -413,16 +467,20 @@ export default function AttendancePortalMarkPage({
                     ...locationPayload,
                     ...facePayload,
                 });
+                setPendingAction(null);
+                setFaceModalOpen(false);
             }
-
-            setPendingAction(null);
-            setFaceModalOpen(false);
         } finally {
-            setSubmitting(false);
+            if (!signingOutRef.current) {
+                setSubmitting(false);
+            }
         }
     };
 
+    const actionsLocked = submitting || checkInComplete || faceModalOpen;
+
     const canCheckIn =
+        !checkInComplete &&
         !activeSession &&
         selected &&
         !selected.is_completed &&
@@ -432,6 +490,7 @@ export default function AttendancePortalMarkPage({
         !(selected.timing?.is_after_checkout_grace && !selected.attendance_status);
 
     const canCheckOut =
+        !checkInComplete &&
         !!activeSession &&
         !activeSession.is_completed &&
         !isSessionMissed(activeSession) &&
@@ -458,163 +517,209 @@ export default function AttendancePortalMarkPage({
             <Head title="Mark Attendance" />
 
             <div className="space-y-5">
-                <Link
-                    href={route('attendance.portal')}
-                    className="inline-flex items-center gap-1 text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-300"
-                >
-                    <ArrowLeft className="size-4" />
-                    Back to portal
-                </Link>
+                {!checkInComplete && (
+                    <Link
+                        href={route('attendance.portal')}
+                        className="inline-flex items-center gap-1 text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-300"
+                    >
+                        <ArrowLeft className="size-4" />
+                        Back to portal
+                    </Link>
+                )}
 
                 <div>
                     <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Mark attendance</h1>
                     <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{roleLabel} · Today only</p>
                 </div>
 
-                {message && (
+                {checkInComplete ? (
                     <div
-                        role="alert"
-                        className={`rounded-xl border px-4 py-3 text-sm ${
-                            message.type === 'success'
-                                ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                                : 'border-red-200 bg-red-50 text-red-800'
-                        }`}
+                        role="status"
+                        aria-live="polite"
+                        className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-8 text-center shadow-sm dark:border-emerald-900 dark:bg-emerald-950/30"
                     >
-                        {message.text}
-                    </div>
-                )}
-
-                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                    <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-                        {isLecturer ? 'Today’s classes' : 'Today’s shift'}
-                    </h2>
-
-                    {loading ? (
-                        <div className="flex items-center gap-2 py-8 text-sm text-slate-500">
-                            <Loader2 className="size-4 animate-spin" />
-                            Loading...
+                        <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
+                            <CheckCircle2 className="size-8" />
                         </div>
-                    ) : sessions.length === 0 ? (
-                        <p className="py-8 text-center text-sm text-slate-500">
-                            Nothing scheduled for you today.
+                        <h2 className="text-xl font-semibold text-emerald-900 dark:text-emerald-100">
+                            Attendance recorded successfully.
+                        </h2>
+                        <p className="mt-2 text-sm text-emerald-800 dark:text-emerald-200">
+                            You have been checked in. Redirecting…
                         </p>
-                    ) : sessions.length === 1 ? (
-                        <SessionCard session={sessions[0]} selected active={activeSession ? sessionKey(activeSession) === sessionKey(sessions[0]) : false} />
-                    ) : (
-                        <div className="mt-4 space-y-3">
-                            {sessions.map((session) => (
-                                <button
-                                    key={sessionKey(session)}
-                                    type="button"
-                                    onClick={() => setSelected(session)}
-                                    disabled={!!activeSession && sessionKey(activeSession) !== sessionKey(session)}
-                                    className="w-full text-left disabled:opacity-60"
-                                >
-                                    <SessionCard
-                                        session={session}
-                                        selected={selected ? sessionKey(selected) === sessionKey(session) : false}
-                                        active={activeSession ? sessionKey(activeSession) === sessionKey(session) : false}
+                        <div className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                            <Loader2 className="size-4 animate-spin" />
+                            Signing out of the attendance portal
+                        </div>
+                    </div>
+                ) : (
+                    <>
+                        {message && (
+                            <div
+                                role="alert"
+                                className={`rounded-xl border px-4 py-3 text-sm ${
+                                    message.type === 'success'
+                                        ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                                        : 'border-red-200 bg-red-50 text-red-800'
+                                }`}
+                            >
+                                {message.text}
+                            </div>
+                        )}
+
+                        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                                {isLecturer ? 'Today’s classes' : 'Today’s shift'}
+                            </h2>
+
+                            {loading ? (
+                                <div className="flex items-center gap-2 py-8 text-sm text-slate-500">
+                                    <Loader2 className="size-4 animate-spin" />
+                                    Loading...
+                                </div>
+                            ) : sessions.length === 0 ? (
+                                <p className="py-8 text-center text-sm text-slate-500">
+                                    Nothing scheduled for you today.
+                                </p>
+                            ) : sessions.length === 1 ? (
+                                <SessionCard
+                                    session={sessions[0]}
+                                    selected
+                                    active={activeSession ? sessionKey(activeSession) === sessionKey(sessions[0]) : false}
+                                />
+                            ) : (
+                                <div className="mt-4 space-y-3">
+                                    {sessions.map((session) => (
+                                        <button
+                                            key={sessionKey(session)}
+                                            type="button"
+                                            onClick={() => setSelected(session)}
+                                            disabled={!!activeSession && sessionKey(activeSession) !== sessionKey(session)}
+                                            className="w-full text-left disabled:opacity-60"
+                                        >
+                                            <SessionCard
+                                                session={session}
+                                                selected={selected ? sessionKey(selected) === sessionKey(session) : false}
+                                                active={
+                                                    activeSession
+                                                        ? sessionKey(activeSession) === sessionKey(session)
+                                                        : false
+                                                }
+                                            />
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </section>
+
+                        {selected?.attendance_state === 'rescheduled_away' && selected.reschedule && (
+                            <RescheduleSessionBanner reschedule={selected.reschedule} variant="away" showBlockedMessage />
+                        )}
+
+                        {selected?.attendance_state === 'rescheduled_active' && selected.reschedule && (
+                            <RescheduleSessionBanner reschedule={selected.reschedule} variant="active" compact />
+                        )}
+
+                        {isSessionMissed(selected) && (
+                            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                                <div className="flex gap-2">
+                                    <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                                    <p>
+                                        {selected?.attendance_blocked_message ||
+                                            'This session was marked as missed. Attendance is no longer available.'}
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+
+                        {selected?.attendance_state === 'rescheduled_away' && !selected.reschedule && (
+                            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                                <div className="flex gap-2">
+                                    <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                                    <p>
+                                        {selected.attendance_blocked_message ||
+                                            'This session has been rescheduled. Attendance is not available here.'}
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+
+                        {selected && (
+                            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <Info
+                                        label="Time"
+                                        value={`${formatTime(selected.start_time)} – ${formatTime(selected.end_time)}`}
+                                        icon={Clock}
                                     />
+                                    <Info
+                                        label="Location"
+                                        value={selected.classroom || selected.building || 'Not set'}
+                                        icon={MapPin}
+                                    />
+                                </div>
+                            </section>
+                        )}
+
+                        <section className="space-y-3">
+                            {canCheckIn && (
+                                <button
+                                    type="button"
+                                    onClick={handleCheckIn}
+                                    disabled={actionsLocked}
+                                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-6 py-4 text-lg font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                                >
+                                    {submitting ? <Loader2 className="size-5 animate-spin" /> : <LogIn className="size-5" />}
+                                    Check In
                                 </button>
-                            ))}
-                        </div>
-                    )}
-                </section>
+                            )}
 
-                {selected?.attendance_state === 'rescheduled_away' && selected.reschedule && (
-                    <RescheduleSessionBanner reschedule={selected.reschedule} variant="away" showBlockedMessage />
+                            {activeSession && canCheckOut && isBeforeSessionEnd(activeSession) && (
+                                <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-center text-sm text-sky-800">
+                                    You can check out anytime. Early departure will be recorded as early leave.
+                                </div>
+                            )}
+
+                            {activeSession && canCheckOut && activeSession.timing?.is_after_checkout_grace && (
+                                <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-center text-sm text-orange-800">
+                                    Check-out will be recorded as overtime
+                                    {activeSession.timing.checkout_grace_deadline_display
+                                        ? ` (grace ended at ${activeSession.timing.checkout_grace_deadline_display})`
+                                        : ''}
+                                    .
+                                </div>
+                            )}
+
+                            {canCheckOut && (
+                                <button
+                                    type="button"
+                                    onClick={handleCheckOut}
+                                    disabled={actionsLocked}
+                                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-violet-600 px-6 py-4 text-lg font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
+                                >
+                                    {submitting ? <Loader2 className="size-5 animate-spin" /> : <LogOut className="size-5" />}
+                                    {checkOutLabel}
+                                </button>
+                            )}
+
+                            {selected?.is_completed && !activeSession && (
+                                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-center text-sm font-medium text-emerald-800">
+                                    Attendance complete for this session.
+                                </div>
+                            )}
+                        </section>
+                    </>
                 )}
-
-                {selected?.attendance_state === 'rescheduled_active' && selected.reschedule && (
-                    <RescheduleSessionBanner reschedule={selected.reschedule} variant="active" compact />
-                )}
-
-                {isSessionMissed(selected) && (
-                    <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-                        <div className="flex gap-2">
-                            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-                            <p>
-                                {selected?.attendance_blocked_message ||
-                                    'This session was marked as missed. Attendance is no longer available.'}
-                            </p>
-                        </div>
-                    </div>
-                )}
-
-                {selected?.attendance_state === 'rescheduled_away' && !selected.reschedule && (
-                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                        <div className="flex gap-2">
-                            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-                            <p>{selected.attendance_blocked_message || 'This session has been rescheduled. Attendance is not available here.'}</p>
-                        </div>
-                    </div>
-                )}
-
-                {selected && (
-                    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                        <div className="grid gap-3 sm:grid-cols-2">
-                            <Info label="Time" value={`${formatTime(selected.start_time)} – ${formatTime(selected.end_time)}`} icon={Clock} />
-                            <Info
-                                label="Location"
-                                value={selected.classroom || selected.building || 'Not set'}
-                                icon={MapPin}
-                            />
-                        </div>
-                    </section>
-                )}
-
-                <section className="space-y-3">
-                    {canCheckIn && (
-                        <button
-                            type="button"
-                            onClick={handleCheckIn}
-                            disabled={submitting}
-                            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-6 py-4 text-lg font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
-                        >
-                            {submitting ? <Loader2 className="size-5 animate-spin" /> : <LogIn className="size-5" />}
-                            Check In
-                        </button>
-                    )}
-
-                    {activeSession && canCheckOut && isBeforeSessionEnd(activeSession) && (
-                        <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-center text-sm text-sky-800">
-                            You can check out anytime. Early departure will be recorded as early leave.
-                        </div>
-                    )}
-
-                    {activeSession && canCheckOut && activeSession.timing?.is_after_checkout_grace && (
-                        <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-center text-sm text-orange-800">
-                            Check-out will be recorded as overtime
-                            {activeSession.timing.checkout_grace_deadline_display
-                                ? ` (grace ended at ${activeSession.timing.checkout_grace_deadline_display})`
-                                : ''}
-                            .
-                        </div>
-                    )}
-
-                    {canCheckOut && (
-                        <button
-                            type="button"
-                            onClick={handleCheckOut}
-                            disabled={submitting}
-                            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-violet-600 px-6 py-4 text-lg font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
-                        >
-                            {submitting ? <Loader2 className="size-5 animate-spin" /> : <LogOut className="size-5" />}
-                            {checkOutLabel}
-                        </button>
-                    )}
-
-                    {selected?.is_completed && !activeSession && (
-                        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-center text-sm font-medium text-emerald-800">
-                            Attendance complete for this session.
-                        </div>
-                    )}
-                </section>
             </div>
 
             <FaceCaptureModal
-                open={faceModalOpen}
-                onOpenChange={setFaceModalOpen}
+                open={faceModalOpen && !checkInComplete}
+                onOpenChange={(open) => {
+                    if (checkInComplete || signingOutRef.current) {
+                        return;
+                    }
+                    setFaceModalOpen(open);
+                }}
                 title="Verify your face"
                 description="Confirm your identity to save attendance."
                 captureLabel="Verify and continue"
