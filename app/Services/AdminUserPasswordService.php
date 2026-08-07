@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\ActivityLog;
 use App\Models\User;
+use App\Support\PasswordShareSession;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
@@ -45,6 +46,12 @@ class AdminUserPasswordService
         $target->save();
 
         DB::table('sessions')->where('user_id', $target->id)->delete();
+
+        if ($mode === 'generate' && $plainPassword) {
+            PasswordShareSession::store('user', $target->id, $plainPassword);
+        } else {
+            PasswordShareSession::forget('user', $target->id);
+        }
 
         $notificationSent = false;
 

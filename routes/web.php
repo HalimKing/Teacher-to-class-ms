@@ -362,8 +362,19 @@ Route::middleware(['auth:web', 'verified', 'password.changed'])->group(function 
                 ->name('teachers.password-management')
                 ->middleware('permission:admin.teachers.password-management');
 
+            // GET fallback: avoid 405 when refreshing/bookmarking the POST-only reset URL
+            Route::get('teachers/{teacher}/reset-password', [TeacherController::class, 'redirectPasswordReset'])
+                ->name('teachers.reset-password.show')
+                ->middleware('permission:admin.teachers.password-management');
             Route::post('teachers/{teacher}/reset-password', [TeacherController::class, 'resetPassword'])
-                ->name('teachers.reset-password');
+                ->name('teachers.reset-password')
+                ->middleware('permission:admin.teachers.password-management');
+            Route::post('teachers/{teacher}/share-password-email', [TeacherController::class, 'sendPasswordShareEmail'])
+                ->name('teachers.share-password-email')
+                ->middleware('permission:admin.teachers.password-management');
+            Route::post('teachers/{teacher}/share-password-whatsapp', [TeacherController::class, 'logPasswordWhatsAppShare'])
+                ->name('teachers.share-password-whatsapp')
+                ->middleware('permission:admin.teachers.password-management');
             Route::post('teachers/{teacher}/face-enrollment', [TeacherFaceEnrollmentController::class, 'store'])
                 ->name('teachers.face-enrollment.store')
                 ->middleware('permission:admin.teachers.edit');
@@ -662,6 +673,12 @@ Route::middleware(['auth:web', 'verified', 'password.changed'])->group(function 
                         ->middleware('permission:admin.user-management.users.view');
                     Route::post('users/{user}/reset-password', [UserController::class, 'resetPassword'])
                         ->name('users.reset-password')
+                        ->middleware('permission:admin.user-management.users.reset-password');
+                    Route::post('users/{user}/share-password-email', [UserController::class, 'sendPasswordShareEmail'])
+                        ->name('users.share-password-email')
+                        ->middleware('permission:admin.user-management.users.reset-password');
+                    Route::post('users/{user}/share-password-whatsapp', [UserController::class, 'logPasswordWhatsAppShare'])
+                        ->name('users.share-password-whatsapp')
                         ->middleware('permission:admin.user-management.users.reset-password');
                     Route::patch('users/{user}/status', [UserController::class, 'updateStatus'])
                         ->name('users.update-status')

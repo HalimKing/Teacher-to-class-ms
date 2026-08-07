@@ -281,7 +281,11 @@ export default function UsersIndexPage({
             const result = await apiJsonRequest<{
                 success: boolean;
                 message?: string;
-                data?: { temporary_password?: string | null };
+                data?: {
+                    temporary_password?: string | null;
+                    can_share_credentials?: boolean;
+                    login_url?: string;
+                };
             }>(route('admin.user-management.users.reset-password', resetUser.id), {
                 method: 'POST',
                 body: JSON.stringify(payload),
@@ -290,7 +294,11 @@ export default function UsersIndexPage({
             toast.success(result.message || 'Password reset successfully.', { theme: 'dark' });
             router.reload({ only: ['users'] });
 
-            return { temporary_password: result.data?.temporary_password ?? null };
+            return {
+                temporary_password: result.data?.temporary_password ?? null,
+                can_share_credentials: result.data?.can_share_credentials ?? false,
+                login_url: result.data?.login_url ?? '/login',
+            };
         } catch (error) {
             toast.error(error instanceof Error ? error.message : 'Password reset failed.', { theme: 'dark' });
         } finally {

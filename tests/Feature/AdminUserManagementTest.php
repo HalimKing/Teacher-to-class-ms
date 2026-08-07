@@ -125,6 +125,23 @@ it('resets another users password without logging plaintext password', function 
         ->and(json_encode($log->metadata))->not->toContain($response->json('data.temporary_password'));
 });
 
+it('can email temporary admin credentials after password reset', function () {
+    Notification::fake();
+
+    $this->actingAs($this->admin)->postJson(route('admin.user-management.users.reset-password', $this->targetUser), [
+        'mode' => 'generate',
+        'force_change_on_login' => true,
+    ])->assertOk()
+        ->assertJsonPath('data.can_share_credentials', true);
+
+    $this->actingAs($this->admin)
+        ->postJson(route('admin.user-management.users.share-password-email', $this->targetUser))
+        ->assertOk()
+        ->assertJsonPath('success', true);
+
+    Notification::assertSentTo($this->targetUser, \App\Notifications\TemporaryPasswordNotification::class);
+});
+
 it('prevents resetting your own password through admin reset endpoint', function () {
     $this->actingAs($this->admin)->postJson(route('admin.user-management.users.reset-password', $this->admin), [
         'mode' => 'generate',
@@ -183,18 +200,42 @@ it('can optionally send welcome email when creating a user', function () {
 
     $email = 'welcome-' . uniqid() . '@example.com';
 
-    $this->actingAs($this->admin)->post(route('admin.user-management.users.store'), [
+    $response = $this->actingAs($this->admin)->post(route('admin.user-management.users.store'), [
         'name' => 'Welcome User',
         'email' => $email,
         'staff_id' => 'WEL' . uniqid(),
         'roles' => ['Super Admin'],
         'status' => User::STATUS_ACTIVE,
         'send_welcome_email' => true,
-    ])->assertRedirect();
+    ]);
+
+    $response->assertRedirect()
+        ->assertSessionHas('generatedPassword');
 
     $created = User::query()->where('email', $email)->first();
+    $temporaryPassword = session('generatedPassword');
 
-    Notification::assertSentTo($created, AdminUserWelcomeNotification::class);
+    expect($created)->not->toBeNull()
+        ->and(Hash::check($temporaryPassword, $created->password))->toBeTrue();
+
+    Notification::assertSentTo(
+        $created,
+        AdminUserWelcomeNotification::class,
+        function (AdminUserWelcomeNotification $notification) use ($created, $temporaryPassword) {
+            expect($notification->temporaryPassword)->toBe($temporaryPassword)
+                ->and(Hash::check($notification->temporaryPassword, $created->password))->toBeTrue();
+
+            $mail = $notification->toMail($created);
+            $rendered = html_entity_decode((string) $mail->render(), ENT_QUOTES | ENT_HTML5);
+
+            expect($rendered)->toContain($created->email)
+                ->and($rendered)->toContain($temporaryPassword)
+                ->and($rendered)->toContain('Temporary Password')
+                ->and($rendered)->toContain('change your password immediately');
+
+            return true;
+        }
+    );
 });
 
 it('supports bulk status updates for selected users', function () {

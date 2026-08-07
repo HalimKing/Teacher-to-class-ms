@@ -8,11 +8,16 @@ import {
   Eye,
   EyeOff,
   Copy,
-  Check
+  Check,
+  Mail,
+  MessageCircle,
+  Loader2,
 } from 'lucide-react';
 import AppLayout from '@/layouts/app-layout';
 import { Head, router, usePage } from '@inertiajs/react';
 import { ToastContainer, toast, Bounce } from 'react-toastify';
+import { apiJsonRequest, getApiErrorMessage } from '@/lib/http';
+import { buildTemporaryPasswordWhatsAppMessage, buildWhatsAppShareUrl } from '@/lib/whatsapp';
 import { PagePropsWithFlash } from '@/types';
 
 type Faculty = {
@@ -40,19 +45,51 @@ interface Teacher {
 interface PasswordManagementPageProps {
   teacher?: Teacher;
   generatedPassword?: string;
+  canShareCredentials?: boolean;
+  loginUrl?: string;
 }
 
-const TeacherPasswordManagementPage = ({ teacher: initialTeacher, generatedPassword }: PasswordManagementPageProps) => {
-  const [employeeId, setEmployeeId] = useState('');
+const TeacherPasswordManagementPage = ({
+  teacher: initialTeacher,
+  generatedPassword,
+  canShareCredentials: initialCanShare = false,
+  loginUrl = '/login',
+}: PasswordManagementPageProps) => {
+  const [employeeId, setEmployeeId] = useState(
+    initialTeacher?.employee_id ? String(initialTeacher.employee_id) : '',
+  );
   const [teacher, setTeacher] = useState<Teacher | null>(initialTeacher || null);
   const [isSearching, setIsSearching] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [newPassword, setNewPassword] = useState(generatedPassword || '');
   const [copied, setCopied] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
-  console.log(newPassword);
+  const [canShareCredentials, setCanShareCredentials] = useState(initialCanShare || Boolean(generatedPassword));
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [isSharingWhatsApp, setIsSharingWhatsApp] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
 
   const { flash } = usePage().props as PagePropsWithFlash;
+
+  useEffect(() => {
+    setTeacher(initialTeacher || null);
+    if (initialTeacher?.employee_id) {
+      setEmployeeId(String(initialTeacher.employee_id));
+    }
+  }, [initialTeacher]);
+
+  useEffect(() => {
+    if (generatedPassword) {
+      setNewPassword(generatedPassword);
+      setShowPassword(true);
+      setCanShareCredentials(true);
+      setEmailSent(false);
+    }
+  }, [generatedPassword]);
+
+  useEffect(() => {
+    setCanShareCredentials(initialCanShare || Boolean(generatedPassword));
+  }, [initialCanShare, generatedPassword]);
 
   useEffect(() => {
     if (flash?.success) {
@@ -99,16 +136,21 @@ const TeacherPasswordManagementPage = ({ teacher: initialTeacher, generatedPassw
     setIsSearching(true);
     
     router.get(route('admin.teachers.password-management'), 
-      { id: teacher?.id },
+      { employee_id: employeeId.trim() },
       {
         preserveState: true,
+        preserveScroll: true,
         onSuccess: (page: any) => {
           setIsSearching(false);
           if (page.props.teacher) {
             setTeacher(page.props.teacher);
             setNewPassword('');
+            setCanShareCredentials(Boolean(page.props.canShareCredentials));
+            setEmailSent(false);
           } else {
             setTeacher(null);
+            setNewPassword('');
+            setCanShareCredentials(false);
             toast.error('No staff member found with this employee ID', {
               position: "top-right",
               autoClose: 3000,
@@ -132,18 +174,118 @@ const TeacherPasswordManagementPage = ({ teacher: initialTeacher, generatedPassw
       setIsResetting(true);
       
       router.post(route('admin.teachers.reset-password', teacher.id), {}, {
-        preserveState: true,
+        preserveScroll: true,
         onSuccess: (page: any) => {
           setIsResetting(false);
-          if (page.props.generatedPassword) {
-            setNewPassword(page.props.generatedPassword);
+          const password =
+            page.props.generatedPassword ||
+            page.props.flash?.generatedPassword ||
+            null;
+
+          if (page.props.teacher) {
+            setTeacher(page.props.teacher);
+          }
+
+          if (password) {
+            setNewPassword(password);
             setShowPassword(true);
+            setCanShareCredentials(true);
+            setEmailSent(false);
+          } else if (page.props.canShareCredentials) {
+            setCanShareCredentials(true);
           }
         },
         onError: () => {
           setIsResetting(false);
         }
       });
+    }
+  };
+
+  const handleSendEmail = async () => {
+    if (!teacher || !newPassword || !canShareCredentials) {
+      return;
+    }
+
+    setIsSendingEmail(true);
+    try {
+      const result = await apiJsonRequest<{ success: boolean; message?: string }>(
+        route('admin.teachers.share-password-email', teacher.id),
+        { method: 'POST' },
+      );
+      setEmailSent(true);
+      toast.success(result.message || 'Credentials emailed successfully.', {
+        position: 'top-right',
+        autoClose: 4000,
+        theme: 'dark',
+        transition: Bounce,
+      });
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Failed to send email. Please try again.'), {
+        position: 'top-right',
+        autoClose: 5000,
+        theme: 'dark',
+        transition: Bounce,
+      });
+    } finally {
+      setIsSendingEmail(false);
+    }
+  };
+
+  const handleShareWhatsApp = async () => {
+    if (!teacher || !newPassword || !canShareCredentials) {
+      return;
+    }
+
+    setIsSharingWhatsApp(true);
+    try {
+      await apiJsonRequest<{ success: boolean; message?: string }>(
+        route('admin.teachers.share-password-whatsapp', teacher.id),
+        { method: 'POST' },
+      );
+
+      const message = buildTemporaryPasswordWhatsAppMessage({
+        recipientName: `${teacher.title} ${teacher.first_name} ${teacher.last_name}`.trim(),
+        appName: 'UBIDS Attendance',
+        loginUrl: loginUrl.startsWith('http') ? loginUrl : `${window.location.origin}${loginUrl}`,
+        email: teacher.email,
+        temporaryPassword: newPassword,
+      });
+
+      const url = buildWhatsAppShareUrl(message, teacher.phone);
+      const popup = window.open(url, '_blank', 'noopener,noreferrer');
+
+      if (!popup) {
+        toast.warning('Popup blocked. Allow popups or open WhatsApp manually.', {
+          position: 'top-right',
+          autoClose: 5000,
+          theme: 'dark',
+          transition: Bounce,
+        });
+      } else if (!teacher.phone) {
+        toast.info('No phone on file — pick the contact in WhatsApp after the chat opens.', {
+          position: 'top-right',
+          autoClose: 5000,
+          theme: 'dark',
+          transition: Bounce,
+        });
+      } else {
+        toast.success('WhatsApp opened with a pre-filled message.', {
+          position: 'top-right',
+          autoClose: 3000,
+          theme: 'dark',
+          transition: Bounce,
+        });
+      }
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Unable to prepare WhatsApp share. Please try again.'), {
+        position: 'top-right',
+        autoClose: 5000,
+        theme: 'dark',
+        transition: Bounce,
+      });
+    } finally {
+      setIsSharingWhatsApp(false);
     }
   };
 
@@ -175,6 +317,8 @@ const TeacherPasswordManagementPage = ({ teacher: initialTeacher, generatedPassw
     setTeacher(null);
     setNewPassword('');
     setShowPassword(false);
+    setCanShareCredentials(false);
+    setEmailSent(false);
   };
 
   const breadcrumbs = [
@@ -311,7 +455,7 @@ const TeacherPasswordManagementPage = ({ teacher: initialTeacher, generatedPassw
                           Faculty
                         </label>
                         <p className="mt-1 text-sm font-medium text-slate-900 dark:text-white">
-                          {teacher.faculty.name}
+                          {teacher.faculty?.name || '—'}
                         </p>
                       </div>
                       <div>
@@ -319,7 +463,7 @@ const TeacherPasswordManagementPage = ({ teacher: initialTeacher, generatedPassw
                           Department
                         </label>
                         <p className="mt-1 text-sm font-medium text-slate-900 dark:text-white">
-                          {teacher.department.name}
+                          {teacher.department?.name || '—'}
                         </p>
                       </div>
                     </div>
@@ -360,7 +504,7 @@ const TeacherPasswordManagementPage = ({ teacher: initialTeacher, generatedPassw
               )}
 
               {/* New Password Display */}
-              {newPassword && (
+              {newPassword && canShareCredentials && (
                 <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-700 p-6 animate-fadeIn">
                   <div className="flex items-center space-x-3 mb-4">
                     <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
@@ -371,7 +515,7 @@ const TeacherPasswordManagementPage = ({ teacher: initialTeacher, generatedPassw
                   
                   <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-4 mb-4">
                     <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-2">
-                      New Password
+                      Temporary Password
                     </label>
                     <div className="flex items-center space-x-2">
                       <div className="flex-1 relative">
@@ -399,11 +543,42 @@ const TeacherPasswordManagementPage = ({ teacher: initialTeacher, generatedPassw
                     </div>
                   </div>
 
-                  <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4">
-                    <p className="text-sm text-green-800 dark:text-green-200">
-                      <strong>Important:</strong> Please save this password and provide it to the staff member securely. 
-                      They should change it after their first login.
+                  <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 mb-5">
+                    <p className="text-sm text-amber-900 dark:text-amber-200">
+                      <strong>Security:</strong> Share these credentials only with the staff member. Ask them to
+                      change the password immediately after their first login.
                     </p>
+                  </div>
+
+                  <div className="mb-2">
+                    <h4 className="text-sm font-semibold text-slate-900 dark:text-white mb-3">
+                      Share credentials
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={handleSendEmail}
+                        disabled={isSendingEmail || !teacher?.email}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:hover:bg-slate-600"
+                      >
+                        {isSendingEmail ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+                        {emailSent ? 'Email Sent' : 'Send Email'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleShareWhatsApp}
+                        disabled={isSharingWhatsApp}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#25D366] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1ebe57] disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {isSharingWhatsApp ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />}
+                        Share via WhatsApp
+                      </button>
+                    </div>
+                    {!teacher?.phone && (
+                      <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                        No phone number on file — WhatsApp will open so you can choose the contact.
+                      </p>
+                    )}
                   </div>
                 </div>
               )}

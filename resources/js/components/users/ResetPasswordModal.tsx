@@ -1,8 +1,11 @@
 import { type UserListItem } from '@/components/users/types';
 import { Button } from '@/components/ui/button';
+import { apiJsonRequest, getApiErrorMessage } from '@/lib/http';
 import { cn } from '@/lib/utils';
-import { Check, Copy, Eye, EyeOff, Key, Loader2, X } from 'lucide-react';
+import { buildTemporaryPasswordWhatsAppMessage, buildWhatsAppShareUrl } from '@/lib/whatsapp';
+import { Check, Copy, Eye, EyeOff, Key, Loader2, Mail, MessageCircle, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { toast } from 'react-toastify';
 
 interface ResetPasswordModalProps {
     open: boolean;
@@ -15,7 +18,7 @@ interface ResetPasswordModalProps {
         password_confirmation?: string;
         force_change_on_login: boolean;
         send_reset_link: boolean;
-    }) => Promise<{ temporary_password?: string | null } | void>;
+    }) => Promise<{ temporary_password?: string | null; can_share_credentials?: boolean; login_url?: string } | void>;
 }
 
 export default function ResetPasswordModal({ open, user, loading, onClose, onSubmit }: ResetPasswordModalProps) {
@@ -26,7 +29,12 @@ export default function ResetPasswordModal({ open, user, loading, onClose, onSub
     const [sendResetLink, setSendResetLink] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
     const [generatedPassword, setGeneratedPassword] = useState<string | null>(null);
+    const [canShareCredentials, setCanShareCredentials] = useState(false);
+    const [loginUrl, setLoginUrl] = useState('/login');
     const [copied, setCopied] = useState(false);
+    const [isSendingEmail, setIsSendingEmail] = useState(false);
+    const [isSharingWhatsApp, setIsSharingWhatsApp] = useState(false);
+    const [emailSent, setEmailSent] = useState(false);
 
     useEffect(() => {
         if (!open) {
@@ -37,7 +45,10 @@ export default function ResetPasswordModal({ open, user, loading, onClose, onSub
             setSendResetLink(false);
             setShowPassword(false);
             setGeneratedPassword(null);
+            setCanShareCredentials(false);
+            setLoginUrl('/login');
             setCopied(false);
+            setEmailSent(false);
         }
     }, [open]);
 
@@ -56,6 +67,9 @@ export default function ResetPasswordModal({ open, user, loading, onClose, onSub
 
         if (result?.temporary_password) {
             setGeneratedPassword(result.temporary_password);
+            setCanShareCredentials(Boolean(result.can_share_credentials ?? true));
+            setLoginUrl(result.login_url || '/login');
+            setEmailSent(false);
         }
     };
 
@@ -67,6 +81,59 @@ export default function ResetPasswordModal({ open, user, loading, onClose, onSub
         await navigator.clipboard.writeText(generatedPassword);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
+    };
+
+    const handleSendEmail = async () => {
+        if (!generatedPassword || !canShareCredentials) {
+            return;
+        }
+
+        setIsSendingEmail(true);
+        try {
+            const result = await apiJsonRequest<{ success: boolean; message?: string }>(
+                route('admin.user-management.users.share-password-email', user.id),
+                { method: 'POST' },
+            );
+            setEmailSent(true);
+            toast.success(result.message || 'Credentials emailed successfully.', { theme: 'dark' });
+        } catch (error) {
+            toast.error(getApiErrorMessage(error, 'Failed to send email. Please try again.'), { theme: 'dark' });
+        } finally {
+            setIsSendingEmail(false);
+        }
+    };
+
+    const handleShareWhatsApp = async () => {
+        if (!generatedPassword || !canShareCredentials) {
+            return;
+        }
+
+        setIsSharingWhatsApp(true);
+        try {
+            await apiJsonRequest<{ success: boolean; message?: string }>(
+                route('admin.user-management.users.share-password-whatsapp', user.id),
+                { method: 'POST' },
+            );
+
+            const message = buildTemporaryPasswordWhatsAppMessage({
+                recipientName: user.name,
+                appName: 'UBIDS Attendance',
+                loginUrl: loginUrl.startsWith('http') ? loginUrl : `${window.location.origin}${loginUrl}`,
+                email: user.email,
+                temporaryPassword: generatedPassword,
+            });
+
+            const popup = window.open(buildWhatsAppShareUrl(message), '_blank', 'noopener,noreferrer');
+            if (!popup) {
+                toast.warning('Popup blocked. Allow popups or open WhatsApp manually.', { theme: 'dark' });
+            } else {
+                toast.success('WhatsApp opened with a pre-filled message.', { theme: 'dark' });
+            }
+        } catch (error) {
+            toast.error(getApiErrorMessage(error, 'Unable to prepare WhatsApp share.'), { theme: 'dark' });
+        } finally {
+            setIsSharingWhatsApp(false);
+        }
     };
 
     return (
@@ -90,8 +157,10 @@ export default function ResetPasswordModal({ open, user, loading, onClose, onSub
                 {generatedPassword ? (
                     <div className="space-y-4">
                         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900 dark:bg-emerald-950/30">
-                            <p className="text-sm font-medium text-emerald-800 dark:text-emerald-300">Temporary password generated</p>
-                            <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">Share this securely with the user. It will not be shown again.</p>
+                            <p className="text-sm font-medium text-emerald-800 dark:text-emerald-300">Password reset successful</p>
+                            <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">
+                                Share this temporary password securely. The user should change it after first login.
+                            </p>
                             <div className="mt-3 flex items-center gap-2">
                                 <code className="flex-1 rounded-lg bg-white px-3 py-2 text-sm dark:bg-sidebar-accent">{generatedPassword}</code>
                                 <Button type="button" variant="outline" size="icon" onClick={handleCopy}>
@@ -99,6 +168,28 @@ export default function ResetPasswordModal({ open, user, loading, onClose, onSub
                                 </Button>
                             </div>
                         </div>
+
+                        {canShareCredentials ? (
+                            <div className="space-y-2">
+                                <p className="text-sm font-medium text-sidebar-foreground">Share credentials</p>
+                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                    <Button type="button" variant="outline" onClick={handleSendEmail} disabled={isSendingEmail}>
+                                        {isSendingEmail ? <Loader2 className="size-4 animate-spin" /> : <Mail className="size-4" />}
+                                        {emailSent ? 'Email Sent' : 'Send Email'}
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        className="bg-[#25D366] text-white hover:bg-[#1ebe57]"
+                                        onClick={handleShareWhatsApp}
+                                        disabled={isSharingWhatsApp}
+                                    >
+                                        {isSharingWhatsApp ? <Loader2 className="size-4 animate-spin" /> : <MessageCircle className="size-4" />}
+                                        Share via WhatsApp
+                                    </Button>
+                                </div>
+                            </div>
+                        ) : null}
+
                         <div className="flex justify-end">
                             <Button type="button" onClick={onClose}>Done</Button>
                         </div>

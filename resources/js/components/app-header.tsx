@@ -587,10 +587,8 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                         </Sheet>
                     </div>
 
-                    <Link href="/dashboard" prefetch className="flex-shrink-0 flex items-center space-x-2">
-                        <div className="hidden sm:block">
-                            <AppLogo />
-                        </div>
+                    <Link href="/dashboard" prefetch className="hidden flex-shrink-0 items-center sm:flex">
+                        <AppLogo />
                     </Link>
 
                     {/* Desktop Navigation */}

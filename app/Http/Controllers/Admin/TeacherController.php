@@ -6,13 +6,15 @@ use App\Http\Controllers\Controller;
 use App\Models\Faculty;
 use App\Models\Department;
 use App\Models\Teacher;
+use App\Notifications\TemporaryPasswordNotification;
 use App\Services\ActivityLogService;
 use App\Services\AdminTeacherManagementService;
+use App\Support\PasswordShareSession;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Maatwebsite\Excel\Facades\Excel;
 
@@ -205,66 +207,177 @@ class TeacherController extends Controller
             ->with('success', 'Staff member deleted successfully!');
     }
 
-        public function passwordManagement(Request $request)
+    public function passwordManagement(Request $request)
     {
         $teacher = null;
-        
-        // If employee_id is provided, search for the teacher
-        if ($request->has('employee_id') && !empty($request->employee_id)) {
+        $employeeId = trim((string) $request->query('employee_id', ''));
+
+        if ($employeeId !== '') {
             $teacher = Teacher::with(['faculty', 'department'])
-                ->where('employee_id', $request->employee_id)
+                ->where('employee_id', $employeeId)
                 ->first();
-            
-            if (!$teacher) {
-                return Inertia::render('admin/teacher/password-management', [
-                    'teacher' => null,
-                ])->with('error', 'No staff member found with this employee ID.');
-            }
         }
 
-        return Inertia::render('admin/teacher/password-management', [
+        $response = Inertia::render('admin/teacher/password-management', [
             'teacher' => $teacher,
+            'generatedPassword' => $request->session()->get('generatedPassword'),
+            'canShareCredentials' => $teacher ? PasswordShareSession::has('teacher', $teacher->id) : false,
+            'loginUrl' => url('/login'),
+        ]);
+
+        if ($employeeId !== '' && ! $teacher) {
+            return $response->with('error', 'No staff member found with this employee ID.');
+        }
+
+        return $response;
+    }
+
+    public function redirectPasswordReset(Teacher $teacher)
+    {
+        return redirect()->route('admin.teachers.password-management', [
+            'employee_id' => $teacher->employee_id,
         ]);
     }
 
-   public function resetPassword(Request $request, Teacher $teacher)
+    public function resetPassword(Request $request, Teacher $teacher)
     {
         try {
-            // Generate a secure random password
-            $newPassword = 'password' . rand(1000, 9999); // Example: you can use a more secure method
-            
-            // Hash and update the password
-            $teacher->password = Hash::make($newPassword);
-            $teacher->password_changed_at = null; // Force password change on next login
+            $newPassword = Str::password(16);
+
+            // Teacher model casts password as 'hashed' — assign plaintext once.
+            $teacher->password = $newPassword;
+            $teacher->password_changed_at = null;
             $teacher->save();
-            
-            // Log the password reset action
-            Log::info('Password reset for teacher', [
-                'teacher_id' => $teacher->id,
-                'employee_id' => $teacher->employee_id,
-                'reset_by' => auth()->id(),
-                'reset_at' => now(),
-            ]);
-            
-            // Optional: Send email notification to teacher
-         
-            
-            // Load relationships for response
+
+            PasswordShareSession::store('teacher', $teacher->id, $newPassword);
+
+            app(ActivityLogService::class)->logUserManagement(
+                'teacher_password_reset',
+                "Password reset for staff {$teacher->first_name} {$teacher->last_name} ({$teacher->employee_id})",
+                [
+                    'teacher_id' => $teacher->id,
+                    'employee_id' => $teacher->employee_id,
+                    'email' => $teacher->email,
+                ]
+            );
+
             $teacher->load(['faculty', 'department']);
-            
-            return Inertia::render('admin/teacher/password-management', [
-                'teacher' => $teacher,
-                'generatedPassword' => $newPassword,
-            ])->with('success', 'Password reset successfully! Please provide the new password to the staff member.');
-            
+
+            return redirect()
+                ->route('admin.teachers.password-management', [
+                    'employee_id' => $teacher->employee_id,
+                ])
+                ->with([
+                    'success' => 'Password reset successfully! Share the temporary password securely with the staff member.',
+                    'generatedPassword' => $newPassword,
+                ]);
         } catch (\Exception $e) {
             Log::error('Password reset failed', [
                 'teacher_id' => $teacher->id,
                 'error' => $e->getMessage(),
             ]);
-            
-            return back()->with('error', 'Failed to reset password. Please try again.');
+
+            return redirect()
+                ->route('admin.teachers.password-management', [
+                    'employee_id' => $teacher->employee_id,
+                ])
+                ->with('error', 'Failed to reset password. Please try again.');
         }
+    }
+
+    public function sendPasswordShareEmail(Teacher $teacher): JsonResponse
+    {
+        $temporaryPassword = PasswordShareSession::get('teacher', $teacher->id);
+
+        if ($temporaryPassword === null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'The temporary password is no longer available. Please reset the password again to share credentials.',
+            ], 422);
+        }
+
+        if (! $teacher->email) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This staff member does not have an email address on file.',
+            ], 422);
+        }
+
+        try {
+            $teacher->notify(new TemporaryPasswordNotification(
+                temporaryPassword: $temporaryPassword,
+                sharedByName: auth()->user()?->name ?? 'an administrator',
+                loginUrl: url('/login'),
+                accountType: 'staff',
+            ));
+
+            app(ActivityLogService::class)->logUserManagement(
+                'teacher_password_shared_email',
+                "Temporary password emailed to {$teacher->email}",
+                [
+                    'teacher_id' => $teacher->id,
+                    'employee_id' => $teacher->employee_id,
+                    'email' => $teacher->email,
+                    'channel' => 'email',
+                ]
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Login credentials have been emailed to ' . $teacher->email . '.',
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Failed to email teacher password credentials', [
+                'teacher_id' => $teacher->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            app(ActivityLogService::class)->logUserManagement(
+                'teacher_password_shared_email_failed',
+                "Failed to email temporary password to {$teacher->email}",
+                [
+                    'teacher_id' => $teacher->id,
+                    'email' => $teacher->email,
+                    'channel' => 'email',
+                    'error' => $e->getMessage(),
+                ]
+            );
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to send the email. Please try again or share via WhatsApp.',
+            ], 500);
+        }
+    }
+
+    public function logPasswordWhatsAppShare(Teacher $teacher): JsonResponse
+    {
+        if (! PasswordShareSession::has('teacher', $teacher->id)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'The temporary password is no longer available. Please reset the password again.',
+            ], 422);
+        }
+
+        app(ActivityLogService::class)->logUserManagement(
+            'teacher_password_shared_whatsapp',
+            "Temporary password share via WhatsApp initiated for {$teacher->first_name} {$teacher->last_name}",
+            [
+                'teacher_id' => $teacher->id,
+                'employee_id' => $teacher->employee_id,
+                'phone' => $teacher->phone,
+                'channel' => 'whatsapp',
+            ]
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => 'WhatsApp share opened. Complete sending the message in WhatsApp.',
+            'data' => [
+                'phone' => $teacher->phone,
+                'has_phone' => filled($teacher->phone),
+            ],
+        ]);
     }
 
     /**

@@ -8,11 +8,14 @@ use App\Http\Requests\Admin\StoreUserRequest;
 use App\Http\Requests\Admin\UpdateUserRequest;
 use App\Models\User;
 use App\Notifications\AdminUserWelcomeNotification;
+use App\Notifications\TemporaryPasswordNotification;
 use App\Services\ActivityLogService;
 use App\Services\AdminUserManagementService;
 use App\Services\AdminUserPasswordService;
+use App\Support\PasswordShareSession;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -73,13 +76,16 @@ class UserController extends Controller
             $user->notify(new AdminUserWelcomeNotification(
                 roles: $validated['roles'],
                 createdByName: $request->user()->name,
+                temporaryPassword: $temporaryPassword,
             ));
         }
 
         return redirect()
             ->route('admin.user-management.users.index')
             ->with([
-                'success' => 'User created successfully. Share the temporary password securely with the user.',
+                'success' => $request->boolean('send_welcome_email')
+                    ? 'User created successfully. A welcome email with temporary login credentials has been sent.'
+                    : 'User created successfully. Share the temporary password securely with the user.',
                 'generatedPassword' => $temporaryPassword,
             ]);
     }
@@ -166,7 +172,96 @@ class UserController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Password reset successfully.',
-            'data' => $result,
+            'data' => array_merge($result, [
+                'can_share_credentials' => PasswordShareSession::has('user', $user->id),
+                'login_url' => url('/login'),
+            ]),
+        ]);
+    }
+
+    public function sendPasswordShareEmail(User $user): JsonResponse
+    {
+        $this->authorize('resetPassword', $user);
+
+        $temporaryPassword = PasswordShareSession::get('user', $user->id);
+
+        if ($temporaryPassword === null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'The temporary password is no longer available. Please reset the password again to share credentials.',
+            ], 422);
+        }
+
+        try {
+            $user->notify(new TemporaryPasswordNotification(
+                temporaryPassword: $temporaryPassword,
+                sharedByName: auth()->user()?->name ?? 'an administrator',
+                loginUrl: url('/login'),
+                accountType: 'administrator',
+            ));
+
+            app(ActivityLogService::class)->logUserManagement(
+                'user_password_shared_email',
+                "Temporary password emailed to {$user->email}",
+                [
+                    'user_id' => $user->id,
+                    'email' => $user->email,
+                    'channel' => 'email',
+                ]
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Login credentials have been emailed to ' . $user->email . '.',
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Failed to email user password credentials', [
+                'user_id' => $user->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            app(ActivityLogService::class)->logUserManagement(
+                'user_password_shared_email_failed',
+                "Failed to email temporary password to {$user->email}",
+                [
+                    'user_id' => $user->id,
+                    'email' => $user->email,
+                    'channel' => 'email',
+                    'error' => $e->getMessage(),
+                ]
+            );
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to send the email. Please try again or share via WhatsApp.',
+            ], 500);
+        }
+    }
+
+    public function logPasswordWhatsAppShare(User $user): JsonResponse
+    {
+        $this->authorize('resetPassword', $user);
+
+        if (! PasswordShareSession::has('user', $user->id)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'The temporary password is no longer available. Please reset the password again.',
+            ], 422);
+        }
+
+        app(ActivityLogService::class)->logUserManagement(
+            'user_password_shared_whatsapp',
+            "Temporary password share via WhatsApp initiated for {$user->name}",
+            [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'channel' => 'whatsapp',
+            ]
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => 'WhatsApp share opened. Complete sending the message in WhatsApp.',
         ]);
     }
 
