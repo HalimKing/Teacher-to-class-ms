@@ -17,7 +17,8 @@ use Illuminate\Support\Collection;
 class AdminStaffAttendanceReportService
 {
     public function __construct(
-        private AttendanceTimingService $timingService
+        private AttendanceTimingService $timingService,
+        private HolidayBreakService $holidayBreaks,
     ) {}
 
     public function baseQuery(): Builder
@@ -523,6 +524,14 @@ class AdminStaffAttendanceReportService
             'attendance_status' => $record->attendance_status,
             'exception_category' => $record->exception_category ?: AttendanceExceptionCategory::NORMAL,
             'exception_category_label' => AttendanceExceptionCategory::label($record->exception_category),
+            'holiday_break_id' => $record->holiday_break_id,
+            'report_status_label' => $this->holidayBreaks->reportStatusLabel(
+                $record->attendance_status,
+                $record->exception_category,
+                $record->date
+                    ? $this->holidayBreaks->dayClassification($record->date, $record->staff)
+                    : HolidayBreakService::DAY_NORMAL,
+            ),
             'authorized_venue_used' => (bool) $record->authorized_venue_used,
             'original_venue' => $record->venueChangeAuthorization?->originalClassroom?->name
                 ?? $record->timetable?->classRoom?->name,
@@ -624,12 +633,21 @@ class AdminStaffAttendanceReportService
 
     private function expectedAdministratorsTodayCount(): int
     {
-        $today = now()->format('l');
+        $today = now();
+        $teacherIds = TimeTable::where('staff_type', Teacher::STAFF_TYPE_ADMINISTRATOR)
+            ->where('day_of_week', $today->format('l'))
+            ->distinct()
+            ->pluck('teacher_id');
 
-        return TimeTable::where('staff_type', Teacher::STAFF_TYPE_ADMINISTRATOR)
-            ->where('day_of_week', now()->format('l'))
-            ->distinct('teacher_id')
-            ->count('teacher_id');
+        if ($teacherIds->isEmpty()) {
+            return 0;
+        }
+
+        $teachers = Teacher::query()->whereIn('id', $teacherIds)->get();
+
+        return $teachers
+            ->filter(fn (Teacher $teacher) => ! $this->holidayBreaks->isAttendanceSuspended($teacher, $today))
+            ->count();
     }
 
     private function groupTrend(Collection $records, string $period, Carbon $start, Carbon $end): array

@@ -279,6 +279,44 @@ Route::middleware(['auth:web', 'verified', 'password.changed'])->group(function 
                 ->name('attendance-explanations.document')
                 ->middleware('permission:admin.attendance-explanations.view');
 
+            // Holidays & University Breaks
+            Route::get('holidays-breaks', [\App\Http\Controllers\Admin\HolidayBreakController::class, 'index'])
+                ->name('holidays-breaks.index')
+                ->middleware('permission:admin.holidays-breaks.view');
+            Route::get('holidays-breaks/create', [\App\Http\Controllers\Admin\HolidayBreakController::class, 'create'])
+                ->name('holidays-breaks.create')
+                ->middleware('permission:admin.holidays-breaks.create');
+            Route::post('holidays-breaks', [\App\Http\Controllers\Admin\HolidayBreakController::class, 'store'])
+                ->name('holidays-breaks.store')
+                ->middleware('permission:admin.holidays-breaks.create');
+            Route::get('holidays-breaks/{holidayBreak}', [\App\Http\Controllers\Admin\HolidayBreakController::class, 'show'])
+                ->name('holidays-breaks.show')
+                ->middleware('permission:admin.holidays-breaks.view');
+            Route::get('holidays-breaks/{holidayBreak}/edit', [\App\Http\Controllers\Admin\HolidayBreakController::class, 'edit'])
+                ->name('holidays-breaks.edit')
+                ->middleware('permission:admin.holidays-breaks.edit');
+            Route::put('holidays-breaks/{holidayBreak}', [\App\Http\Controllers\Admin\HolidayBreakController::class, 'update'])
+                ->name('holidays-breaks.update')
+                ->middleware('permission:admin.holidays-breaks.edit');
+            Route::delete('holidays-breaks/{holidayBreak}', [\App\Http\Controllers\Admin\HolidayBreakController::class, 'destroy'])
+                ->name('holidays-breaks.destroy')
+                ->middleware('permission:admin.holidays-breaks.delete');
+            Route::patch('holidays-breaks/{holidayBreak}/toggle-status', [\App\Http\Controllers\Admin\HolidayBreakController::class, 'toggleStatus'])
+                ->name('holidays-breaks.toggle-status')
+                ->middleware('permission:admin.holidays-breaks.edit');
+            Route::post('holidays-breaks/{holidayBreak}/duty', [\App\Http\Controllers\Admin\HolidayBreakController::class, 'storeDuty'])
+                ->name('holidays-breaks.duty.store')
+                ->middleware('permission:admin.holidays-breaks.edit');
+            Route::post('holidays-breaks/{holidayBreak}/duty/assign-all', [\App\Http\Controllers\Admin\HolidayBreakController::class, 'assignAllDuty'])
+                ->name('holidays-breaks.duty.assign-all')
+                ->middleware('permission:admin.holidays-breaks.edit');
+            Route::put('holidays-breaks/{holidayBreak}/duty/{dutyAssignment}', [\App\Http\Controllers\Admin\HolidayBreakController::class, 'updateDuty'])
+                ->name('holidays-breaks.duty.update')
+                ->middleware('permission:admin.holidays-breaks.edit');
+            Route::delete('holidays-breaks/{holidayBreak}/duty/{dutyAssignment}', [\App\Http\Controllers\Admin\HolidayBreakController::class, 'destroyDuty'])
+                ->name('holidays-breaks.duty.destroy')
+                ->middleware('permission:admin.holidays-breaks.edit');
+
             // Help Desk
             Route::get('help-desk', [\App\Http\Controllers\Admin\HelpDeskController::class, 'index'])
                 ->name('help-desk.index')

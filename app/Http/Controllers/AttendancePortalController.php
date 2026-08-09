@@ -9,6 +9,7 @@ use App\Models\TeacherAttendance;
 use App\Services\ActivityLogService;
 use App\Services\AttendancePortalService;
 use App\Services\FacialRecognitionService;
+use App\Services\HolidayBreakService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -21,6 +22,7 @@ class AttendancePortalController extends Controller
     public function __construct(
         private AttendancePortalService $portal,
         private ActivityLogService $activityLog,
+        private HolidayBreakService $holidayBreaks,
     ) {}
 
     public function showLogin(Request $request): Response|RedirectResponse
@@ -110,6 +112,7 @@ class AttendancePortalController extends Controller
                 'faculty' => $teacher->faculty?->name,
             ],
             'attendanceSummary' => $attendanceSummary,
+            'holidayContext' => $this->holidayBreaks->portalContext($teacher, $today),
         ]);
     }
 
@@ -121,6 +124,7 @@ class AttendancePortalController extends Controller
             'staffType' => $teacher->staff_type,
             'roleLabel' => $teacher->isLecturer() ? 'Lecturer' : 'Administrator',
             'facialRecognitionEnabled' => $facialRecognition->isEnabled(),
+            'holidayContext' => $this->holidayBreaks->portalContext($teacher, now()),
         ]);
     }
 

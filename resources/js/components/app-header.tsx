@@ -265,6 +265,12 @@ const mainNavItems: NavItem[] = [
                 permission: 'admin.settings.view',
             },
             {
+                title: 'Holidays & Breaks',
+                href: '/admin/holidays-breaks',
+                icon: CalendarDays,
+                permission: 'admin.holidays-breaks.view',
+            },
+            {
                 title: 'System Logs',
                 href: '/admin/system-logs',
                 icon: ScrollText,

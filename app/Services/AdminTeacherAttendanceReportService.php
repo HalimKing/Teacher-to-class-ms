@@ -26,6 +26,7 @@ class AdminTeacherAttendanceReportService
     public function __construct(
         private AttendanceTimingService $timingService,
         private RescheduledAttendanceService $rescheduledAttendance,
+        private HolidayBreakService $holidayBreaks,
     ) {}
 
     public function baseQuery(): Builder
@@ -394,7 +395,10 @@ class AdminTeacherAttendanceReportService
                 ->values()
                 ->all(),
             'attendanceTrend' => $this->groupTrend($records, 'day', self::STATUS_COLUMN, $start, $end),
-            'attendanceCalendar' => $this->attendanceCalendar($records, self::STATUS_COLUMN),
+            'attendanceCalendar' => array_merge(
+                $this->attendanceCalendar($records, self::STATUS_COLUMN),
+                $this->holidayCalendarAnnotations($start, $end),
+            ),
             'records' => $records->map(fn (TeacherAttendance $record) => $this->transformRecord($record))->values()->all(),
         ];
     }
@@ -525,6 +529,14 @@ class AdminTeacherAttendanceReportService
             'attendance_status' => $record->status,
             'exception_category' => $record->exception_category ?: AttendanceExceptionCategory::NORMAL,
             'exception_category_label' => AttendanceExceptionCategory::label($record->exception_category),
+            'holiday_break_id' => $record->holiday_break_id,
+            'report_status_label' => $this->holidayBreaks->reportStatusLabel(
+                $record->status,
+                $record->exception_category,
+                $record->date
+                    ? $this->holidayBreaks->dayClassification($record->date, $record->teacher)
+                    : HolidayBreakService::DAY_NORMAL,
+            ),
             'arrival_category' => $arrival['arrival_category'],
             'arrival_category_label' => $arrival['arrival_category_label'],
             'minutes_early' => $arrival['minutes_early'],
@@ -564,10 +576,49 @@ class AdminTeacherAttendanceReportService
 
     private function expectedTeachersTodayCount(): int
     {
-        return TimeTable::where('staff_type', Teacher::STAFF_TYPE_LECTURER)
-            ->where('day_of_week', now()->format('l'))
-            ->distinct('teacher_id')
-            ->count('teacher_id');
+        $today = now();
+        $teacherIds = TimeTable::where('staff_type', Teacher::STAFF_TYPE_LECTURER)
+            ->where('day_of_week', $today->format('l'))
+            ->distinct()
+            ->pluck('teacher_id');
+
+        if ($teacherIds->isEmpty()) {
+            return 0;
+        }
+
+        $teachers = Teacher::query()->whereIn('id', $teacherIds)->get();
+
+        return $teachers
+            ->filter(fn (Teacher $teacher) => ! $this->holidayBreaks->isAttendanceSuspended($teacher, $today))
+            ->count();
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function holidayCalendarAnnotations(Carbon $start, Carbon $end): array
+    {
+        $annotations = [];
+        $cursor = $start->copy()->startOfDay();
+        $limit = $end->copy()->startOfDay();
+
+        while ($cursor->lte($limit)) {
+            $classification = $this->holidayBreaks->dayClassification($cursor);
+            if ($classification !== HolidayBreakService::DAY_NORMAL) {
+                $annotations[] = [
+                    'date' => $cursor->toDateString(),
+                    'status' => $classification,
+                    'report_status_label' => $this->holidayBreaks->dayClassificationLabel($classification),
+                    'present' => false,
+                    'late' => false,
+                    'is_break_duty' => false,
+                    'is_holiday_break' => true,
+                ];
+            }
+            $cursor->addDay();
+        }
+
+        return $annotations;
     }
 
     private function employmentStatusBreakdown(Collection $records): array

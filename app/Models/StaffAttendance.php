@@ -38,6 +38,7 @@ class StaffAttendance extends Model
         'auto_generated_at',
         'auto_absence_reason',
         'exception_category',
+        'holiday_break_id',
     ];
 
     protected $casts = [
@@ -75,6 +76,11 @@ class StaffAttendance extends Model
     public function academicYear()
     {
         return $this->belongsTo(AcademicYear::class);
+    }
+
+    public function holidayBreak()
+    {
+        return $this->belongsTo(HolidayBreak::class);
     }
 
     public function scopeActiveCheckIn($query)

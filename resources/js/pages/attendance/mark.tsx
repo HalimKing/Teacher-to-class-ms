@@ -6,7 +6,7 @@ import { type FaceCaptureResult } from '@/lib/face-recognition';
 import { getBooleanSetting } from '@/lib/system-settings';
 import AttendancePortalLayout from '@/layouts/attendance-portal-layout';
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { AlertTriangle, ArrowLeft, CheckCircle2, Clock, Loader2, LogIn, LogOut, MapPin } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CalendarOff, CheckCircle2, Clock, Loader2, LogIn, LogOut, MapPin, ShieldAlert } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 interface SessionTiming {
@@ -61,6 +61,19 @@ interface MarkPageProps {
     staffType: string;
     roleLabel: string;
     facialRecognitionEnabled?: boolean;
+    holidayContext?: {
+        mode: string;
+        title: string;
+        message: string;
+        attendance_required: boolean;
+        break?: {
+            id: number;
+            name: string;
+            type_label: string;
+            start_date?: string | null;
+            end_date?: string | null;
+        } | null;
+    };
 }
 
 async function requestJson<T>(url: string, options: RequestInit = {}): Promise<T> {
@@ -89,6 +102,7 @@ export default function AttendancePortalMarkPage({
     staffType,
     roleLabel,
     facialRecognitionEnabled: facialRecognitionEnabledProp,
+    holidayContext,
 }: MarkPageProps) {
     const isLecturer = staffType === 'lecturer';
     const { system_settings: systemSettings } = usePage().props as {
@@ -479,8 +493,18 @@ export default function AttendancePortalMarkPage({
 
     const actionsLocked = submitting || checkInComplete || faceModalOpen;
 
+    const holiday = holidayContext || {
+        mode: 'open',
+        title: 'Attendance is open',
+        message: 'Attendance is open.',
+        attendance_required: true,
+        break: null,
+    };
+    const attendanceSuspended = !holiday.attendance_required;
+
     const canCheckIn =
         !checkInComplete &&
+        !attendanceSuspended &&
         !activeSession &&
         selected &&
         !selected.is_completed &&
@@ -491,6 +515,7 @@ export default function AttendancePortalMarkPage({
 
     const canCheckOut =
         !checkInComplete &&
+        !attendanceSuspended &&
         !!activeSession &&
         !activeSession.is_completed &&
         !isSessionMissed(activeSession) &&
@@ -531,6 +556,32 @@ export default function AttendancePortalMarkPage({
                     <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Mark attendance</h1>
                     <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{roleLabel} · Today only</p>
                 </div>
+
+                {!checkInComplete && (
+                    <div
+                        className={`rounded-xl border px-4 py-3 text-sm ${
+                            holiday.mode === 'break_duty'
+                                ? 'border-violet-200 bg-violet-50 text-violet-900'
+                                : holiday.mode === 'open'
+                                  ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                                  : 'border-amber-200 bg-amber-50 text-amber-950'
+                        }`}
+                    >
+                        <div className="flex gap-2">
+                            {holiday.mode === 'break_duty' ? (
+                                <ShieldAlert className="mt-0.5 size-4 shrink-0" />
+                            ) : holiday.mode === 'open' ? (
+                                <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
+                            ) : (
+                                <CalendarOff className="mt-0.5 size-4 shrink-0" />
+                            )}
+                            <div>
+                                <p className="font-semibold">{holiday.title}</p>
+                                <p className="mt-0.5 opacity-90">{holiday.message}</p>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {checkInComplete ? (
                     <div

@@ -310,11 +310,25 @@ trait BuildsAttendanceAnalytics
     protected function attendanceCalendar(Collection $records, string $statusColumn): array
     {
         return $records->map(function ($record) use ($statusColumn) {
+            $status = $record->{$statusColumn};
+            $exception = $record->exception_category ?? null;
+            $isBreakDuty = $exception === \App\Support\AttendanceExceptionCategory::BREAK_DUTY;
+            $normalized = strtolower((string) $status);
+
+            $reportLabel = match (true) {
+                $isBreakDuty && $normalized === 'absent' => 'Break Duty Absent',
+                $isBreakDuty => 'Break Duty Present',
+                $normalized === 'absent' => 'Absent',
+                default => 'Present',
+            };
+
             return [
                 'date' => Carbon::parse($record->date)->format('Y-m-d'),
-                'status' => $record->{$statusColumn},
+                'status' => $status,
+                'report_status_label' => $reportLabel,
                 'present' => $this->isPresentRecord($record, $statusColumn),
                 'late' => $this->isLateRecord($record, $statusColumn),
+                'is_break_duty' => $isBreakDuty,
             ];
         })->values()->all();
     }

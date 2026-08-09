@@ -26,6 +26,7 @@ class AttendanceProcessorService
         private RescheduledAttendanceService $rescheduledAttendance,
         private LecturerNotificationService $notifications,
         private ActivityLogService $activityLog,
+        private HolidayBreakService $holidayBreaks,
     ) {}
 
     public function process(?Carbon $reference = null): array
@@ -235,6 +236,12 @@ class AttendanceProcessorService
         EloquentCollection $teacherAttendances,
         ?RescheduledSession $rescheduledSession = null,
     ): void {
+        $teacher = $schedule->teacher;
+        if ($teacher && $this->holidayBreaks->isAttendanceSuspended($teacher, $now)) {
+            $stats['skipped']++;
+            return;
+        }
+
         $stats['processed']++;
 
         $attendance = $this->findTeacherAttendance($teacherAttendances, $schedule, $rescheduledSession);
@@ -280,6 +287,12 @@ class AttendanceProcessorService
         EloquentCollection $staffAttendances,
         ?RescheduledSession $rescheduledSession = null,
     ): void {
+        $staff = $schedule->teacher;
+        if ($staff && $this->holidayBreaks->isAttendanceSuspended($staff, $now)) {
+            $stats['skipped']++;
+            return;
+        }
+
         $stats['processed']++;
 
         $attendance = $this->findStaffAttendance($staffAttendances, $schedule);
@@ -336,13 +349,18 @@ class AttendanceProcessorService
         }
 
         try {
+            $breakMeta = $schedule->teacher
+                ? ($this->holidayBreaks->breakDutyMeta($schedule->teacher, $today) ?? [])
+                : [];
+
             $attendance = TeacherAttendance::create([
                 ...$attributes,
                 'classroom_id' => $rescheduledSession?->classroom_id ?? $schedule->class_room_id,
                 'academic_year_id' => $schedule->academic_year_id,
                 'course_id' => $schedule->course_id,
                 'status' => 'absent',
-                'exception_category' => AttendanceExceptionCategory::UNEXCUSED_ABSENCE,
+                'exception_category' => $breakMeta['exception_category'] ?? AttendanceExceptionCategory::UNEXCUSED_ABSENCE,
+                'holiday_break_id' => $breakMeta['holiday_break_id'] ?? null,
                 'attendance_source' => AttendanceRecordSource::SYSTEM,
                 'auto_generated' => true,
                 'auto_generated_at' => $now,
@@ -383,12 +401,17 @@ class AttendanceProcessorService
         }
 
         try {
+            $breakMeta = $schedule->teacher
+                ? ($this->holidayBreaks->breakDutyMeta($schedule->teacher, $today) ?? [])
+                : [];
+
             $attendance = StaffAttendance::create([
                 ...$attributes,
                 'classroom_id' => $rescheduledSession?->classroom_id ?? $schedule->class_room_id,
                 'academic_year_id' => $schedule->academic_year_id,
                 'attendance_status' => 'absent',
-                'exception_category' => AttendanceExceptionCategory::UNEXCUSED_ABSENCE,
+                'exception_category' => $breakMeta['exception_category'] ?? AttendanceExceptionCategory::UNEXCUSED_ABSENCE,
+                'holiday_break_id' => $breakMeta['holiday_break_id'] ?? null,
                 'attendance_source' => AttendanceRecordSource::SYSTEM,
                 'auto_generated' => true,
                 'auto_generated_at' => $now,

@@ -18,6 +18,7 @@ class RescheduledAttendanceService
 
     public function __construct(
         private AttendanceTimingService $timingService,
+        private HolidayBreakService $holidayBreaks,
     ) {}
 
     /**
@@ -289,6 +290,11 @@ class RescheduledAttendanceService
      */
     public function buildTodaysClasses(int $teacherId, Carbon $date): array
     {
+        $teacher = \App\Models\Teacher::query()->find($teacherId);
+        if ($teacher && $this->holidayBreaks->isAttendanceSuspended($teacher, $date)) {
+            return [];
+        }
+
         $context = $this->loadTeacherRescheduleContext($teacherId, $date);
         $movedAway = $context['moved_away'];
         $activeToday = $context['active_today'];

@@ -10,6 +10,7 @@ use App\Models\TimeTable;
 use App\Services\FacialRecognitionService;
 use App\Services\AttendanceTimingService;
 use App\Services\ActivityLogService;
+use App\Services\HolidayBreakService;
 use App\Services\VenueChangeAuthorizationService;
 use App\Support\AttendanceExceptionCategory;
 use Carbon\Carbon;
@@ -23,6 +24,7 @@ class StaffAttendanceController extends Controller
     public function __construct(
         private AttendanceTimingService $timingService,
         private VenueChangeAuthorizationService $venueChangeAuthorization,
+        private HolidayBreakService $holidayBreaks,
     ) {}
 
     public function index(FacialRecognitionService $facialRecognition): Response
@@ -58,6 +60,15 @@ class StaffAttendanceController extends Controller
         $today = now()->format('l');
         $date = now()->format('Y-m-d');
 
+        if ($this->holidayBreaks->isAttendanceSuspended($staff, $date)) {
+            return response()->json([
+                'success' => true,
+                'data' => [],
+                'message' => 'Today\'s staff schedules fetched successfully.',
+                'holiday_context' => $this->holidayBreaks->portalContext($staff, $date),
+            ]);
+        }
+
         $schedules = TimeTable::where('teacher_id', $staff->id)
             ->where('staff_type', Teacher::STAFF_TYPE_ADMINISTRATOR)
             ->where('day_of_week', $today)
@@ -78,6 +89,7 @@ class StaffAttendanceController extends Controller
             'success' => true,
             'data' => $data,
             'message' => 'Today\'s staff schedules fetched successfully.',
+            'holiday_context' => $this->holidayBreaks->portalContext($staff, $date),
         ]);
     }
 
@@ -103,6 +115,18 @@ class StaffAttendanceController extends Controller
             ], 404);
         }
 
+        $now = Carbon::now();
+
+        if ($this->holidayBreaks->isAttendanceSuspended($staff, $now)) {
+            $context = $this->holidayBreaks->portalContext($staff, $now);
+
+            return response()->json([
+                'success' => false,
+                'message' => $context['message'],
+                'holiday_context' => $context,
+            ], 422);
+        }
+
         if (($timetable->day_of_week ?? $timetable->day) !== now()->format('l')) {
             return response()->json([
                 'success' => false,
@@ -110,7 +134,6 @@ class StaffAttendanceController extends Controller
             ], 400);
         }
 
-        $now = Carbon::now();
         $scheduledStart = $this->timingService->parseScheduleTime((string) $timetable->start_time, $now);
 
         if (!$this->timingService->canCheckInNow($now, $scheduledStart, AttendanceTimingService::ROLE_ADMINISTRATOR)) {
@@ -210,6 +233,10 @@ class StaffAttendanceController extends Controller
 
         $effectiveClassroom = $venueContext['classroom'] ?? $timetable->classRoom;
         $authorization = $venueContext['authorization'];
+        $breakMeta = $this->holidayBreaks->breakDutyMeta($staff, $now);
+        $exceptionCategory = $venueContext['authorized_venue_used']
+            ? AttendanceExceptionCategory::AUTHORIZED_VENUE_CHANGE
+            : ($breakMeta['exception_category'] ?? AttendanceExceptionCategory::NORMAL);
 
         $attendance = StaffAttendance::create([
             'staff_id' => $staff->id,
@@ -217,9 +244,8 @@ class StaffAttendanceController extends Controller
             'classroom_id' => $effectiveClassroom?->id ?? $timetable->class_room_id,
             'venue_change_authorization_id' => $authorization?->id,
             'authorized_venue_used' => (bool) $venueContext['authorized_venue_used'],
-            'exception_category' => $venueContext['authorized_venue_used']
-                ? AttendanceExceptionCategory::AUTHORIZED_VENUE_CHANGE
-                : AttendanceExceptionCategory::NORMAL,
+            'exception_category' => $exceptionCategory,
+            'holiday_break_id' => $breakMeta['holiday_break_id'] ?? null,
             'academic_year_id' => $timetable->academic_year_id,
             'date' => $today,
             'check_in_time' => $now->format('H:i:s'),

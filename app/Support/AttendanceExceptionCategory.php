@@ -10,6 +10,7 @@ class AttendanceExceptionCategory
     public const UNEXCUSED_ABSENCE = 'unexcused_absence';
     public const AUTHORIZED_EARLY_DEPARTURE = 'authorized_early_departure';
     public const UNAUTHORIZED_EARLY_DEPARTURE = 'unauthorized_early_departure';
+    public const BREAK_DUTY = 'break_duty';
 
     public static function labels(): array
     {
@@ -20,6 +21,7 @@ class AttendanceExceptionCategory
             self::UNEXCUSED_ABSENCE => 'Unexcused absence',
             self::AUTHORIZED_EARLY_DEPARTURE => 'Authorized early departure',
             self::UNAUTHORIZED_EARLY_DEPARTURE => 'Unauthorized early departure',
+            self::BREAK_DUTY => 'Break duty',
         ];
     }
 

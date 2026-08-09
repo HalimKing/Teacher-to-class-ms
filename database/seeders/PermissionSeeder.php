@@ -85,6 +85,10 @@ class PermissionSeeder extends Seeder
             'admin.venue-change-requests.manage',
             'admin.attendance-explanations.view',
             'admin.attendance-explanations.manage',
+            'admin.holidays-breaks.view',
+            'admin.holidays-breaks.create',
+            'admin.holidays-breaks.edit',
+            'admin.holidays-breaks.delete',
             'admin.help-desk.view',
             'admin.help-desk.manage',
         ];

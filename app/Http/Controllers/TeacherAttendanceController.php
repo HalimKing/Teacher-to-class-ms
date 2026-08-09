@@ -9,6 +9,7 @@ use App\Models\TeacherAttendance;
 use App\Models\TimeTable;
 use App\Services\AttendanceTimingService;
 use App\Services\FacialRecognitionService;
+use App\Services\HolidayBreakService;
 use App\Services\LecturerNotificationService;
 use App\Services\RescheduledAttendanceService;
 use App\Support\LecturerNotificationPayload;
@@ -22,6 +23,7 @@ class TeacherAttendanceController extends Controller
         private AttendanceTimingService $timingService,
         private LecturerNotificationService $lecturerNotifications,
         private RescheduledAttendanceService $rescheduledAttendance,
+        private HolidayBreakService $holidayBreaks,
     ) {}
 
     public function index(FacialRecognitionService $facialRecognition)
@@ -83,13 +85,14 @@ class TeacherAttendanceController extends Controller
 
     public function getTodaysClasses(Request $request)
     {
-        $teacherId = auth('teacher')->id();
+        $teacher = auth('teacher')->user();
         $today = Carbon::now();
 
         return response()->json([
             'success' => true,
-            'data' => $this->rescheduledAttendance->buildTodaysClasses($teacherId, $today),
+            'data' => $this->rescheduledAttendance->buildTodaysClasses((int) $teacher->id, $today),
             'message' => 'Today\'s classes fetched successfully',
+            'holiday_context' => $this->holidayBreaks->portalContext($teacher, $today),
         ]);
     }
 
@@ -128,6 +131,18 @@ class TeacherAttendanceController extends Controller
         }
 
         $now = Carbon::now();
+        $teacher = auth('teacher')->user();
+
+        if ($this->holidayBreaks->isAttendanceSuspended($teacher, $now)) {
+            $context = $this->holidayBreaks->portalContext($teacher, $now);
+
+            return response()->json([
+                'success' => false,
+                'message' => $context['message'],
+                'holiday_context' => $context,
+            ], 422);
+        }
+
         $attendanceContext = $this->rescheduledAttendance->resolveAttendanceContext($timetable, $now);
         if ($blocked = $this->rescheduledAttendance->assertSessionAttendanceAllowed(
             $timetable,
@@ -176,7 +191,6 @@ class TeacherAttendanceController extends Controller
 
         $faceVerificationPayload = null;
         $faceMatchScore = null;
-        $teacher = auth('teacher')->user();
         if ($facialRecognition->isEnabled()) {
             if (!$teacher->hasFaceEnrollment()) {
                 $facialRecognition->logAttempt($teacher, (int) $request->timetable_id, 'failed', null, 'not_enrolled');
@@ -263,6 +277,12 @@ class TeacherAttendanceController extends Controller
             $attendance->face_verified = $faceVerificationPayload !== null;
             $attendance->face_match_score = $faceMatchScore ?? ($faceVerificationPayload['score'] ?? null);
             $attendance->face_verified_at = $faceVerificationPayload ? now() : null;
+
+            $breakMeta = $this->holidayBreaks->breakDutyMeta($teacher, $now);
+            if ($breakMeta) {
+                $attendance->holiday_break_id = $breakMeta['holiday_break_id'];
+                $attendance->exception_category = $breakMeta['exception_category'];
+            }
 
             $attendance->save();
 
