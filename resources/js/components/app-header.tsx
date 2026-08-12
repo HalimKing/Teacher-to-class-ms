@@ -128,7 +128,7 @@ const mainNavItems: NavItem[] = [
         permission: 'admin.dashboard.view',
     },
     {
-        title: 'Staff',
+        title: 'Staffss',
         href: '/admin/teachers',
         icon: LayoutGrid,
         permission: 'admin.teachers.view',
