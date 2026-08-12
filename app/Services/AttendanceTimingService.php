@@ -101,7 +101,7 @@ class AttendanceTimingService
                 'attendance_status' => 'late',
                 'arrival_category' => 'late',
                 'minutes_early' => null,
-                'minutes_late' => $scheduledStart->diffInMinutes($now),
+                'minutes_late' => $this->wholeMinutes($scheduledStart, $now),
             ];
         }
 
@@ -109,7 +109,7 @@ class AttendanceTimingService
             return [
                 'attendance_status' => $checkedInStatus,
                 'arrival_category' => 'early',
-                'minutes_early' => $now->diffInMinutes($scheduledStart),
+                'minutes_early' => $this->wholeMinutes($now, $scheduledStart),
                 'minutes_late' => null,
             ];
         }
@@ -159,7 +159,7 @@ class AttendanceTimingService
         return [
             'attendance_status' => $status,
             'departure_category' => 'overtime',
-            'minutes_overtime' => (int) round($graceDeadline->diffInMinutes($now)),
+            'minutes_overtime' => $this->wholeMinutes($graceDeadline, $now),
         ];
     }
 
@@ -176,7 +176,7 @@ class AttendanceTimingService
         $scheduledStart = $this->parseScheduleTime($startTime, $reference);
         $allowedCheckIn = $this->getAllowedCheckInTime($scheduledStart, $role);
         $canCheckIn = $this->canCheckInNow($reference, $scheduledStart, $role);
-        $minutesUntilOpen = $canCheckIn ? 0 : $allowedCheckIn->diffInMinutes($reference);
+        $minutesUntilOpen = $canCheckIn ? 0 : $this->wholeMinutes($reference, $allowedCheckIn);
 
         $timing = [
             'early_checkin_minutes' => $earlyMinutes,
@@ -332,6 +332,14 @@ class AttendanceTimingService
             'minutes_overtime' => $outcome['minutes_overtime'],
             'is_overtime' => $outcome['departure_category'] === 'overtime',
         ];
+    }
+
+    /**
+     * PostgreSQL smallint columns reject Carbon's float minute diffs.
+     */
+    private function wholeMinutes(Carbon $from, Carbon $to): int
+    {
+        return (int) max(0, round(abs($from->diffInMinutes($to))));
     }
 
     private function emptyScheduleTiming(int $earlyMinutes, int $graceMinutes): array

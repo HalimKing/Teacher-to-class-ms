@@ -28,7 +28,7 @@ return new class extends Migration
             $table->string('check_out_distance')->nullable();
             $table->boolean('check_in_within_range')->default(false);
             $table->boolean('check_out_within_range')->default(false);
-            $table->enum('attendance_status', ['pending', 'checked_in', 'completed', 'late', 'early_leave'])->default('pending');
+            $table->string('attendance_status', 32)->default('pending');
             $table->timestamps();
 
             $table->unique(['staff_id', 'timetable_id', 'date'], 'unique_staff_attendance');

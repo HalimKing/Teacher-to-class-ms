@@ -55,6 +55,9 @@ class TeacherAttendance extends Model
             'check_out_within_range' => 'boolean',
             'auto_generated' => 'boolean',
             'auto_generated_at' => 'datetime',
+            'minutes_early' => 'integer',
+            'minutes_late' => 'integer',
+            'minutes_overtime' => 'integer',
         ];
     }
 

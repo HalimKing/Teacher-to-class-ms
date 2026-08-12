@@ -1,6 +1,6 @@
 # cPanel Deployment Guide
 
-Deploy **teacher-to-class-ms** on shared cPanel hosting (Apache/LiteSpeed + PHP 8.3+ + MySQL/MariaDB).
+Deploy **teacher-to-class-ms** on shared cPanel hosting (Apache/LiteSpeed + PHP 8.3+ + PostgreSQL).
 
 ---
 
@@ -9,8 +9,8 @@ Deploy **teacher-to-class-ms** on shared cPanel hosting (Apache/LiteSpeed + PHP 
 | Requirement | Minimum |
 |-------------|---------|
 | PHP | 8.3+ |
-| Extensions | `bcmath`, `ctype`, `curl`, `dom`, `fileinfo`, `gd`, `json`, `mbstring`, `openssl`, `pdo`, `pdo_mysql`, `tokenizer`, `xml`, `zip` |
-| Database | MySQL 8+ or MariaDB 10.6+ |
+| Extensions | `bcmath`, `ctype`, `curl`, `dom`, `fileinfo`, `gd`, `json`, `mbstring`, `openssl`, `pdo`, `pdo_pgsql`, `tokenizer`, `xml`, `zip` |
+| Database | PostgreSQL 14+ |
 | Composer | Available via SSH or locally before upload |
 | Node.js | Build assets **locally** (`npm run build`); upload `public/build` |
 
@@ -46,9 +46,9 @@ APP_DEBUG=false
 APP_KEY=base64:...your-key...
 APP_URL=https://yourdomain.com
 
-DB_CONNECTION=mysql
-DB_HOST=localhost
-DB_PORT=3306
+DB_CONNECTION=pgsql
+DB_HOST=127.0.0.1
+DB_PORT=5432
 DB_DATABASE=your_db_name
 DB_USERNAME=your_db_user
 DB_PASSWORD=your_db_password

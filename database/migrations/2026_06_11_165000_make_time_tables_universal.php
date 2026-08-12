@@ -20,7 +20,7 @@ return new class extends Migration
             }
 
             if (!Schema::hasColumn('time_tables', 'staff_type')) {
-                $table->enum('staff_type', Teacher::STAFF_TYPES)->default(Teacher::STAFF_TYPE_LECTURER)->after('teacher_id');
+                $table->string('staff_type', 32)->default(Teacher::STAFF_TYPE_LECTURER)->after('teacher_id');
             }
 
             if (!Schema::hasColumn('time_tables', 'day_of_week')) {

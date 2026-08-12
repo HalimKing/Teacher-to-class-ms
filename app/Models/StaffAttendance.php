@@ -51,6 +51,9 @@ class StaffAttendance extends Model
         'face_verified_at' => 'datetime',
         'auto_generated' => 'boolean',
         'auto_generated_at' => 'datetime',
+        'minutes_early' => 'integer',
+        'minutes_late' => 'integer',
+        'minutes_overtime' => 'integer',
     ];
 
     public function staff()

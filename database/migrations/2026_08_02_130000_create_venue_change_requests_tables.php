@@ -12,14 +12,14 @@ return new class extends Migration
             $table->id();
             $table->foreignId('staff_id')->constrained('teachers')->cascadeOnDelete();
             $table->foreignId('authorized_classroom_id')->constrained('class_rooms')->cascadeOnDelete();
-            $table->enum('authorization_type', ['check_in', 'check_out', 'both'])->default('both');
+            $table->string('authorization_type', 32)->default('both');
             $table->date('start_date');
             $table->date('end_date');
             $table->time('start_time')->nullable();
             $table->time('end_time')->nullable();
             $table->string('reason');
             $table->text('notes')->nullable();
-            $table->enum('status', ['pending', 'approved', 'rejected'])->default('pending');
+            $table->string('status', 32)->default('pending');
             $table->foreignId('reviewed_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamp('reviewed_at')->nullable();
             $table->text('admin_comments')->nullable();

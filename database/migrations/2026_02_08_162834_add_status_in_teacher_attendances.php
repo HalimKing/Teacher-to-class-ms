@@ -13,8 +13,8 @@ return new class extends Migration
     {
         Schema::table('teacher_attendances', function (Blueprint $table) {
             //
-            $table->enum('check_in_status', ['late', 'present', 'absent'])->default('late')->after('check_out_within_range');
-            $table->enum('check_out_status', ['early_leave', 'present', 'absent'])->default('present')->after('check_in_status');
+            $table->string('check_in_status', 32)->default('late')->after('check_out_within_range');
+            $table->string('check_out_status', 32)->default('present')->after('check_in_status');
 
         });
     }

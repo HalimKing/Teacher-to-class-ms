@@ -22,7 +22,7 @@ return new class extends Migration
             $table->string('employee_id')->unique();
             $table->foreign('faculty_id')->references('id')->on('faculties')->onDelete('cascade');
             $table->foreign('department_id')->references('id')->on('departments')->onDelete('cascade');
-            $table->enum('title', ['Mr.', 'Ms.', 'Dr.', 'Prof.'])->nullable();
+            $table->string('title', 16)->nullable();
             $table->timestamps();
             $table->softDeletes();
 

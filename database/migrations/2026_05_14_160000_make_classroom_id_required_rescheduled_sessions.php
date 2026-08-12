@@ -12,34 +12,19 @@ return new class extends Migration
         // Cleanup stray temp table from a prior failed SQLite migration attempt.
         Schema::dropIfExists('__temp__rescheduled_sessions');
 
-        if (Schema::getConnection()->getDriverName() === 'mysql') {
-            DB::statement(
-                'UPDATE rescheduled_sessions rs
-                INNER JOIN time_tables tt ON tt.id = rs.timetable_id
-                SET rs.classroom_id = tt.class_room_id
-                WHERE rs.classroom_id IS NULL'
-            );
-        } else {
-            DB::statement(
-                'UPDATE rescheduled_sessions SET classroom_id = (
-                    SELECT class_room_id FROM time_tables WHERE time_tables.id = rescheduled_sessions.timetable_id
-                ) WHERE classroom_id IS NULL'
-            );
-        }
+        DB::statement(
+            'UPDATE rescheduled_sessions SET classroom_id = (
+                SELECT class_room_id FROM time_tables WHERE time_tables.id = rescheduled_sessions.timetable_id
+            ) WHERE classroom_id IS NULL'
+        );
 
         Schema::table('rescheduled_sessions', function (Blueprint $table) {
             $table->dropForeign(['classroom_id']);
         });
 
-        if (Schema::getConnection()->getDriverName() === 'mysql') {
-            DB::statement(
-                'ALTER TABLE rescheduled_sessions MODIFY classroom_id BIGINT UNSIGNED NOT NULL'
-            );
-        } else {
-            Schema::table('rescheduled_sessions', function (Blueprint $table) {
-                $table->unsignedBigInteger('classroom_id')->nullable(false)->change();
-            });
-        }
+        Schema::table('rescheduled_sessions', function (Blueprint $table) {
+            $table->unsignedBigInteger('classroom_id')->nullable(false)->change();
+        });
 
         Schema::table('rescheduled_sessions', function (Blueprint $table) {
             $table->foreign('classroom_id')
@@ -55,15 +40,9 @@ return new class extends Migration
             $table->dropForeign(['classroom_id']);
         });
 
-        if (Schema::getConnection()->getDriverName() === 'mysql') {
-            DB::statement(
-                'ALTER TABLE rescheduled_sessions MODIFY classroom_id BIGINT UNSIGNED NULL'
-            );
-        } else {
-            Schema::table('rescheduled_sessions', function (Blueprint $table) {
-                $table->unsignedBigInteger('classroom_id')->nullable()->change();
-            });
-        }
+        Schema::table('rescheduled_sessions', function (Blueprint $table) {
+            $table->unsignedBigInteger('classroom_id')->nullable()->change();
+        });
 
         Schema::table('rescheduled_sessions', function (Blueprint $table) {
             $table->foreign('classroom_id')

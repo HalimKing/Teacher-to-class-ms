@@ -20,7 +20,7 @@ return new class extends Migration
             $table->time('new_end_time');
             $table->string('reason')->nullable();
             $table->text('note')->nullable();
-            $table->enum('status', ['pending', 'approved', 'rejected', 'active'])->default('pending');
+            $table->string('status', 32)->default('pending');
             $table->unsignedBigInteger('approved_by')->nullable();
             $table->timestamp('approved_at')->nullable();
             $table->text('rejected_reason')->nullable();

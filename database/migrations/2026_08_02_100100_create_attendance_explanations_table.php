@@ -15,12 +15,12 @@ return new class extends Migration
             $table->unsignedBigInteger('attendance_id');
             $table->foreignId('timetable_id')->nullable()->constrained('time_tables')->nullOnDelete();
             $table->date('attendance_date');
-            $table->enum('explanation_type', ['absence', 'early_departure']);
+            $table->string('explanation_type', 32);
             $table->string('reason_category');
             $table->text('explanation');
             $table->string('supporting_document_path')->nullable();
             $table->string('supporting_document_name')->nullable();
-            $table->enum('status', ['pending', 'approved', 'rejected'])->default('pending');
+            $table->string('status', 32)->default('pending');
             $table->foreignId('reviewed_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamp('reviewed_at')->nullable();
             $table->text('admin_comments')->nullable();

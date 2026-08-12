@@ -10,6 +10,7 @@ use App\Models\TeacherAttendance;
 use App\Models\TimeTable;
 use App\Support\AttendanceExceptionCategory;
 use App\Support\AttendanceRecordSource;
+use App\Support\SqlDialect;
 use App\Services\RescheduledAttendanceService;
 use App\Services\Concerns\BuildsAttendanceAnalytics;
 use Carbon\Carbon;
@@ -169,13 +170,7 @@ class AdminTeacherAttendanceReportService
             $dayIndex = array_search($dayName, ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'], true);
 
             if ($dayIndex !== false) {
-                $driver = $query->getConnection()->getDriverName();
-
-                if ($driver === 'sqlite') {
-                    $query->whereRaw("CAST(strftime('%w', date) AS INTEGER) = ?", [$dayIndex]);
-                } else {
-                    $query->whereRaw('DAYNAME(date) = ?', [$dayName]);
-                }
+                SqlDialect::whereDayName($query->getQuery(), 'date', $dayName);
             }
         }
 

@@ -37,7 +37,7 @@ return new class extends Migration
                     }
                 });
             } else {
-                // MySQL may use the composite index for the staff_id FK — ensure a dedicated index first.
+                // PostgreSQL (and other engines) may use the composite index for the staff_id FK.
                 if (!$this->hasIndex('venue_change_authorizations', 'vca_staff_id_idx')) {
                     Schema::table('venue_change_authorizations', function (Blueprint $table) {
                         $table->index('staff_id', 'vca_staff_id_idx');

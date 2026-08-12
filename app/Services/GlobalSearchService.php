@@ -12,9 +12,9 @@ use App\Models\Teacher;
 use App\Models\TeacherAttendance;
 use App\Models\TimeTable;
 use App\Models\User;
+use App\Support\SqlDialect;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class GlobalSearchService
@@ -598,28 +598,12 @@ class GlobalSearchService
     }
 
     /**
-     * Build a portable LOWER(col1 || ' ' || col2) / CONCAT expression.
+     * Build a portable LOWER(col1 || ' ' || col2) expression.
      *
      * @param  list<string>  $columns
      */
     private function lowerConcatExpr(array $columns): string
     {
-        $driver = DB::connection()->getDriverName();
-
-        if ($driver === 'sqlite') {
-            $parts = array_map(
-                fn (string $column) => "COALESCE({$column}, '')",
-                $columns
-            );
-
-            return 'LOWER(' . implode(" || ' ' || ", $parts) . ')';
-        }
-
-        $parts = array_map(
-            fn (string $column) => "COALESCE({$column}, '')",
-            $columns
-        );
-
-        return 'LOWER(CONCAT(' . implode(", ' ', ", $parts) . '))';
+        return SqlDialect::lowerConcat($columns);
     }
 }

@@ -14,13 +14,13 @@ return new class extends Migration
             $table->foreignId('timetable_id')->nullable()->constrained('time_tables')->nullOnDelete();
             $table->foreignId('original_classroom_id')->constrained('class_rooms')->cascadeOnDelete();
             $table->foreignId('authorized_classroom_id')->constrained('class_rooms')->cascadeOnDelete();
-            $table->enum('authorization_type', ['check_in', 'check_out', 'both'])->default('both');
+            $table->string('authorization_type', 32)->default('both');
             $table->date('authorization_date');
             $table->time('start_time')->nullable();
             $table->time('end_time')->nullable();
             $table->string('reason');
             $table->text('notes')->nullable();
-            $table->enum('status', ['active', 'expired', 'revoked'])->default('active');
+            $table->string('status', 32)->default('active');
             $table->foreignId('approved_by')->constrained('users')->cascadeOnDelete();
             $table->timestamp('approved_at');
             $table->foreignId('revoked_by')->nullable()->constrained('users')->nullOnDelete();

@@ -9,6 +9,7 @@ use App\Models\Course;
 use App\Models\Level;
 use App\Models\Program;
 use App\Models\Teacher;
+use App\Support\SqlDialect;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Http\JsonResponse;
@@ -585,7 +586,7 @@ class CourseController extends Controller
                     }
                     if (!empty($row['teacher'])) {
                         $teacherName = trim($row['teacher']);
-                        $found = Teacher::whereRaw("CONCAT(first_name, ' ', last_name) = ?", [$teacherName])->exists();
+                        $found = Teacher::whereRaw(SqlDialect::concat(['first_name', 'last_name']) . ' = ?', [$teacherName])->exists();
                         if (!$found) {
                             $errors[] = 'Teacher "' . $teacherName . '" not found';
                         }
@@ -675,7 +676,7 @@ class CourseController extends Controller
                         }
                         if (!empty($row['teacher'])) {
                             $teacherName = trim((string)$row['teacher']);
-                            $found = Teacher::whereRaw("CONCAT(first_name, ' ', last_name) = ?", [$teacherName])->exists();
+                            $found = Teacher::whereRaw(SqlDialect::concat(['first_name', 'last_name']) . ' = ?', [$teacherName])->exists();
                             if (!$found) {
                                 $errors[] = 'Teacher "' . $teacherName . '" not found';
                             }
@@ -860,7 +861,7 @@ class CourseController extends Controller
             }
             $teacherId = null;
             if (!empty($teacherName)) {
-                $teacher = Teacher::whereRaw("CONCAT(first_name, ' ', last_name) = ?", [$teacherName])->first();
+                $teacher = Teacher::whereRaw(SqlDialect::concat(['first_name', 'last_name']) . ' = ?', [$teacherName])->first();
                 if ($teacher) {
                     $teacherId = $teacher->id;
                 }

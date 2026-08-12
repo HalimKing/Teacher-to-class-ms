@@ -66,7 +66,8 @@ LABEL org.opencontainers.image.description="Laravel 12 + Inertia React attendanc
 ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
 ENV PORT=8080
 
-# System packages + PHP extensions required by Laravel, Excel, DomPDF, PostgreSQL/MySQL
+# System packages + PHP extensions required by Laravel, Excel, DomPDF, PostgreSQL
+# pdo_mysql is included only so `php artisan db:import-mysql` can read a legacy MySQL dump.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
         git \

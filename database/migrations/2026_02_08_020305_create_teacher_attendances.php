@@ -57,7 +57,7 @@ return new class extends Migration
             
 
             // Status
-            $table->enum('status', ['pending', 'completed', 'absent', 'late', 'early_leave'])
+            $table->string('status', 32)
             ->default('pending');
 
             $table->timestamps();
