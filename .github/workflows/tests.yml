@@ -123,7 +123,7 @@ jobs:
   deploy-render:
     name: deploy-render
     needs: ci
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && secrets.RENDER_DEPLOY_HOOK_URL != ''
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -135,6 +135,11 @@ jobs:
           RENDER_SCHEDULER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_SCHEDULER_DEPLOY_HOOK_URL }}
         run: |
           set -euo pipefail
+
+          if [ -z "${RENDER_DEPLOY_HOOK_URL:-}" ]; then
+            echo "RENDER_DEPLOY_HOOK_URL not set — skipping Render deploy (VPS deploy above is the primary path)."
+            exit 0
+          fi
 
           trigger_deploy() {
             local name="$1"
