@@ -171,7 +171,7 @@ class AdminDashboardService
             ],
             [
                 'title' => 'Active Today',
-                'value' => TeacherAttendance::whereDate('date', $todayStr)->distinct('teacher_id')->count('teacher_id'),
+                'value' => TeacherAttendance::whereDate('date', $todayStr)->distinct()->count('teacher_id'),
                 'change' => 'N/A',
                 'changeType' => 'neutral',
             ],
@@ -405,13 +405,13 @@ class AdminDashboardService
         $lecturers = TimeTable::query()
             ->where('staff_type', Teacher::STAFF_TYPE_LECTURER)
             ->where('day_of_week', $currentDay)
-            ->distinct('teacher_id')
+            ->distinct()
             ->count('teacher_id');
 
         $administrators = TimeTable::query()
             ->where('staff_type', Teacher::STAFF_TYPE_ADMINISTRATOR)
             ->where('day_of_week', $currentDay)
-            ->distinct('teacher_id')
+            ->distinct()
             ->count('teacher_id');
 
         return $lecturers + $administrators;

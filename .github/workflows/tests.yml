@@ -9,6 +9,11 @@ on:
     branches:
       - develop
       - main
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   ci:
@@ -24,7 +29,7 @@ jobs:
           php-version: 8.4
           tools: composer:v2
           coverage: xdebug
-          extensions: pdo_pgsql, pgsql
+          extensions: pdo_pgsql, pgsql, pdo_sqlite, sqlite3
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -49,3 +54,133 @@ jobs:
 
       - name: Tests
         run: ./vendor/bin/pest
+
+      - name: Upload frontend build
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-build
+          path: public/build
+          retention-days: 3
+
+  deploy-vps:
+    name: deploy-vps
+    needs: ci
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download frontend build
+        uses: actions/download-artifact@v4
+        with:
+          name: public-build
+          path: public/build
+
+      - name: Check VPS secrets
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USERNAME: ${{ secrets.VPS_USERNAME }}
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_APP_DIR: ${{ secrets.VPS_APP_DIR }}
+        run: |
+          missing=0
+          [ -z "${VPS_HOST:-}" ] && echo "::error::Missing secret VPS_HOST" && missing=1
+          [ -z "${VPS_USERNAME:-}" ] && echo "::error::Missing secret VPS_USERNAME" && missing=1
+          [ -z "${VPS_SSH_PRIVATE_KEY:-}" ] && echo "::error::Missing secret VPS_SSH_PRIVATE_KEY" && missing=1
+          [ -z "${VPS_APP_DIR:-}" ] && echo "::error::Missing secret VPS_APP_DIR (absolute app path on the server, e.g. /var/www/teacher-to-class-ms)" && missing=1
+          if [ "$missing" -ne 0 ]; then
+            echo "Add the VPS secrets in GitHub → Settings → Secrets and variables → Actions. See docs/VPS_DEPLOYMENT.md."
+            exit 1
+          fi
+
+      - name: Start SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+
+      - name: Trust VPS host key
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          PORT="${VPS_PORT:-22}"
+          if [ -n "${VPS_SSH_KNOWN_HOSTS:-}" ]; then
+            printf '%s\n' "$VPS_SSH_KNOWN_HOSTS" >> ~/.ssh/known_hosts
+          else
+            ssh-keyscan -p "$PORT" "$VPS_HOST" >> ~/.ssh/known_hosts
+          fi
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Sync application to VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USERNAME: ${{ secrets.VPS_USERNAME }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_APP_DIR: ${{ secrets.VPS_APP_DIR }}
+        run: |
+          set -euo pipefail
+          PORT="${VPS_PORT:-22}"
+          ssh -p "$PORT" "${VPS_USERNAME}@${VPS_HOST}" "mkdir -p '${VPS_APP_DIR}'"
+          rsync -az --delete \
+            -e "ssh -p ${PORT}" \
+            --exclude-from=scripts/rsync-deploy-exclude.txt \
+            ./ "${VPS_USERNAME}@${VPS_HOST}:${VPS_APP_DIR}/"
+
+      - name: Run release commands on VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USERNAME: ${{ secrets.VPS_USERNAME }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_APP_DIR: ${{ secrets.VPS_APP_DIR }}
+          VPS_PHP_BIN: ${{ secrets.VPS_PHP_BIN }}
+        run: |
+          set -euo pipefail
+          PORT="${VPS_PORT:-22}"
+          PHP_BIN="${VPS_PHP_BIN:-php}"
+          ssh -p "$PORT" "${VPS_USERNAME}@${VPS_HOST}" \
+            "PHP_BIN='${PHP_BIN}' bash '${VPS_APP_DIR}/scripts/vps-release.sh' '${VPS_APP_DIR}'"
+
+  deploy-render:
+    name: deploy-render
+    needs: ci
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && secrets.RENDER_DEPLOY_HOOK_URL != ''
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Trigger Render deploys
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+          RENDER_WORKER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_WORKER_DEPLOY_HOOK_URL }}
+          RENDER_SCHEDULER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_SCHEDULER_DEPLOY_HOOK_URL }}
+        run: |
+          set -euo pipefail
+
+          trigger_deploy() {
+            local name="$1"
+            local url="$2"
+
+            echo "Deploying ${name} at ${COMMIT_SHA}"
+            curl --fail --silent --show-error --request POST "${url}?ref=${COMMIT_SHA}"
+            echo
+          }
+
+          trigger_deploy "teacher-to-class-web" "$RENDER_DEPLOY_HOOK_URL"
+
+          if [ -n "${RENDER_WORKER_DEPLOY_HOOK_URL:-}" ]; then
+            trigger_deploy "teacher-to-class-worker" "$RENDER_WORKER_DEPLOY_HOOK_URL"
+          else
+            echo "::warning::RENDER_WORKER_DEPLOY_HOOK_URL is not set. The queue worker will keep serving the previous image."
+          fi
+
+          if [ -n "${RENDER_SCHEDULER_DEPLOY_HOOK_URL:-}" ]; then
+            trigger_deploy "teacher-to-class-scheduler" "$RENDER_SCHEDULER_DEPLOY_HOOK_URL"
+          else
+            echo "::warning::RENDER_SCHEDULER_DEPLOY_HOOK_URL is not set. The scheduler will keep serving the previous image."
+          fi

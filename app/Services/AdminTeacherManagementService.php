@@ -112,6 +112,21 @@ class AdminTeacherManagementService
     public function filteredQuery(Request $request): Builder
     {
         $query = Teacher::query()
+            ->select([
+                'id',
+                'first_name',
+                'last_name',
+                'email',
+                'phone',
+                'faculty_id',
+                'department_id',
+                'employee_id',
+                'title',
+                'staff_type',
+                'employment_status',
+                'face_registered_at',
+                'created_at',
+            ])
             ->with(['faculty:id,name', 'department:id,name'])
             ->withCount(['timeTables', 'courses']);
 
@@ -346,7 +361,7 @@ class AdminTeacherManagementService
         $presentToday = $context['present_teacher_ids']->count() + $context['present_staff_ids']->count();
         $scheduledToday = TimeTable::query()
             ->where('day_of_week', now()->format('l'))
-            ->distinct('teacher_id')
+            ->distinct()
             ->count('teacher_id');
         $absentToday = max($scheduledToday - $presentToday, 0);
         $attendanceRate = $scheduledToday > 0 ? round(($presentToday / $scheduledToday) * 100, 1) : 0;
@@ -407,7 +422,7 @@ class AdminTeacherManagementService
             'attendance_badge' => $this->resolveTodayAttendanceBadge($teacher, $todayRecord),
             'account_status' => ($teacher->time_tables_count ?? 0) > 0 ? 'active' : 'inactive',
             'created_at' => $teacher->created_at?->format('M d, Y'),
-            'initials' => strtoupper(substr($teacher->first_name, 0, 1) . substr($teacher->last_name, 0, 1)),
+            'initials' => strtoupper(substr((string) $teacher->first_name, 0, 1) . substr((string) $teacher->last_name, 0, 1)),
         ];
     }
 

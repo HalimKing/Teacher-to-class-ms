@@ -7,6 +7,10 @@ services:
     runtime: docker
     plan: starter
     region: oregon
+    branch: main
+    # GitHub Actions (.github/workflows/tests.yml) triggers deploys after CI
+    # via Render deploy hooks. Keep auto-deploy off to avoid a second deploy.
+    autoDeployTrigger: 'off'
     healthCheckPath: /up
     dockerfilePath: ./Dockerfile
     preDeployCommand: php artisan migrate --force --no-interaction
@@ -51,6 +55,8 @@ services:
     runtime: docker
     plan: starter
     region: oregon
+    branch: main
+    autoDeployTrigger: 'off'
     dockerfilePath: ./Dockerfile
     dockerCommand: php artisan queue:work --sleep=3 --tries=3 --max-time=3600
     envVars:
@@ -87,6 +93,8 @@ services:
     runtime: docker
     plan: starter
     region: oregon
+    branch: main
+    autoDeployTrigger: 'off'
     schedule: "* * * * *"
     dockerfilePath: ./Dockerfile
     dockerCommand: php artisan schedule:run

@@ -409,14 +409,25 @@ php artisan storage:link --force
 
 ## CI/CD with GitHub
 
-Render auto-deploys on push when enabled in service settings. Your repo already has GitHub Actions for tests (`.github/workflows/tests.yml`). Recommended flow:
+Pushes to `main` run GitHub Actions (`.github/workflows/tests.yml`):
 
-1. Push to `main`
-2. GitHub Actions runs Pest + `npm run build`
-3. Render builds Docker image and deploys
-4. Pre-deploy runs migrations
+1. Pest tests + `npm run build`
+2. **VPS** (required when VPS secrets are set) — rsync + `scripts/vps-release.sh`. See `docs/VPS_DEPLOYMENT.md`.
+3. **Render** (optional) — only if `RENDER_DEPLOY_HOOK_URL` is set, then each Render deploy hook is called for that commit
 
-Optional: add a deploy workflow that only triggers Render after CI passes (Render deploy hook URL).
+### Optional Render secrets
+
+In each Render service: **Settings → Deploy Hook**. Then in GitHub: **Settings → Secrets and variables → Actions**.
+
+| GitHub secret | Render service |
+|---------------|----------------|
+| `RENDER_DEPLOY_HOOK_URL` | `teacher-to-class-web` |
+| `RENDER_WORKER_DEPLOY_HOOK_URL` | `teacher-to-class-worker` |
+| `RENDER_SCHEDULER_DEPLOY_HOOK_URL` | `teacher-to-class-scheduler` |
+
+`render.yaml` sets `branch: main` and `autoDeployTrigger: off` so Render does not also auto-deploy on git push.
+
+You can rerun the **tests** workflow from the Actions tab (`workflow_dispatch`) on `main` to deploy again.
 
 ---
 

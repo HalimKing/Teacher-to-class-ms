@@ -348,7 +348,7 @@ class AdminUserManagementService
         $loggedInNow = DB::table('sessions')
             ->whereNotNull('user_id')
             ->where('last_activity', '>=', now()->subMinutes(30)->timestamp)
-            ->distinct('user_id')
+            ->distinct()
             ->count('user_id');
 
         $roleCounts = User::query()

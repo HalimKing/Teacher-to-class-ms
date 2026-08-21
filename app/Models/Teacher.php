@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\NullableEncryptedArray;
 use App\Services\FacialRecognitionService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -87,7 +88,7 @@ class Teacher extends Authenticatable
     {
         return [
             'password' => 'hashed',
-            'face_descriptor' => 'encrypted:array',
+            'face_descriptor' => NullableEncryptedArray::class,
             'face_registered_at' => 'datetime',
         ];
     }
@@ -159,11 +160,19 @@ class Teacher extends Authenticatable
 
     public function hasFaceEnrollment(): bool
     {
-        return app(FacialRecognitionService::class)->hasValidEnrollment($this);
+        try {
+            return app(FacialRecognitionService::class)->hasValidEnrollment($this);
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     public function faceEnrollmentStatus(): string
     {
+        if ($this->face_registered_at) {
+            return 'enrolled';
+        }
+
         return $this->hasFaceEnrollment() ? 'enrolled' : 'not_enrolled';
     }
 }
