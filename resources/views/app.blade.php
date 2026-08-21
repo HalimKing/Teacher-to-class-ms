@@ -34,9 +34,10 @@
 
     <title inertia>{{ \App\Models\SystemSetting::appName() }}</title>
 
-    <link rel="icon" href="{{ \App\Models\SystemSetting::appLogoUrl() }}" type="image/png" sizes="any">
-    <link rel="icon" href="/favicon.ico" sizes="any">
-    <link rel="apple-touch-icon" href="{{ \App\Models\SystemSetting::appLogoUrl() }}">
+    @php($favicon = \App\Models\SystemSetting::appLogoUrl())
+    <link rel="icon" href="{{ $favicon }}" type="image/png">
+    <link rel="shortcut icon" href="{{ $favicon }}" type="image/png">
+    <link rel="apple-touch-icon" href="{{ $favicon }}">
 
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600" rel="stylesheet" />
