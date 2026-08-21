@@ -70,27 +70,16 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Download frontend build
-        uses: actions/download-artifact@v4
-        with:
-          name: public-build
-          path: public/build
-
       - name: Check VPS secrets
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USERNAME: ${{ secrets.VPS_USERNAME }}
           VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
-          VPS_APP_DIR: ${{ secrets.VPS_APP_DIR }}
         run: |
           missing=0
           [ -z "${VPS_HOST:-}" ] && echo "::error::Missing secret VPS_HOST" && missing=1
           [ -z "${VPS_USERNAME:-}" ] && echo "::error::Missing secret VPS_USERNAME" && missing=1
           [ -z "${VPS_SSH_PRIVATE_KEY:-}" ] && echo "::error::Missing secret VPS_SSH_PRIVATE_KEY" && missing=1
-          [ -z "${VPS_APP_DIR:-}" ] && echo "::error::Missing secret VPS_APP_DIR (absolute app path on the server, e.g. /var/www/teacher-to-class-ms)" && missing=1
           if [ "$missing" -ne 0 ]; then
             echo "Add the VPS secrets in GitHub → Settings → Secrets and variables → Actions. See docs/VPS_DEPLOYMENT.md."
             exit 1
@@ -117,34 +106,19 @@ jobs:
           fi
           chmod 644 ~/.ssh/known_hosts
 
-      - name: Sync application to VPS
+      - name: Deploy on VPS
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USERNAME: ${{ secrets.VPS_USERNAME }}
           VPS_PORT: ${{ secrets.VPS_PORT }}
-          VPS_APP_DIR: ${{ secrets.VPS_APP_DIR }}
         run: |
           set -euo pipefail
           PORT="${VPS_PORT:-22}"
-          ssh -p "$PORT" "${VPS_USERNAME}@${VPS_HOST}" "mkdir -p '${VPS_APP_DIR}'"
-          rsync -az --delete \
-            -e "ssh -p ${PORT}" \
-            --exclude-from=scripts/rsync-deploy-exclude.txt \
-            ./ "${VPS_USERNAME}@${VPS_HOST}:${VPS_APP_DIR}/"
-
-      - name: Run release commands on VPS
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USERNAME: ${{ secrets.VPS_USERNAME }}
-          VPS_PORT: ${{ secrets.VPS_PORT }}
-          VPS_APP_DIR: ${{ secrets.VPS_APP_DIR }}
-          VPS_PHP_BIN: ${{ secrets.VPS_PHP_BIN }}
-        run: |
-          set -euo pipefail
-          PORT="${VPS_PORT:-22}"
-          PHP_BIN="${VPS_PHP_BIN:-php}"
-          ssh -p "$PORT" "${VPS_USERNAME}@${VPS_HOST}" \
-            "PHP_BIN='${PHP_BIN}' bash '${VPS_APP_DIR}/scripts/vps-release.sh' '${VPS_APP_DIR}'"
+          # The deploy key's authorized_keys entry is restricted to a single
+          # forced command (git pull + docker compose build/up for this app),
+          # so what we "request" here is irrelevant — it only ever runs that
+          # script. See deploy.sh in the app directory on the VPS.
+          ssh -p "$PORT" "${VPS_USERNAME}@${VPS_HOST}" "deploy"
 
   deploy-render:
     name: deploy-render

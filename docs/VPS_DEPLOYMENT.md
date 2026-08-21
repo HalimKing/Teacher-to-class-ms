@@ -1,64 +1,57 @@
-# Deploy to a VPS from GitHub Actions
+# Deploy to the VPS from GitHub Actions
 
-Pushes to `main` run tests, then GitHub Actions rsyncs the app to your VPS and runs Composer, migrations, and Laravel caches. Render stays optional: it deploys only if `RENDER_DEPLOY_HOOK_URL` is set.
+Pushes to `main` run tests, then GitHub Actions SSHs into the VPS and triggers a deploy
+there. Render stays optional: it deploys only if `RENDER_DEPLOY_HOOK_URL` is set.
 
-The VPS keeps its own `.env`, uploaded files, and logs. Frontend assets are built in CI (`public/build` is gitignored).
+The app runs in Docker Compose on the VPS (`web`, `worker`, `scheduler`, `postgres`).
+GitHub Actions never touches files directly — it only opens an SSH connection with a key
+that is restricted (via a forced `command=` in `authorized_keys`) to run one script on the
+server: `deploy.sh`, sitting next to `docker-compose.yml` outside the git-tracked `repo/`
+directory. Whatever command the workflow "requests" over SSH is ignored; the forced
+command always runs instead. That script:
 
-## One-time server setup
+1. `git fetch origin main && git reset --hard origin/main` inside `repo/`
+2. `docker compose build web worker scheduler`
+3. `docker compose up -d --force-recreate web worker scheduler`
+4. Waits for all three to report `healthy`, or exits non-zero after ~60s
 
-1. Create the app directory (GitHub Actions will upload the code):
+`postgres` is never rebuilt or recreated by this flow, so data is untouched by every
+deploy. Composer/npm install, asset builds, and `php artisan migrate --force` all happen
+inside the Docker build/entrypoint — nothing needs to be installed on the VPS itself beyond
+Docker and git.
 
-```bash
-sudo mkdir -p /var/www/teacher-to-class-ms
-sudo chown -R "$USER":"$USER" /var/www/teacher-to-class-ms
-```
+## One-time server setup (already done for this app)
 
-2. After the first rsync (or after cloning once), create production `.env` on the server. GitHub Actions never overwrites this file:
+1. A dedicated ed25519 keypair was generated on the VPS for this purpose only (not shared
+   with other apps on the box).
+2. Its public key was added to the deploy user's `~/.ssh/authorized_keys`, restricted to:
+   ```
+   restrict,command="/home/eben/apps/teacher-to-class-ms/deploy.sh",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty ssh-ed25519 AAAA... github-actions-deploy-ttcms
+   ```
+   Even if the private key ever leaked, it can only ever run that one script — no shell,
+   no port/agent forwarding, no other command.
+3. The private key was uploaded to the GitHub repo as `VPS_SSH_PRIVATE_KEY` and then
+   deleted from the VPS's own disk (it only needs to exist as a GitHub secret).
 
-```bash
-cp /var/www/teacher-to-class-ms/.env.example /var/www/teacher-to-class-ms/.env
-# set APP_KEY, APP_URL, database, mail, etc.
-php /var/www/teacher-to-class-ms/artisan key:generate --force
-```
+## GitHub secrets in use
 
-3. Point the web server document root at `public/` (Nginx/Apache/Caddy).
-4. Install PHP 8.3+, Composer, PostgreSQL PHP extensions, and `rsync`.
-5. Keep a scheduler and queue worker running (systemd, Supervisor, or cron). Deploy only runs `php artisan queue:restart`.
+| Secret | Required | Notes |
+|--------|----------|-------|
+| `VPS_HOST` | yes | VPS public IP/hostname |
+| `VPS_USERNAME` | yes | SSH user on the VPS |
+| `VPS_SSH_PRIVATE_KEY` | yes | Private half of the restricted deploy key |
+| `VPS_SSH_KNOWN_HOSTS` | no | Output of `ssh-keyscan -p 22 <host>`; if absent, CI keyscans at deploy time |
+| `VPS_PORT` | no | Defaults to `22` |
 
-## SSH key for GitHub Actions
-
-On your laptop (or GitHub’s runner is not needed for this step):
-
-```bash
-ssh-keygen -t ed25519 -C "github-actions-deploy" -f github-actions-vps -N ""
-```
-
-On the VPS, append the **public** key to the deploy user’s `~/.ssh/authorized_keys`.
-
-In GitHub: **Settings → Secrets and variables → Actions**:
-
-| Secret | Required | Example |
-|--------|----------|---------|
-| `VPS_HOST` | yes | `192.0.2.10` or `vps.example.com` |
-| `VPS_USERNAME` | yes | `deploy` |
-| `VPS_SSH_PRIVATE_KEY` | yes | Full private key, including `BEGIN/END` lines |
-| `VPS_APP_DIR` | yes | `/var/www/teacher-to-class-ms` |
-| `VPS_PORT` | no | `22` |
-| `VPS_PHP_BIN` | no | `php` or `/usr/bin/php8.3` |
-| `VPS_SSH_KNOWN_HOSTS` | no | Output of `ssh-keyscan -p 22 your.vps.host` |
-
-Optional Render secrets are listed in `docs/RENDER_DEPLOYMENT.md`. If they are absent, the Render job is skipped.
-
-## What each deploy does
-
-1. Pest tests + `npm run build` on GitHub
-2. `rsync` application files to `VPS_APP_DIR` (does **not** overwrite `.env` or `storage/`)
-3. On the server: `scripts/vps-release.sh`
-   - `composer install --no-dev`
-   - `php artisan migrate --force`
-   - `php artisan optimize`
-   - `php artisan queue:restart`
+Optional Render secrets are listed below. If they are absent, the Render job is skipped.
 
 ## Manual deploy
 
-Actions tab → **tests** → **Run workflow** (branch `main`).
+Actions tab → **tests** → **Run workflow** (branch `main`). Or SSH in with any key/account
+and run `~/apps/teacher-to-class-ms/deploy.sh` directly.
+
+## Render (optional, not currently used)
+
+`deploy-render` triggers Render deploy hooks (`RENDER_DEPLOY_HOOK_URL`,
+`RENDER_WORKER_DEPLOY_HOOK_URL`, `RENDER_SCHEDULER_DEPLOY_HOOK_URL`) if set. It's
+independent of the VPS deploy above and safe to leave unset.
