@@ -30,21 +30,22 @@ export default function UserBulkActionsBar({
     }
 
     return (
-        <div className="sticky top-4 z-10 flex flex-col gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 shadow-sm backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between">
-            <div>
+        <div className="sticky top-16 z-10 flex flex-col gap-3 rounded-xl border border-primary/20 bg-primary/5 p-3 shadow-sm backdrop-blur-sm sm:top-4 sm:p-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0">
                 <p className="text-sm font-semibold text-sidebar-foreground">
                     {selectedCount} user{selectedCount === 1 ? '' : 's'} selected
                 </p>
                 <p className="text-xs text-sidebar-foreground/60">Bulk actions apply only to selected records.</p>
             </div>
 
-            <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
                 {can('admin.user-management.users.export') && (
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button type="button" variant="outline" size="sm">
+                            <Button type="button" variant="outline" className="h-10 sm:h-9">
                                 <Download className="size-4" />
-                                Export Selected
+                                <span className="sm:hidden">Export</span>
+                                <span className="hidden sm:inline">Export Selected</span>
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
@@ -57,15 +58,15 @@ export default function UserBulkActionsBar({
 
                 {can('admin.user-management.users.edit') && (
                     <>
-                        <Button type="button" variant="outline" size="sm" onClick={() => onSetStatus('active')}>
+                        <Button type="button" variant="outline" className="h-10 sm:h-9" onClick={() => onSetStatus('active')}>
                             <UserCheck className="size-4" />
                             Activate
                         </Button>
-                        <Button type="button" variant="outline" size="sm" onClick={() => onSetStatus('inactive')}>
+                        <Button type="button" variant="outline" className="h-10 sm:h-9" onClick={() => onSetStatus('inactive')}>
                             <UserX className="size-4" />
                             Deactivate
                         </Button>
-                        <Button type="button" variant="outline" size="sm" onClick={onRequirePasswordChange}>
+                        <Button type="button" variant="outline" className="h-10 col-span-2 sm:col-auto sm:h-9" onClick={onRequirePasswordChange}>
                             <Key className="size-4" />
                             Require Password Change
                         </Button>
@@ -73,13 +74,14 @@ export default function UserBulkActionsBar({
                 )}
 
                 {can('admin.user-management.users.delete') && (
-                    <Button type="button" variant="destructive" size="sm" onClick={onDeleteSelected}>
+                    <Button type="button" variant="destructive" className="h-10 sm:h-9" onClick={onDeleteSelected}>
                         <Trash2 className="size-4" />
-                        Delete Selected
+                        <span className="sm:hidden">Delete</span>
+                        <span className="hidden sm:inline">Delete Selected</span>
                     </Button>
                 )}
 
-                <Button type="button" variant="ghost" size="sm" onClick={onClearSelection}>
+                <Button type="button" variant="ghost" className="h-10 sm:h-9" onClick={onClearSelection}>
                     Clear
                 </Button>
             </div>

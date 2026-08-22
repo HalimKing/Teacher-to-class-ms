@@ -129,22 +129,22 @@ const EditRolePage = ({ role, permissions }: EditRolePageProps) => {
     <AppLayout breadcrumbs={breadcrumbs}>
       <Head title={`Edit Role: ${role.name}`} />
       
-      <div className="min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8">
-        <div className="max-w-4xl mx-auto">
-          <div className="bg-white rounded-2xl shadow-lg border border-slate-200">
-            <div className="p-6 border-b border-slate-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h1 className="text-2xl font-bold text-slate-900">Edit Role</h1>
+      <div className="min-w-0 p-4 sm:p-6 lg:p-8">
+        <div className="mx-auto max-w-4xl">
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg">
+            <div className="border-b border-slate-200 p-4 sm:p-6">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Edit Role</h1>
                   <p className="mt-1 text-sm text-slate-500">Update role details and permissions.</p>
                 </div>
                 <div className="text-sm text-slate-500">
-                  Role ID: <span className="font-mono bg-slate-100 px-2 py-1 rounded">{role.id}</span>
+                  Role ID: <span className="rounded bg-slate-100 px-2 py-1 font-mono">{role.id}</span>
                 </div>
               </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-6">
+            <form onSubmit={handleSubmit} className="space-y-6 p-4 sm:p-6">
               <div className="space-y-6">
                 {/* Basic Information Section */}
                 <div>
@@ -167,7 +167,7 @@ const EditRolePage = ({ role, permissions }: EditRolePageProps) => {
 
                     {/* Permissions Section */}
                     <div>
-                      <div className="flex items-center justify-between mb-4">
+                      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <h3 className="text-lg font-semibold text-slate-800">Permissions</h3>
                         <div className="text-sm text-slate-500">
                           {data.permissions.length} permission(s) selected
@@ -185,12 +185,12 @@ const EditRolePage = ({ role, permissions }: EditRolePageProps) => {
                           return (
                             <div key={groupName} className="border border-slate-200 rounded-xl overflow-hidden">
                               <div className="bg-slate-50 px-4 py-3 border-b border-slate-200">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center space-x-2">
-                                    <span className="font-semibold text-slate-800">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                    <span className="font-semibold break-words text-slate-800">
                                       {formatGroupName(groupName)}
                                     </span>
-                                    <span className="text-sm text-slate-500 bg-slate-200 px-2 py-1 rounded-full">
+                                    <span className="rounded-full bg-slate-200 px-2 py-1 text-sm text-slate-500">
                                       {groupPermissions.length} permissions
                                     </span>
                                   </div>
@@ -228,7 +228,7 @@ const EditRolePage = ({ role, permissions }: EditRolePageProps) => {
                                             : 'border-slate-200 hover:border-slate-300'
                                         }`}
                                       >
-                                        <label className="flex items-center space-x-3 cursor-pointer">
+                        <label className="flex min-w-0 cursor-pointer items-start gap-3">
                                           <div className="relative">
                                             <input
                                               type="checkbox"
@@ -282,12 +282,12 @@ const EditRolePage = ({ role, permissions }: EditRolePageProps) => {
                 </div>
               </div>
 
-              <div className="flex justify-end space-x-4 pt-6 border-t border-slate-200">
+              <div className="flex flex-col-reverse gap-3 border-t border-slate-200 pt-6 sm:flex-row sm:justify-end sm:space-x-4">
                 <Button
                   type="button"
                   variant="outlined"
                   onClick={() => window.history.back()}
-                  className="border-slate-300 text-slate-700 hover:border-slate-400"
+                  className="h-11 w-full border-slate-300 text-slate-700 hover:border-slate-400 sm:w-auto"
                   disabled={processing}
                 >
                   Cancel
@@ -297,7 +297,7 @@ const EditRolePage = ({ role, permissions }: EditRolePageProps) => {
                   color="primary"
                   variant="contained"
                   disabled={processing}
-                  className="bg-gradient-to-r from-indigo-600 to-purple-700 hover:from-indigo-700 hover:to-purple-800 text-white shadow-md hover:shadow-lg transition-shadow"
+                  className="h-11 w-full bg-gradient-to-r from-indigo-600 to-purple-700 text-white shadow-md transition-shadow hover:from-indigo-700 hover:to-purple-800 hover:shadow-lg sm:w-auto"
                 >
                   {processing ? 'Updating...' : 'Update Role'}
                 </Button>

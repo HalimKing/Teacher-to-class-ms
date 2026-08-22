@@ -1,4 +1,5 @@
 import AttendancePortalLayout from '@/layouts/attendance-portal-layout';
+import { formatLongDateRange } from '@/lib/dates';
 import { Head, Link, router } from '@inertiajs/react';
 import { ArrowRight, CalendarOff, CheckCircle, Clock, LogIn, RefreshCw, ShieldAlert, User } from 'lucide-react';
 
@@ -112,7 +113,7 @@ export default function AttendancePortalDashboardPage({
                                 <p className="mt-2 text-xs opacity-80">
                                     {context.break.name} ({context.break.type_label})
                                     {context.break.start_date && context.break.end_date
-                                        ? ` · ${context.break.start_date} → ${context.break.end_date}`
+                                        ? ` · ${formatLongDateRange(context.break.start_date, context.break.end_date)}`
                                         : ''}
                                 </p>
                             ) : null}

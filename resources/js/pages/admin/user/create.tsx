@@ -79,9 +79,9 @@ export default function CreateUserPage({ roles, statusOptions }: CreateUserPageP
             <Head title="Create User" />
             <ToastContainer />
 
-            <div className="flex h-full flex-1 flex-col gap-6 p-4 md:p-6">
+            <div className="flex h-full min-w-0 flex-1 flex-col gap-6 p-4 md:p-6">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                    <div className="space-y-2">
+                    <div className="min-w-0 space-y-2">
                         <div className="inline-flex items-center gap-2 rounded-full border border-sidebar-border/70 bg-white px-3 py-1 text-xs font-medium text-sidebar-foreground/70 shadow-sm dark:border-sidebar-border dark:bg-sidebar-accent">
                             <UserPlus className="size-3.5 text-primary" />
                             Administration
@@ -91,7 +91,7 @@ export default function CreateUserPage({ roles, statusOptions }: CreateUserPageP
                             A secure temporary password will be generated automatically. The user must change it on first login.
                         </p>
                     </div>
-                    <Button asChild variant="outline" className="shrink-0">
+                    <Button asChild variant="outline" className="h-10 w-full shrink-0 sm:w-auto">
                         <Link href={route('admin.user-management.users.index')}>
                             <ArrowLeft className="size-4" />
                             Back to users
@@ -163,10 +163,10 @@ export default function CreateUserPage({ roles, statusOptions }: CreateUserPageP
                     }
                     mobileActions={
                         <div className="flex flex-col-reverse gap-2 border-t border-sidebar-border/70 pt-4 sm:flex-row sm:justify-end">
-                            <Button asChild type="button" variant="outline" className="sm:min-w-28">
+                            <Button asChild type="button" variant="outline" className="h-10 sm:min-w-28">
                                 <Link href={route('admin.user-management.users.index')}>Cancel</Link>
                             </Button>
-                            <Button type="submit" disabled={processing} className="sm:min-w-44">
+                            <Button type="submit" disabled={processing} className="h-10 sm:min-w-44">
                                 {processing ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
                                 {processing ? 'Creating…' : 'Create user'}
                             </Button>
@@ -180,9 +180,9 @@ export default function CreateUserPage({ roles, statusOptions }: CreateUserPageP
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
     return (
-        <div className="flex items-start justify-between gap-3 text-sm">
-            <span className="text-muted-foreground">{label}</span>
-            <span className="max-w-[62%] text-right font-medium text-sidebar-foreground">{value}</span>
+        <div className="flex min-w-0 items-start justify-between gap-3 text-sm">
+            <span className="shrink-0 text-muted-foreground">{label}</span>
+            <span className="min-w-0 text-right font-medium break-words text-sidebar-foreground">{value}</span>
         </div>
     );
 }

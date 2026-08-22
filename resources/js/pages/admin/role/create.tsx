@@ -160,17 +160,17 @@ const CreateRolePage = ({ permissions }: CreateRolePageProps) => {
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Create Role" />
 
-            <div className="min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8">
+            <div className="min-w-0 p-4 sm:p-6 lg:p-8">
                 <div className="mx-auto max-w-5xl">
                     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg">
-                        <div className="border-b border-slate-200 bg-gradient-to-r from-indigo-50 via-white to-purple-50 p-6">
+                        <div className="border-b border-slate-200 bg-gradient-to-r from-indigo-50 via-white to-purple-50 p-4 sm:p-6">
                             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                                <div className="flex items-start gap-4">
-                                    <div className="flex size-12 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md">
+                                <div className="flex min-w-0 items-start gap-4">
+                                    <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md">
                                         <Shield className="size-6" />
                                     </div>
-                                    <div>
-                                        <h1 className="text-2xl font-bold text-slate-900">Create New Role</h1>
+                                    <div className="min-w-0">
+                                        <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Create New Role</h1>
                                         <p className="mt-1 text-sm text-slate-500">
                                             Define a role name and assign the permissions this role should have.
                                         </p>
@@ -179,7 +179,7 @@ const CreateRolePage = ({ permissions }: CreateRolePageProps) => {
 
                                 <Link
                                     href={route('admin.user-management.roles.index')}
-                                    className="inline-flex items-center gap-2 self-start rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                                    className="inline-flex h-10 w-full items-center justify-center gap-2 self-start rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 sm:w-auto"
                                 >
                                     <ArrowLeft className="size-4" />
                                     Back to Roles
@@ -187,7 +187,7 @@ const CreateRolePage = ({ permissions }: CreateRolePageProps) => {
                             </div>
                         </div>
 
-                        <form onSubmit={handleSubmit} className="space-y-6 p-6">
+                        <form onSubmit={handleSubmit} className="space-y-6 p-4 sm:p-6">
                             <div className="space-y-6">
                                 <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-5">
                                     <h2 className="mb-4 text-lg font-semibold text-slate-800">Role Details</h2>
@@ -369,7 +369,7 @@ const CreateRolePage = ({ permissions }: CreateRolePageProps) => {
                                     type="button"
                                     variant="outlined"
                                     onClick={() => window.history.back()}
-                                    className="border-slate-300 text-slate-700 hover:border-slate-400"
+                                    className="h-11 w-full border-slate-300 text-slate-700 hover:border-slate-400 sm:w-auto"
                                     disabled={processing}
                                 >
                                     Cancel
@@ -379,7 +379,7 @@ const CreateRolePage = ({ permissions }: CreateRolePageProps) => {
                                     color="primary"
                                     variant="contained"
                                     disabled={processing}
-                                    className="bg-gradient-to-r from-indigo-600 to-purple-700 text-white shadow-md transition-shadow hover:from-indigo-700 hover:to-purple-800 hover:shadow-lg md:h-12"
+                                    className="h-11 w-full bg-gradient-to-r from-indigo-600 to-purple-700 text-white shadow-md transition-shadow hover:from-indigo-700 hover:to-purple-800 hover:shadow-lg sm:w-auto md:h-12"
                                 >
                                     {processing ? 'Creating...' : 'Create Role'}
                                 </Button>

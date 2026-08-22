@@ -13,7 +13,6 @@ import AppLayout from '@/layouts/app-layout';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { ToastContainer, toast, Bounce } from 'react-toastify';
 import { PagePropsWithFlash } from '@/types';
-import Button from '@mui/material/Button';
 import { can } from '@/lib/can';
 
 interface Permission {
@@ -207,6 +206,38 @@ const RolesIndexPage = ({ roles, filters: initialFilters }: RolesIndexPageProps)
     return colorMap[group] || colorMap.default;
   };
 
+  const renderRoleActions = (role: Role) => (
+    <div className="flex shrink-0 items-center gap-1">
+      {can('admin.user-management.roles.edit') && (
+        <Link
+          href={`/admin/user-management/roles/${role.id}/edit`}
+          title="Edit Role"
+          className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-blue-50 hover:text-blue-600 dark:text-slate-400 dark:hover:bg-blue-900/20 dark:hover:text-blue-400"
+        >
+          <Edit className="h-5 w-5" />
+        </Link>
+      )}
+      {can('admin.user-management.roles.view') && (
+        <Link
+          href={route('admin.user-management.roles.show', role.id)}
+          title="Show Role"
+          className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+        >
+          <Eye className="h-5 w-5" />
+        </Link>
+      )}
+      {can('admin.user-management.roles.delete') && (
+        <button
+          onClick={() => handleDelete(role.id)}
+          title="Delete Role"
+          className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:text-slate-400 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+        >
+          <Trash2 className="h-5 w-5" />
+        </button>
+      )}
+    </div>
+  );
+
   // Breadcrumbs for the layout
   const breadcrumbs = [
     {
@@ -222,17 +253,16 @@ const RolesIndexPage = ({ roles, filters: initialFilters }: RolesIndexPageProps)
   return (
     <AppLayout breadcrumbs={breadcrumbs}>
       <Head title="Roles & Permissions" />
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex">
-        <div className="flex-1 min-w-0 flex flex-col">
-          <div className="p-4 sm:p-6 lg:p-8 flex-1 overflow-auto">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
-              <div>
-                <h2 className="text-3xl font-extrabold text-slate-900 dark:text-white mb-2">Roles & Permissions</h2>
+      <div className="flex min-w-0 flex-col">
+        <div className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">
+            <div className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <h2 className="mb-2 text-2xl font-extrabold text-slate-900 sm:text-3xl dark:text-white">Roles & Permissions</h2>
                 <p className="text-slate-600 dark:text-slate-400">Manage user roles and their permissions</p>
               </div>
               <Link
                 href={route('admin.user-management.roles.create')} 
-                className="mt-4 sm:mt-0 flex items-center justify-center px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-700 hover:from-indigo-700 hover:to-purple-800 text-white font-semibold rounded-xl transition-all duration-200 shadow-md hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-500/50"
+                className="inline-flex h-11 w-full items-center justify-center rounded-xl bg-gradient-to-r from-indigo-600 to-purple-700 px-6 py-3 font-semibold text-white shadow-md transition-all duration-200 hover:from-indigo-700 hover:to-purple-800 hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-500/50 sm:w-auto"
               >
                 <Plus className="w-5 h-5 mr-2" />
                 Create New Role
@@ -240,17 +270,17 @@ const RolesIndexPage = ({ roles, filters: initialFilters }: RolesIndexPageProps)
             </div>
 
             {/* Filters Section */}
-            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-700 p-6 mb-6">
-              <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between space-y-4 lg:space-y-0">
-                <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4 flex-1">
-                  <div className="relative flex-1 sm:flex-none">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 dark:text-slate-500 w-5 h-5" />
+            <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-lg sm:p-6 dark:border-slate-700 dark:bg-slate-800">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                <div className="min-w-0 flex-1">
+                  <div className="relative w-full">
+                    <Search className="absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 transform text-slate-400 dark:text-slate-500" />
                     <input
                       type="text"
                       placeholder="Search roles by name..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10 pr-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-white text-sm w-full sm:w-64 transition-shadow dark:placeholder-slate-400"
+                      className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pr-4 pl-10 text-sm text-slate-900 transition-shadow focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:placeholder-slate-400"
                     />
                   </div>
                 </div>
@@ -267,18 +297,77 @@ const RolesIndexPage = ({ roles, filters: initialFilters }: RolesIndexPageProps)
             </div>
 
             {/* Roles Table */}
-            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-700">
-              <div className="p-6 border-b border-slate-200 dark:border-slate-700">
-                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
-                  <h3 className="text-xl font-bold text-slate-900 dark:text-white">Role Directory</h3>
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800">
+              <div className="border-b border-slate-200 p-4 sm:p-6 dark:border-slate-700">
+                <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                  <h3 className="text-lg font-bold text-slate-900 sm:text-xl dark:text-white">Role Directory</h3>
                   <div className="text-sm text-slate-600 dark:text-slate-400">
                     Showing {roles.from}-{roles.to} of {roles.total} roles
                   </div>
                 </div>
               </div>
+
+              <div className="space-y-3 p-4 lg:hidden">
+                {roles.data.map((role) => {
+                  const displayedPermissions = role.permissions.slice(0, 5);
+                  const remainingCount = role.permissions.length - 5;
+
+                  return (
+                    <div key={role.id} className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 dark:border-slate-700 dark:bg-slate-800/60">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-r ${getRoleColor(role.name)}`}>
+                            <span className="text-sm font-semibold text-white">{getInitials(role.name)}</span>
+                          </div>
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-semibold text-slate-900 dark:text-white">{role.name}</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400">
+                              {role.permissions.length} permission{role.permissions.length !== 1 ? 's' : ''}
+                            </div>
+                          </div>
+                        </div>
+                        {renderRoleActions(role)}
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {role.permissions.length > 0 ? (
+                          <>
+                            {displayedPermissions.map((permission) => (
+                              <span
+                                key={permission.id}
+                                className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${getPermissionGroupColor(permission.name)}`}
+                                title={permission.name}
+                              >
+                                {formatPermissionName(permission.name)}
+                              </span>
+                            ))}
+                            {remainingCount > 0 && (
+                              <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-400">
+                                +{remainingCount} more
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-sm text-slate-500">No permissions</span>
+                        )}
+                      </div>
+                      <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+                        Created {formatDate(role.created_at)} · Updated {formatDate(role.updated_at)}
+                      </p>
+                    </div>
+                  );
+                })}
+                {roles.data.length === 0 && (
+                  <div className="px-2 py-12 text-center">
+                    <Shield className="mx-auto mb-3 h-12 w-12 text-slate-400" />
+                    <p className="text-slate-500 dark:text-slate-400">
+                      {searchTerm ? 'No roles found matching your search.' : 'No roles found.'}
+                    </p>
+                  </div>
+                )}
+              </div>
               
-              <div className="overflow-x-auto">
-                <table className="w-full whitespace-nowrap">
+              <div className="hidden overflow-x-auto lg:block">
+                <table className="w-full min-w-[720px]">
                   <thead className="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
                     <tr>
                       <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Role</th>
@@ -357,38 +446,7 @@ const RolesIndexPage = ({ roles, filters: initialFilters }: RolesIndexPageProps)
                               {formatDate(role.updated_at)}
                             </div>
                           </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center space-x-1">
-                              {can('admin.user-management.roles.edit') && (
-                              <Link 
-                                href={`/admin/user-management/roles/${role.id}/edit`} 
-                                title="Edit Role" 
-                                className="p-2 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
-                              >
-                                <Edit className="w-5 h-5" />
-                              </Link>
-                              )}
-                              {/* show */}
-                              {can('admin.user-management.roles.view') && (
-                                
-                                <Link 
-                                  href={route('admin.user-management.roles.show', role.id)} 
-                                  title="Show Role"
-                                >
-                                  <Eye className="w-5 h-5" />
-                                </Link>
-                              )}
-                              {can('admin.user-management.roles.delete') && (
-                              <button
-                                onClick={() => handleDelete(role.id)} 
-                                title="Delete Role" 
-                                className="p-2 text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                              >
-                                <Trash2 className="w-5 h-5" />
-                              </button>
-                              )}
-                            </div>
-                          </td>
+                          <td className="px-6 py-4">{renderRoleActions(role)}</td>
                         </tr>
                       );
                     })}
@@ -418,41 +476,40 @@ const RolesIndexPage = ({ roles, filters: initialFilters }: RolesIndexPageProps)
               
               {/* Pagination */}
               {roles.data.length > 0 && (
-                <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between flex-wrap gap-4">
+                <div className="flex flex-col gap-3 border-t border-slate-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 dark:border-slate-700">
                   <div className="text-sm text-slate-600 dark:text-slate-400">
                     Showing <span className="font-semibold text-slate-800 dark:text-slate-200">{roles.from}-{roles.to}</span> of <span className="font-semibold text-slate-800 dark:text-slate-200">{roles.total}</span> roles
                   </div>
-                  <div className="flex space-x-2">
+                  <div className="grid grid-cols-2 gap-2 sm:flex sm:space-x-2">
                     <button 
                       onClick={() => handlePageChange(roles.current_page - 1)}
                       disabled={roles.current_page === 1}
-                      className={`px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-xl text-sm font-medium flex items-center space-x-2 ${
+                      className={`flex h-10 items-center justify-center space-x-2 rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium dark:border-slate-600 ${
                         roles.current_page === 1 
-                          ? 'text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 cursor-not-allowed' 
-                          : 'text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600'
+                          ? 'cursor-not-allowed bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500' 
+                          : 'bg-white text-slate-700 hover:bg-slate-50 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600'
                       }`}
                     >
-                      <ChevronLeft className="w-4 h-4" />
+                      <ChevronLeft className="h-4 w-4" />
                       <span>Previous</span>
                     </button>
                     
                     <button 
                       onClick={() => handlePageChange(roles.current_page + 1)}
                       disabled={roles.current_page === roles.last_page}
-                      className={`px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-xl text-sm font-medium flex items-center space-x-2 ${
+                      className={`flex h-10 items-center justify-center space-x-2 rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium dark:border-slate-600 ${
                         roles.current_page === roles.last_page
-                          ? 'text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 cursor-not-allowed' 
-                          : 'text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600'
+                          ? 'cursor-not-allowed bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500' 
+                          : 'bg-white text-slate-700 hover:bg-slate-50 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600'
                       }`}
                     >
                       <span>Next</span>
-                      <ChevronRight className="w-4 h-4" />
+                      <ChevronRight className="h-4 w-4" />
                     </button>
                   </div>
                 </div>
               )}
             </div>
-          </div>
         </div>
       </div>
       <ToastContainer />

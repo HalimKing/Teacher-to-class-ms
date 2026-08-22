@@ -309,7 +309,7 @@ export default function UsersIndexPage({
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="User Management" />
-            <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+            <div className="min-w-0 space-y-6 p-4 sm:p-6 lg:p-8">
                 <UserPageHeader
                     onRefresh={handleRefresh}
                     onExport={handleExport}

@@ -43,19 +43,19 @@ export default function UserFiltersPanel({ filters, roles, statusOptions, onChan
     return (
         <div className="overflow-hidden rounded-xl border border-sidebar-border/70 bg-white shadow-sm dark:bg-sidebar-accent">
             <div className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center">
-                <div className="relative flex-1">
+                <div className="relative min-w-0 flex-1">
                     <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-sidebar-foreground/40" />
                     <input
                         type="search"
                         value={filters.search ?? ''}
                         onChange={(event) => onChange('search', event.target.value)}
                         placeholder="Search name, email, or staff ID..."
-                        className={cn(selectClass, 'pl-10')}
+                        className={cn(selectClass, 'h-11 pl-10 sm:h-10')}
                     />
                 </div>
 
-                <div className="grid flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                    <select value={filters.role ?? 'all'} onChange={(event) => onChange('role', event.target.value)} className={selectClass}>
+                <div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <select value={filters.role ?? 'all'} onChange={(event) => onChange('role', event.target.value)} className={cn(selectClass, 'h-11 sm:h-10')}>
                         <option value="all">All Roles</option>
                         {roles.map((role) => (
                             <option key={role.id} value={role.name}>
@@ -64,7 +64,7 @@ export default function UserFiltersPanel({ filters, roles, statusOptions, onChan
                         ))}
                     </select>
 
-                    <select value={filters.status ?? 'all'} onChange={(event) => onChange('status', event.target.value)} className={selectClass}>
+                    <select value={filters.status ?? 'all'} onChange={(event) => onChange('status', event.target.value)} className={cn(selectClass, 'h-11 sm:h-10')}>
                         <option value="all">All Statuses</option>
                         {statusOptions.map((status) => (
                             <option key={status} value={status}>
@@ -77,22 +77,23 @@ export default function UserFiltersPanel({ filters, roles, statusOptions, onChan
                     <select
                         value={filters.password_status ?? 'all'}
                         onChange={(event) => onChange('password_status', event.target.value)}
-                        className={selectClass}
+                        className={cn(selectClass, 'h-11 sm:h-10')}
                     >
                         <option value="all">All Password States</option>
                         <option value="reset_required">Reset Required</option>
                         <option value="current">Current</option>
                     </select>
 
-                    <Button type="button" variant="outline" onClick={() => setExpanded((current) => !current)}>
+                    <Button type="button" variant="outline" className="h-11 w-full sm:h-10" onClick={() => setExpanded((current) => !current)}>
                         <Filter className="size-4" />
-                        Advanced Filters
+                        <span className="truncate sm:hidden">Advanced</span>
+                        <span className="hidden truncate sm:inline">Advanced Filters</span>
                         {activeFilterCount > 0 && (
                             <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground">
                                 {activeFilterCount}
                             </span>
                         )}
-                        <ChevronDown className={cn('size-4 transition-transform', expanded && 'rotate-180')} />
+                        <ChevronDown className={cn('size-4 shrink-0 transition-transform', expanded && 'rotate-180')} />
                     </Button>
                 </div>
             </div>

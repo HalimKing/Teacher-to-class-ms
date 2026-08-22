@@ -123,20 +123,73 @@ export default function UserDataTable({
 
     const statusTone = (user: UserListItem) => (user.is_locked ? 'locked' : user.status);
 
+    const renderActions = (user: UserListItem) => (
+        <div className="flex shrink-0 items-center justify-end gap-1">
+            <Button type="button" variant="ghost" size="icon" className="size-10 lg:size-9" onClick={() => onQuickView(user)} title="Quick view">
+                <Eye className="size-4" />
+            </Button>
+
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button type="button" variant="ghost" size="icon" className="size-10 lg:size-9">
+                        <MoreHorizontal className="size-4" />
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                    {can('admin.user-management.users.edit') && (
+                        <DropdownMenuItem asChild>
+                            <Link href={route('admin.user-management.users.edit', user.id)}>
+                                <Edit className="size-4" />
+                                Edit User
+                            </Link>
+                        </DropdownMenuItem>
+                    )}
+                    {can('admin.user-management.users.reset-password') && (
+                        <DropdownMenuItem onClick={() => onResetPassword(user)}>
+                            <Key className="size-4" />
+                            Reset Password
+                        </DropdownMenuItem>
+                    )}
+                    <DropdownMenuSeparator />
+                    {can('admin.user-management.users.delete') && (
+                        <DropdownMenuItem className="text-rose-600 focus:text-rose-600" onClick={() => onDelete(user.id)}>
+                            <Trash2 className="size-4" />
+                            Delete User
+                        </DropdownMenuItem>
+                    )}
+                </DropdownMenuContent>
+            </DropdownMenu>
+        </div>
+    );
+
+    const emptyMessage = 'No users match the current filters.';
+
     return (
         <div className="overflow-hidden rounded-xl border border-sidebar-border/70 bg-white shadow-sm dark:bg-sidebar-accent">
             <div className="flex flex-col gap-4 border-b border-sidebar-border/60 p-4 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                    <h2 className="text-lg font-semibold text-sidebar-foreground">User Directory</h2>
+                <div className="min-w-0">
+                    <h2 className="text-base font-semibold text-sidebar-foreground sm:text-lg">User Directory</h2>
                     <p className="text-sm text-sidebar-foreground/60">
                         Showing {users.from ?? 0}-{users.to ?? 0} of {users.total} users
                     </p>
+                    {bulkMode && pageIds.length > 0 && (
+                        <label className="mt-3 inline-flex items-center gap-2 text-sm text-sidebar-foreground/70 lg:hidden">
+                            <input
+                                type="checkbox"
+                                className="size-4"
+                                checked={allSelected}
+                                onChange={() => onToggleSelectAll(allSelected ? [] : pageIds)}
+                                aria-label="Select all users on page"
+                            />
+                            Select all on this page
+                        </label>
+                    )}
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <DropdownMenu open={showColumnMenu} onOpenChange={setShowColumnMenu}>
                         <DropdownMenuTrigger asChild>
-                            <Button type="button" variant="outline" size="sm">
+                            <Button type="button" variant="outline" className="h-10 flex-1 sm:h-9 sm:flex-none">
                                 <Columns3 className="size-4" />
                                 Columns
                             </Button>
@@ -153,7 +206,7 @@ export default function UserDataTable({
                     <select
                         value={perPage}
                         onChange={(event) => onPerPageChange(Number(event.target.value))}
-                        className="h-9 rounded-lg border border-sidebar-border/70 bg-white px-3 text-sm dark:bg-sidebar-accent"
+                        className="h-10 min-w-0 flex-1 rounded-lg border border-sidebar-border/70 bg-white px-3 text-sm sm:h-9 sm:flex-none dark:bg-sidebar-accent"
                     >
                         {[10, 15, 25, 50, 100].map((size) => (
                             <option key={size} value={size}>
@@ -164,189 +217,219 @@ export default function UserDataTable({
                 </div>
             </div>
 
-            <div className="relative overflow-x-auto">
+            <div className="relative">
                 {loading && (
                     <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/60 dark:bg-sidebar-accent/60">
                         <Loader2 className="size-6 animate-spin text-primary" />
                     </div>
                 )}
 
-                <table className="min-w-full divide-y divide-sidebar-border/60">
-                    <thead className="bg-muted/30">
-                        <tr>
-                            {bulkMode && (
-                                <th className="px-4 py-3">
-                                    <input
-                                        type="checkbox"
-                                        checked={allSelected}
-                                        onChange={() => onToggleSelectAll(allSelected ? [] : pageIds)}
-                                        aria-label="Select all users on page"
-                                    />
-                                </th>
-                            )}
-                            {isVisible('profile') && (
-                                <th className="px-4 py-3 text-left">
-                                    <SortButton label={columnLabels.profile} column="name" sortBy={sortBy} sortDir={sortDir} onSort={onSort} />
-                                </th>
-                            )}
-                            {isVisible('staff_id') && (
-                                <th className="px-4 py-3 text-left">
-                                    <SortButton label={columnLabels.staff_id} column="staff_id" sortBy={sortBy} sortDir={sortDir} onSort={onSort} />
-                                </th>
-                            )}
-                            {isVisible('email') && (
-                                <th className="px-4 py-3 text-left">
-                                    <SortButton label={columnLabels.email} column="email" sortBy={sortBy} sortDir={sortDir} onSort={onSort} />
-                                </th>
-                            )}
-                            {isVisible('roles') && <th className="px-4 py-3 text-left text-xs font-semibold tracking-wide text-sidebar-foreground/60 uppercase">{columnLabels.roles}</th>}
-                            {isVisible('status') && (
-                                <th className="px-4 py-3 text-left">
-                                    <SortButton label={columnLabels.status} column="status" sortBy={sortBy} sortDir={sortDir} onSort={onSort} />
-                                </th>
-                            )}
-                            {isVisible('password') && <th className="px-4 py-3 text-left text-xs font-semibold tracking-wide text-sidebar-foreground/60 uppercase">{columnLabels.password}</th>}
-                            {isVisible('last_login') && (
-                                <th className="px-4 py-3 text-left">
-                                    <SortButton label={columnLabels.last_login} column="last_login_at" sortBy={sortBy} sortDir={sortDir} onSort={onSort} />
-                                </th>
-                            )}
-                            {isVisible('created') && (
-                                <th className="px-4 py-3 text-left">
-                                    <SortButton label={columnLabels.created} column="created_at" sortBy={sortBy} sortDir={sortDir} onSort={onSort} />
-                                </th>
-                            )}
-                            {isVisible('actions') && <th className="px-4 py-3 text-right text-xs font-semibold tracking-wide text-sidebar-foreground/60 uppercase">{columnLabels.actions}</th>}
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-sidebar-border/60">
-                        {users.data.map((user) => (
-                            <tr key={user.id} className="transition-colors hover:bg-muted/20">
-                                {bulkMode && (
-                                    <td className="px-4 py-4">
+                <div className="space-y-3 p-4 lg:hidden">
+                    {users.data.map((user) => (
+                        <div key={user.id} className="rounded-xl border border-sidebar-border/60 bg-muted/10 p-4">
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="flex min-w-0 items-center gap-3">
+                                    {bulkMode && (
                                         <input
                                             type="checkbox"
+                                            className="size-4 shrink-0"
                                             checked={selectedIds.includes(user.id)}
                                             onChange={() => onToggleSelect(user.id)}
                                             aria-label={`Select ${user.name}`}
                                         />
-                                    </td>
+                                    )}
+                                    <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-sm font-semibold text-primary">
+                                        {user.initials}
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="truncate font-medium text-sidebar-foreground">{user.name}</p>
+                                        <p className="truncate text-xs text-sidebar-foreground/50">
+                                            {user.staff_id} · ID #{user.id}
+                                        </p>
+                                    </div>
+                                </div>
+                                {isVisible('actions') && renderActions(user)}
+                            </div>
+
+                            <div className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                                <div className="min-w-0">
+                                    <p className="text-xs text-sidebar-foreground/50">Email</p>
+                                    <p className="break-all text-sidebar-foreground/80">{user.email}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-sidebar-foreground/50">Status</p>
+                                    <StatusBadge label={user.is_locked ? 'Locked' : user.status_label} tone={statusTone(user)} />
+                                </div>
+                                <div>
+                                    <p className="text-xs text-sidebar-foreground/50">Password</p>
+                                    <StatusBadge label={user.password_status} tone={passwordTone(user)} />
+                                </div>
+                                <div>
+                                    <p className="text-xs text-sidebar-foreground/50">Last login</p>
+                                    <p className="text-sidebar-foreground/70">{user.last_login_display ?? 'Never'}</p>
+                                </div>
+                                <div className="sm:col-span-2">
+                                    <p className="text-xs text-sidebar-foreground/50">Roles</p>
+                                    <div className="mt-1 flex flex-wrap gap-1">
+                                        {user.roles.length ? (
+                                            user.roles.map((role) => (
+                                                <span key={role} className="rounded-full bg-violet-50 px-2 py-1 text-xs font-medium text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
+                                                    {role}
+                                                </span>
+                                            ))
+                                        ) : (
+                                            <span className="text-sm text-sidebar-foreground/50">No roles</span>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+
+                    {users.data.length === 0 && (
+                        <p className="px-2 py-12 text-center text-sm text-sidebar-foreground/60">{emptyMessage}</p>
+                    )}
+                </div>
+
+                <div className="hidden overflow-x-auto lg:block">
+                    <table className="min-w-full divide-y divide-sidebar-border/60">
+                        <thead className="bg-muted/30">
+                            <tr>
+                                {bulkMode && (
+                                    <th className="px-4 py-3">
+                                        <input
+                                            type="checkbox"
+                                            checked={allSelected}
+                                            onChange={() => onToggleSelectAll(allSelected ? [] : pageIds)}
+                                            aria-label="Select all users on page"
+                                        />
+                                    </th>
                                 )}
                                 {isVisible('profile') && (
-                                    <td className="px-4 py-4">
-                                        <div className="flex items-center gap-3">
-                                            <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-sm font-semibold text-primary">
-                                                {user.initials}
-                                            </div>
-                                            <div>
-                                                <p className="font-medium text-sidebar-foreground">{user.name}</p>
-                                                <p className="text-xs text-sidebar-foreground/50">ID #{user.id}</p>
-                                            </div>
-                                        </div>
-                                    </td>
+                                    <th className="px-4 py-3 text-left">
+                                        <SortButton label={columnLabels.profile} column="name" sortBy={sortBy} sortDir={sortDir} onSort={onSort} />
+                                    </th>
                                 )}
                                 {isVisible('staff_id') && (
-                                    <td className="px-4 py-4">
-                                        <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
-                                            {user.staff_id}
-                                        </span>
-                                    </td>
+                                    <th className="px-4 py-3 text-left">
+                                        <SortButton label={columnLabels.staff_id} column="staff_id" sortBy={sortBy} sortDir={sortDir} onSort={onSort} />
+                                    </th>
                                 )}
-                                {isVisible('email') && <td className="px-4 py-4 text-sm text-sidebar-foreground/80">{user.email}</td>}
-                                {isVisible('roles') && (
-                                    <td className="px-4 py-4">
-                                        <div className="flex flex-wrap gap-1">
-                                            {user.roles.length ? (
-                                                user.roles.map((role) => (
-                                                    <span key={role} className="rounded-full bg-violet-50 px-2 py-1 text-xs font-medium text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
-                                                        {role}
-                                                    </span>
-                                                ))
-                                            ) : (
-                                                <span className="text-sm text-sidebar-foreground/50">No roles</span>
-                                            )}
-                                        </div>
-                                    </td>
+                                {isVisible('email') && (
+                                    <th className="px-4 py-3 text-left">
+                                        <SortButton label={columnLabels.email} column="email" sortBy={sortBy} sortDir={sortDir} onSort={onSort} />
+                                    </th>
                                 )}
+                                {isVisible('roles') && <th className="px-4 py-3 text-left text-xs font-semibold tracking-wide text-sidebar-foreground/60 uppercase">{columnLabels.roles}</th>}
                                 {isVisible('status') && (
-                                    <td className="px-4 py-4">
-                                        <StatusBadge label={user.is_locked ? 'Locked' : user.status_label} tone={statusTone(user)} />
-                                    </td>
+                                    <th className="px-4 py-3 text-left">
+                                        <SortButton label={columnLabels.status} column="status" sortBy={sortBy} sortDir={sortDir} onSort={onSort} />
+                                    </th>
                                 )}
-                                {isVisible('password') && (
-                                    <td className="px-4 py-4">
-                                        <StatusBadge label={user.password_status} tone={passwordTone(user)} />
-                                    </td>
-                                )}
+                                {isVisible('password') && <th className="px-4 py-3 text-left text-xs font-semibold tracking-wide text-sidebar-foreground/60 uppercase">{columnLabels.password}</th>}
                                 {isVisible('last_login') && (
-                                    <td className="px-4 py-4 text-sm text-sidebar-foreground/70">{user.last_login_display ?? 'Never'}</td>
+                                    <th className="px-4 py-3 text-left">
+                                        <SortButton label={columnLabels.last_login} column="last_login_at" sortBy={sortBy} sortDir={sortDir} onSort={onSort} />
+                                    </th>
                                 )}
-                                {isVisible('created') && <td className="px-4 py-4 text-sm text-sidebar-foreground/70">{user.created_at}</td>}
-                                {isVisible('actions') && (
-                                    <td className="px-4 py-4">
-                                        <div className="flex items-center justify-end gap-1">
-                                            <Button type="button" variant="ghost" size="icon" onClick={() => onQuickView(user)} title="Quick view">
-                                                <Eye className="size-4" />
-                                            </Button>
+                                {isVisible('created') && (
+                                    <th className="px-4 py-3 text-left">
+                                        <SortButton label={columnLabels.created} column="created_at" sortBy={sortBy} sortDir={sortDir} onSort={onSort} />
+                                    </th>
+                                )}
+                                {isVisible('actions') && <th className="px-4 py-3 text-right text-xs font-semibold tracking-wide text-sidebar-foreground/60 uppercase">{columnLabels.actions}</th>}
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-sidebar-border/60">
+                            {users.data.map((user) => (
+                                <tr key={user.id} className="transition-colors hover:bg-muted/20">
+                                    {bulkMode && (
+                                        <td className="px-4 py-4">
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedIds.includes(user.id)}
+                                                onChange={() => onToggleSelect(user.id)}
+                                                aria-label={`Select ${user.name}`}
+                                            />
+                                        </td>
+                                    )}
+                                    {isVisible('profile') && (
+                                        <td className="px-4 py-4">
+                                            <div className="flex min-w-0 items-center gap-3">
+                                                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-sm font-semibold text-primary">
+                                                    {user.initials}
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className="truncate font-medium text-sidebar-foreground">{user.name}</p>
+                                                    <p className="text-xs text-sidebar-foreground/50">ID #{user.id}</p>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    )}
+                                    {isVisible('staff_id') && (
+                                        <td className="px-4 py-4">
+                                            <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium whitespace-nowrap text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+                                                {user.staff_id}
+                                            </span>
+                                        </td>
+                                    )}
+                                    {isVisible('email') && <td className="max-w-xs px-4 py-4 text-sm break-all text-sidebar-foreground/80">{user.email}</td>}
+                                    {isVisible('roles') && (
+                                        <td className="px-4 py-4">
+                                            <div className="flex flex-wrap gap-1">
+                                                {user.roles.length ? (
+                                                    user.roles.map((role) => (
+                                                        <span key={role} className="rounded-full bg-violet-50 px-2 py-1 text-xs font-medium text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
+                                                            {role}
+                                                        </span>
+                                                    ))
+                                                ) : (
+                                                    <span className="text-sm text-sidebar-foreground/50">No roles</span>
+                                                )}
+                                            </div>
+                                        </td>
+                                    )}
+                                    {isVisible('status') && (
+                                        <td className="px-4 py-4">
+                                            <StatusBadge label={user.is_locked ? 'Locked' : user.status_label} tone={statusTone(user)} />
+                                        </td>
+                                    )}
+                                    {isVisible('password') && (
+                                        <td className="px-4 py-4">
+                                            <StatusBadge label={user.password_status} tone={passwordTone(user)} />
+                                        </td>
+                                    )}
+                                    {isVisible('last_login') && (
+                                        <td className="px-4 py-4 text-sm whitespace-nowrap text-sidebar-foreground/70">{user.last_login_display ?? 'Never'}</td>
+                                    )}
+                                    {isVisible('created') && <td className="px-4 py-4 text-sm whitespace-nowrap text-sidebar-foreground/70">{user.created_at}</td>}
+                                    {isVisible('actions') && <td className="px-4 py-4">{renderActions(user)}</td>}
+                                </tr>
+                            ))}
 
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button type="button" variant="ghost" size="icon">
-                                                        <MoreHorizontal className="size-4" />
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end">
-                                                    {can('admin.user-management.users.edit') && (
-                                                        <DropdownMenuItem asChild>
-                                                            <Link href={route('admin.user-management.users.edit', user.id)}>
-                                                                <Edit className="size-4" />
-                                                                Edit User
-                                                            </Link>
-                                                        </DropdownMenuItem>
-                                                    )}
-                                                    {can('admin.user-management.users.reset-password') && (
-                                                        <DropdownMenuItem onClick={() => onResetPassword(user)}>
-                                                            <Key className="size-4" />
-                                                            Reset Password
-                                                        </DropdownMenuItem>
-                                                    )}
-                                                    <DropdownMenuSeparator />
-                                                    {can('admin.user-management.users.delete') && (
-                                                        <DropdownMenuItem className="text-rose-600 focus:text-rose-600" onClick={() => onDelete(user.id)}>
-                                                            <Trash2 className="size-4" />
-                                                            Delete User
-                                                        </DropdownMenuItem>
-                                                    )}
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
-                                        </div>
+                            {users.data.length === 0 && (
+                                <tr>
+                                    <td colSpan={visibleColumns.length + (bulkMode ? 1 : 0)} className="px-4 py-16 text-center text-sm text-sidebar-foreground/60">
+                                        {emptyMessage}
                                     </td>
-                                )}
-                            </tr>
-                        ))}
-
-                        {users.data.length === 0 && (
-                            <tr>
-                                <td colSpan={visibleColumns.length} className="px-4 py-16 text-center text-sm text-sidebar-foreground/60">
-                                    No users match the current filters.
-                                </td>
-                            </tr>
-                        )}
-                    </tbody>
-                </table>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             {users.data.length > 0 && (
-                <div className="flex flex-wrap items-center justify-between gap-4 border-t border-sidebar-border/60 px-4 py-4">
+                <div className="flex flex-col gap-3 border-t border-sidebar-border/60 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-sm text-sidebar-foreground/60">
                         Page {users.current_page} of {users.last_page}
                     </p>
-                    <div className="flex items-center gap-2">
-                        <Button type="button" variant="outline" size="sm" disabled={users.current_page === 1} onClick={() => onPageChange(users.current_page - 1)}>
+                    <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+                        <Button type="button" variant="outline" className="h-10 sm:h-9" disabled={users.current_page === 1} onClick={() => onPageChange(users.current_page - 1)}>
                             <ChevronLeft className="size-4" />
                             Previous
                         </Button>
-                        <Button type="button" variant="outline" size="sm" disabled={users.current_page === users.last_page} onClick={() => onPageChange(users.current_page + 1)}>
+                        <Button type="button" variant="outline" className="h-10 sm:h-9" disabled={users.current_page === users.last_page} onClick={() => onPageChange(users.current_page + 1)}>
                             Next
                             <ChevronRight className="size-4" />
                         </Button>

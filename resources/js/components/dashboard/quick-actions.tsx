@@ -1,4 +1,4 @@
-import { can } from '@/lib/can';
+import { useCan } from '@/lib/can';
 import { Link } from '@inertiajs/react';
 import {
     ArrowRight,
@@ -71,6 +71,7 @@ const actions: QuickAction[] = [
 ];
 
 export default function QuickActions() {
+    const can = useCan();
     const visibleActions = actions.filter((action) => !action.permission || can(action.permission));
 
     if (visibleActions.length === 0) return null;

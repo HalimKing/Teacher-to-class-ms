@@ -22,7 +22,7 @@ import AppLogo from './app-logo';
 import AppLogoIcon from './app-logo-icon';
 import NotificationBell from '@/components/notifications/NotificationBell';
 import { GlobalSearchDialog } from '@/components/global-search-dialog';
-import { can } from '@/lib/can';
+import { useCan } from '@/lib/can';
 import { useMobileNavigation } from '@/hooks/use-mobile-navigation';
 
 const teacherNavItems: NavItem[] = [
@@ -365,6 +365,7 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
         system_settings?: Record<string, Record<string, { value?: boolean | string | number }>>;
     }).system_settings;
     const getInitials = useInitials();
+    const can = useCan();
     const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
     const [navItems, setNavItems] = useState<NavItem[]>(auth.user && auth.guard === 'teacher' ? teacherNavItems : mainNavItems);
 
@@ -386,13 +387,6 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
         return auth.user.name || auth.user.email || 'User';
     }, [auth.user, isTeacher]);
 
-    console.log('User Info:', isTeacher ? 'Teacher' : 'Admin', auth.user);
-    
-
-    // Helper function to check permissions
-    
-
-    // Filter navigation items based on permissions
     const filteredNavItems = useMemo(() => {
         if (isTeacher) {
             return teacherNavItems
@@ -456,10 +450,7 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
             }
             return true;
         });
-    }, [auth.user, teacherStaffType, venueChangeRequestsEnabled]);
-
-
-    console.log('Filtered Nav Items:', filteredNavItems);
+    }, [auth.user, can, teacherStaffType, venueChangeRequestsEnabled]);
 
     const isNavItemActive = (item: NavItem) => {
         const current = page.url.split('?')[0];
@@ -520,7 +511,7 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                                     <Menu className="h-5 w-5" />
                                 </Button>
                             </SheetTrigger>
-                            <SheetContent side="left" className="w-72 flex h-full flex-col items-stretch justify-between bg-sidebar overflow-y-auto">
+                            <SheetContent side="left" className="flex h-full w-[min(18rem,85vw)] flex-col items-stretch justify-between overflow-y-auto bg-sidebar">
                                 <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
                                 <SheetHeader className="flex justify-start text-left">
                                     <AppLogoIcon className="h-10 w-10" />
@@ -753,7 +744,7 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
             </div>
             {breadcrumbs.length > 1 && (
                 <div className="flex w-full border-b border-sidebar-border/70">
-                    <div className="mx-auto flex h-12 w-full items-center justify-start px-4 text-neutral-500 md:max-w-7xl">
+                    <div className="mx-auto flex min-h-12 w-full min-w-0 items-center justify-start overflow-x-auto px-3 py-2 text-neutral-500 sm:px-4 md:max-w-7xl">
                         <Breadcrumbs breadcrumbs={breadcrumbs} />
                     </div>
                 </div>

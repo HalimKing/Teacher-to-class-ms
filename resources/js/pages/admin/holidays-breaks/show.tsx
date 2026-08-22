@@ -1,5 +1,6 @@
 import AppLayout from '@/layouts/app-layout';
 import { can } from '@/lib/can';
+import { formatLongDate, formatLongDateRange } from '@/lib/dates';
 import { type BreadcrumbItem, type PagePropsWithFlash } from '@/types';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
@@ -221,7 +222,7 @@ export default function HolidayBreakShow({
                     <div>
                         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{holidayBreak.name}</h1>
                         <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-                            {holidayBreak.type_label} · {holidayBreak.start_date} → {holidayBreak.end_date}
+                            {holidayBreak.type_label} · {formatLongDateRange(holidayBreak.start_date, holidayBreak.end_date)}
                         </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -251,7 +252,7 @@ export default function HolidayBreakShow({
                     <Info label="Covered staff" value={String(holidayBreak.covered_staff_count)} />
                     <Info label="Break duty staff" value={String(holidayBreak.duty_assignments_count)} />
                     <Info label="Created by" value={holidayBreak.created_by_name || '—'} />
-                    <Info label="Created at" value={holidayBreak.created_at || '—'} />
+                    <Info label="Created at" value={formatLongDate(holidayBreak.created_at)} />
                     <div className="sm:col-span-2">
                         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Coverage rules</p>
                         <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">{holidayBreak.coverage_description}</p>
@@ -473,7 +474,7 @@ export default function HolidayBreakShow({
                                                 }
                                                 className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700"
                                             >
-                                                {date} ×
+                                                {formatLongDate(date)} ×
                                             </button>
                                         ))}
                                     </div>
@@ -534,7 +535,7 @@ export default function HolidayBreakShow({
                                             </td>
                                             <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
                                                 {assignment.duty_dates && assignment.duty_dates.length > 0
-                                                    ? assignment.duty_dates.join(', ')
+                                                    ? assignment.duty_dates.map((date) => formatLongDate(date)).join(', ')
                                                     : 'All days in period'}
                                             </td>
                                             <td className="px-4 py-3 text-slate-600 dark:text-slate-300">

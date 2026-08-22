@@ -6,6 +6,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/app-layout';
+import { formatLongDateRange } from '@/lib/dates';
 import { cn } from '@/lib/utils';
 import { type BreadcrumbItem, type PagePropsWithFlash } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
@@ -62,23 +63,6 @@ function staffTypeForCoverage(coverage: string): string | null {
         return 'lecturer';
     }
     return null;
-}
-
-function formatDisplayDate(value: string): string {
-    if (!value) {
-        return 'Not set';
-    }
-
-    const date = new Date(`${value}T00:00:00`);
-    if (Number.isNaN(date.getTime())) {
-        return value;
-    }
-
-    return date.toLocaleDateString(undefined, {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-    });
 }
 
 function inclusiveDayCount(startDate: string, endDate: string): number | null {
@@ -523,7 +507,7 @@ export default function HolidayBreakCreate({
                                     label="Dates"
                                     value={
                                         data.start_date || data.end_date
-                                            ? `${formatDisplayDate(data.start_date)} → ${formatDisplayDate(data.end_date)}`
+                                            ? formatLongDateRange(data.start_date, data.end_date, 'Not set')
                                             : 'Not set'
                                     }
                                 />
@@ -569,7 +553,7 @@ export default function HolidayBreakCreate({
                             </CardContent>
                         </Card>
 
-                        <Card className="border-sidebar-border/70 bg-white shadow-sm dark:border-sidebar-border dark:bg-sidebar-accent">
+                        <Card className="hidden border-sidebar-border/70 bg-white shadow-sm xl:block dark:border-sidebar-border dark:bg-sidebar-accent">
                             <CardContent className="flex flex-col gap-3 pt-6">
                                 <Button
                                     type="submit"

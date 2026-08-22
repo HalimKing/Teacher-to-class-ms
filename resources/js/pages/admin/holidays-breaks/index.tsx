@@ -1,8 +1,17 @@
+import { Button } from '@/components/ui/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import AppLayout from '@/layouts/app-layout';
 import { can } from '@/lib/can';
+import { formatLongDateRange } from '@/lib/dates';
 import { type BreadcrumbItem, type PagePropsWithFlash } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { AlertTriangle, CalendarDays, Plus, Search } from 'lucide-react';
+import { AlertTriangle, CalendarDays, Edit, Eye, MoreVertical, Plus, Power, PowerOff, Search } from 'lucide-react';
 import { FormEvent, useEffect, useState } from 'react';
 import { Bounce, toast, ToastContainer } from 'react-toastify';
 
@@ -85,14 +94,60 @@ export default function HolidayBreaksIndex({ holidayBreaks, filters, typeOptions
         router.patch(route('admin.holidays-breaks.toggle-status', item.id), { status: next }, { preserveScroll: true });
     };
 
+    const renderActions = (item: HolidayBreakRow) => (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="size-10 shrink-0 lg:size-9"
+                    aria-label={`Actions for ${item.name}`}
+                >
+                    <MoreVertical className="size-4" />
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+                <DropdownMenuItem asChild className="min-h-10 cursor-pointer">
+                    <Link href={route('admin.holidays-breaks.show', item.id)}>
+                        <Eye className="size-4" />
+                        Manage
+                    </Link>
+                </DropdownMenuItem>
+                {can('admin.holidays-breaks.edit') && (
+                    <>
+                        <DropdownMenuItem asChild className="min-h-10 cursor-pointer">
+                            <Link href={route('admin.holidays-breaks.edit', item.id)}>
+                                <Edit className="size-4" />
+                                Edit
+                            </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem className="min-h-10 cursor-pointer" onSelect={() => toggleStatus(item)}>
+                            {item.status === 'active' ? <PowerOff className="size-4" /> : <Power className="size-4" />}
+                            {item.status === 'active' ? 'Deactivate' : 'Activate'}
+                        </DropdownMenuItem>
+                    </>
+                )}
+            </DropdownMenuContent>
+        </DropdownMenu>
+    );
+
+    const emptyState = (
+        <div className="px-4 py-10 text-center text-slate-500">
+            <CalendarDays className="mx-auto mb-2 size-8 opacity-40" />
+            No holiday or break periods found.
+        </div>
+    );
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Holidays & Breaks" />
             <ToastContainer />
 
-            <div className="mx-auto w-full max-w-6xl space-y-5 p-4 md:p-6">
+            <div className="mx-auto w-full min-w-0 max-w-6xl space-y-5 p-4 md:p-6">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
+                    <div className="min-w-0">
                         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Holidays & University Breaks</h1>
                         <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
                             Configure days when normal attendance is suspended, and assign essential break-duty staff.
@@ -101,7 +156,7 @@ export default function HolidayBreaksIndex({ holidayBreaks, filters, typeOptions
                     {can('admin.holidays-breaks.create') && (
                         <Link
                             href={route('admin.holidays-breaks.create')}
-                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700"
+                            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 sm:h-auto sm:w-auto"
                         >
                             <Plus className="size-4" />
                             Add Holiday / Break
@@ -165,95 +220,128 @@ export default function HolidayBreaksIndex({ holidayBreaks, filters, typeOptions
                 </form>
 
                 <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                    <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
-                        <thead className="bg-slate-50 dark:bg-slate-950/50">
-                            <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                <th className="px-4 py-3">Name</th>
-                                <th className="px-4 py-3">Type</th>
-                                <th className="px-4 py-3">Applies to</th>
-                                <th className="px-4 py-3">Dates</th>
-                                <th className="px-4 py-3">Duty staff</th>
-                                <th className="px-4 py-3">Status</th>
-                                <th className="px-4 py-3">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                            {holidayBreaks.data.length === 0 ? (
-                                <tr>
-                                    <td colSpan={7} className="px-4 py-10 text-center text-slate-500">
-                                        <CalendarDays className="mx-auto mb-2 size-8 opacity-40" />
-                                        No holiday or break periods found.
-                                    </td>
+                    <div className="space-y-3 p-4 lg:hidden">
+                        {holidayBreaks.data.length === 0
+                            ? emptyState
+                            : holidayBreaks.data.map((item) => (
+                                  <div key={item.id} className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-950/40">
+                                      <div className="flex items-start justify-between gap-3">
+                                          <div className="min-w-0">
+                                              <Link
+                                                  href={route('admin.holidays-breaks.show', item.id)}
+                                                  className="font-semibold break-words text-slate-900 hover:text-emerald-700 dark:text-white"
+                                              >
+                                                  {item.name}
+                                              </Link>
+                                              <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{item.type_label}</p>
+                                          </div>
+                                          <div className="flex shrink-0 items-center gap-2">
+                                              <span
+                                                  className={`rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${
+                                                      item.status === 'active'
+                                                          ? 'bg-emerald-100 text-emerald-800'
+                                                          : 'bg-slate-100 text-slate-600'
+                                                  }`}
+                                              >
+                                                  {item.status}
+                                              </span>
+                                              {renderActions(item)}
+                                          </div>
+                                      </div>
+
+                                      {item.overlaps && (
+                                          <p className="mt-2 inline-flex items-center gap-1 text-xs text-amber-700">
+                                              <AlertTriangle className="size-3.5" />
+                                              Overlaps another active period
+                                          </p>
+                                      )}
+
+                                      <dl className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                                          <div>
+                                              <dt className="text-xs text-slate-500">Applies to</dt>
+                                              <dd className="text-slate-700 dark:text-slate-200">{item.coverage_label}</dd>
+                                              <dd className="text-xs text-slate-500">{item.covered_staff_count} covered</dd>
+                                          </div>
+                                          <div>
+                                              <dt className="text-xs text-slate-500">Dates</dt>
+                                              <dd className="text-slate-700 dark:text-slate-200">
+                                                  {formatLongDateRange(item.start_date, item.end_date)}
+                                              </dd>
+                                          </div>
+                                          <div>
+                                              <dt className="text-xs text-slate-500">Duty staff</dt>
+                                              <dd className="text-slate-700 dark:text-slate-200">{item.duty_assignments_count}</dd>
+                                          </div>
+                                      </dl>
+
+                                  </div>
+                              ))}
+                    </div>
+
+                    <div className="hidden overflow-x-auto lg:block">
+                        <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
+                            <thead className="bg-slate-50 dark:bg-slate-950/50">
+                                <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                    <th className="px-4 py-3">Name</th>
+                                    <th className="px-4 py-3">Type</th>
+                                    <th className="px-4 py-3">Applies to</th>
+                                    <th className="px-4 py-3">Dates</th>
+                                    <th className="px-4 py-3">Duty staff</th>
+                                    <th className="px-4 py-3">Status</th>
+                                    <th className="sticky right-0 bg-slate-50 px-4 py-3 text-right dark:bg-slate-950/50">Actions</th>
                                 </tr>
-                            ) : (
-                                holidayBreaks.data.map((item) => (
-                                    <tr key={item.id} className="align-top">
-                                        <td className="px-4 py-3">
-                                            <Link
-                                                href={route('admin.holidays-breaks.show', item.id)}
-                                                className="font-semibold text-slate-900 hover:text-emerald-700 dark:text-white"
-                                            >
-                                                {item.name}
-                                            </Link>
-                                            {item.overlaps && (
-                                                <p className="mt-1 inline-flex items-center gap-1 text-xs text-amber-700">
-                                                    <AlertTriangle className="size-3.5" />
-                                                    Overlaps another active period
-                                                </p>
-                                            )}
-                                        </td>
-                                        <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{item.type_label}</td>
-                                        <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
-                                            <p>{item.coverage_label}</p>
-                                            <p className="text-xs text-slate-500">{item.covered_staff_count} covered</p>
-                                        </td>
-                                        <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
-                                            {item.start_date} → {item.end_date}
-                                        </td>
-                                        <td className="px-4 py-3">{item.duty_assignments_count}</td>
-                                        <td className="px-4 py-3">
-                                            <span
-                                                className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                                                    item.status === 'active'
-                                                        ? 'bg-emerald-100 text-emerald-800'
-                                                        : 'bg-slate-100 text-slate-600'
-                                                }`}
-                                            >
-                                                {item.status}
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <div className="flex flex-wrap gap-2">
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                {holidayBreaks.data.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={7}>{emptyState}</td>
+                                    </tr>
+                                ) : (
+                                    holidayBreaks.data.map((item) => (
+                                        <tr key={item.id} className="align-top">
+                                            <td className="px-4 py-3">
                                                 <Link
                                                     href={route('admin.holidays-breaks.show', item.id)}
-                                                    className="rounded-lg border px-2.5 py-1.5 text-xs font-medium hover:bg-slate-50 dark:hover:bg-slate-800"
+                                                    className="font-semibold text-slate-900 hover:text-emerald-700 dark:text-white"
                                                 >
-                                                    Manage
+                                                    {item.name}
                                                 </Link>
-                                                {can('admin.holidays-breaks.edit') && (
-                                                    <>
-                                                        <Link
-                                                            href={route('admin.holidays-breaks.edit', item.id)}
-                                                            className="rounded-lg border px-2.5 py-1.5 text-xs font-medium hover:bg-slate-50 dark:hover:bg-slate-800"
-                                                        >
-                                                            Edit
-                                                        </Link>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => toggleStatus(item)}
-                                                            className="rounded-lg border px-2.5 py-1.5 text-xs font-medium hover:bg-slate-50 dark:hover:bg-slate-800"
-                                                        >
-                                                            {item.status === 'active' ? 'Deactivate' : 'Activate'}
-                                                        </button>
-                                                    </>
+                                                {item.overlaps && (
+                                                    <p className="mt-1 inline-flex items-center gap-1 text-xs text-amber-700">
+                                                        <AlertTriangle className="size-3.5" />
+                                                        Overlaps another active period
+                                                    </p>
                                                 )}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
+                                            </td>
+                                            <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{item.type_label}</td>
+                                            <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                                                <p>{item.coverage_label}</p>
+                                                <p className="text-xs text-slate-500">{item.covered_staff_count} covered</p>
+                                            </td>
+                                            <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                                                {formatLongDateRange(item.start_date, item.end_date)}
+                                            </td>
+                                            <td className="px-4 py-3">{item.duty_assignments_count}</td>
+                                            <td className="px-4 py-3">
+                                                <span
+                                                    className={`rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${
+                                                        item.status === 'active'
+                                                            ? 'bg-emerald-100 text-emerald-800'
+                                                            : 'bg-slate-100 text-slate-600'
+                                                    }`}
+                                                >
+                                                    {item.status}
+                                                </span>
+                                            </td>
+                                            <td className="sticky right-0 bg-white px-4 py-3 text-right dark:bg-slate-900">
+                                                {renderActions(item)}
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </AppLayout>

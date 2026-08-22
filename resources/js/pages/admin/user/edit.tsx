@@ -61,10 +61,10 @@ export default function EditUserPage({ user, roles, userRoles, statusOptions }: 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title={`Edit ${user.name}`} />
-            <div className="mx-auto max-w-3xl space-y-6 p-4 sm:p-6 lg:p-8">
-                <div className="rounded-2xl border border-sidebar-border/70 bg-gradient-to-br from-white via-white to-primary/5 p-6 shadow-sm dark:from-sidebar-accent dark:via-sidebar-accent">
+            <div className="mx-auto w-full min-w-0 max-w-3xl space-y-6 p-4 sm:p-6 lg:p-8">
+                <div className="rounded-2xl border border-sidebar-border/70 bg-gradient-to-br from-white via-white to-primary/5 p-4 shadow-sm sm:p-6 dark:from-sidebar-accent dark:via-sidebar-accent">
                     <p className="text-xs font-medium tracking-wide text-primary uppercase">Administration</p>
-                    <h1 className="mt-2 text-3xl font-semibold text-sidebar-foreground">Edit User</h1>
+                    <h1 className="mt-2 text-2xl font-semibold text-sidebar-foreground sm:text-3xl">Edit User</h1>
                     <p className="mt-2 text-sm text-sidebar-foreground/70">Update account details, status, and assigned roles.</p>
                 </div>
 

@@ -137,19 +137,19 @@ export default function ResetPasswordModal({ open, user, loading, onClose, onSub
     };
 
     return (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[60] flex items-end justify-center p-0 sm:items-center sm:p-4">
             <button type="button" className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} aria-label="Close reset password modal" />
-            <div className="relative w-full max-w-lg rounded-2xl border border-sidebar-border/70 bg-white p-6 shadow-2xl dark:bg-sidebar-accent">
-                <div className="mb-6 flex items-start justify-between">
-                    <div>
+            <div className="relative max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-sidebar-border/70 bg-white p-4 shadow-2xl sm:max-w-lg sm:rounded-2xl sm:p-6 dark:bg-sidebar-accent">
+                <div className="mb-6 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
                         <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
                             <Key className="size-3.5" />
                             Password Reset
                         </div>
-                        <h2 className="text-xl font-semibold text-sidebar-foreground">Reset password for {user.name}</h2>
-                        <p className="mt-1 text-sm text-sidebar-foreground/60">{user.email}</p>
+                        <h2 className="text-lg font-semibold break-words text-sidebar-foreground sm:text-xl">Reset password for {user.name}</h2>
+                        <p className="mt-1 break-all text-sm text-sidebar-foreground/60">{user.email}</p>
                     </div>
-                    <Button type="button" variant="ghost" size="icon" onClick={onClose}>
+                    <Button type="button" variant="ghost" size="icon" className="size-10 shrink-0" onClick={onClose}>
                         <X className="size-4" />
                     </Button>
                 </div>
@@ -162,8 +162,8 @@ export default function ResetPasswordModal({ open, user, loading, onClose, onSub
                                 Share this temporary password securely. The user should change it after first login.
                             </p>
                             <div className="mt-3 flex items-center gap-2">
-                                <code className="flex-1 rounded-lg bg-white px-3 py-2 text-sm dark:bg-sidebar-accent">{generatedPassword}</code>
-                                <Button type="button" variant="outline" size="icon" onClick={handleCopy}>
+                                <code className="min-w-0 flex-1 overflow-x-auto rounded-lg bg-white px-3 py-2 text-sm break-all dark:bg-sidebar-accent">{generatedPassword}</code>
+                                <Button type="button" variant="outline" size="icon" className="size-10 shrink-0" onClick={handleCopy}>
                                     {copied ? <Check className="size-4 text-emerald-600" /> : <Copy className="size-4" />}
                                 </Button>
                             </div>
@@ -196,14 +196,14 @@ export default function ResetPasswordModal({ open, user, loading, onClose, onSub
                     </div>
                 ) : (
                     <div className="space-y-5">
-                        <div className="grid grid-cols-2 gap-2 rounded-xl bg-muted/40 p-1">
+                        <div className="grid grid-cols-1 gap-2 rounded-xl bg-muted/40 p-1 sm:grid-cols-2">
                             {(['generate', 'manual'] as const).map((option) => (
                                 <button
                                     key={option}
                                     type="button"
                                     onClick={() => setMode(option)}
                                     className={cn(
-                                        'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                                        'min-h-11 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
                                         mode === option ? 'bg-white text-sidebar-foreground shadow-sm dark:bg-sidebar-accent' : 'text-sidebar-foreground/60',
                                     )}
                                 >
@@ -236,21 +236,21 @@ export default function ResetPasswordModal({ open, user, loading, onClose, onSub
                             </div>
                         )}
 
-                        <label className="flex items-center gap-2 text-sm">
-                            <input type="checkbox" checked={forceChange} onChange={(event) => setForceChange(event.target.checked)} />
+                        <label className="flex items-start gap-2 text-sm">
+                            <input type="checkbox" className="mt-0.5 size-4 shrink-0" checked={forceChange} onChange={(event) => setForceChange(event.target.checked)} />
                             Require password change on next login
                         </label>
 
-                        <label className="flex items-center gap-2 text-sm">
-                            <input type="checkbox" checked={sendResetLink} onChange={(event) => setSendResetLink(event.target.checked)} />
+                        <label className="flex items-start gap-2 text-sm">
+                            <input type="checkbox" className="mt-0.5 size-4 shrink-0" checked={sendResetLink} onChange={(event) => setSendResetLink(event.target.checked)} />
                             Send password reset email link
                         </label>
 
-                        <div className="flex justify-end gap-2">
-                            <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
+                        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                            <Button type="button" variant="outline" className="h-10" onClick={onClose} disabled={loading}>
                                 Cancel
                             </Button>
-                            <Button type="button" onClick={handleSubmit} disabled={loading}>
+                            <Button type="button" className="h-10" onClick={handleSubmit} disabled={loading}>
                                 {loading ? <Loader2 className="size-4 animate-spin" /> : null}
                                 Reset Password
                             </Button>

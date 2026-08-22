@@ -43,7 +43,7 @@ interface UserFormProps {
 }
 
 const fieldClass =
-    'h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50';
+    'h-10 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50';
 
 function formatStatusLabel(status: string): string {
     return status.charAt(0).toUpperCase() + status.slice(1);
@@ -99,7 +99,7 @@ export default function UserForm({
         <div className="space-y-6">
             {mode === 'edit' && userSummary && (
                 <Card className="border-sidebar-border/70 bg-gradient-to-br from-primary/10 via-white to-primary/5 shadow-sm dark:from-sidebar-accent dark:via-sidebar-accent">
-                    <CardContent className="flex items-center gap-4 pt-6">
+                    <CardContent className="flex min-w-0 items-center gap-4 pt-6">
                         <div className="flex size-14 items-center justify-center rounded-xl bg-primary/15 text-lg font-semibold text-primary">
                             {userSummary.initials}
                         </div>
@@ -182,7 +182,7 @@ export default function UserForm({
                                         type="button"
                                         onClick={() => onChange('status', status)}
                                         className={cn(
-                                            'flex h-9 items-center justify-center rounded-md border text-sm font-medium transition-colors',
+                                            'flex min-h-11 items-center justify-center rounded-md border text-sm font-medium transition-colors',
                                             statusButtonClass(status, selected),
                                         )}
                                         aria-pressed={selected}
@@ -239,7 +239,7 @@ export default function UserForm({
                                     type="button"
                                     onClick={() => toggleRole(role.name)}
                                     className={cn(
-                                        'flex items-start gap-3 rounded-xl border px-4 py-3 text-left text-sm transition-colors',
+                                        'flex min-h-11 min-w-0 items-start gap-3 rounded-xl border px-4 py-3 text-left text-sm transition-colors',
                                         selected
                                             ? 'border-primary bg-primary/5 text-sidebar-foreground ring-1 ring-primary/20'
                                             : 'border-sidebar-border/70 text-sidebar-foreground/80 hover:border-primary/40 hover:bg-muted/40',
@@ -300,9 +300,9 @@ export default function UserForm({
     );
 
     return (
-        <form onSubmit={onSubmit} className="flex flex-col gap-6">
+        <form onSubmit={onSubmit} className="flex min-w-0 flex-col gap-6">
             {sidebar ? (
-                <div className="grid gap-6 xl:grid-cols-[1.45fr_0.85fr]">
+                <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,0.85fr)]">
                     {fields}
                     <aside className="space-y-6 xl:sticky xl:top-6 xl:self-start">{sidebar}</aside>
                 </div>
@@ -312,13 +312,13 @@ export default function UserForm({
 
             {showActions && (
                 <div className="flex flex-col-reverse gap-2 border-t border-sidebar-border/70 pt-4 sm:flex-row sm:items-center sm:justify-between">
-                    <Button type="button" variant="outline" asChild>
+                    <Button type="button" variant="outline" className="h-10" asChild>
                         <Link href={route('admin.user-management.users.index')}>
                             <ArrowLeft className="size-4" />
                             {mode === 'create' ? 'Cancel' : 'Back to users'}
                         </Link>
                     </Button>
-                    <Button type="submit" disabled={processing} className="sm:min-w-44">
+                    <Button type="submit" disabled={processing} className="h-10 sm:min-w-44">
                         {processing ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
                         {processing ? (mode === 'create' ? 'Creating…' : 'Saving…') : mode === 'create' ? 'Create user' : 'Save changes'}
                     </Button>
