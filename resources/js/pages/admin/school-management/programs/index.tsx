@@ -1,6 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import DataTable from '@/components/data-table/DataTable';
+import RowActionsMenu from '@/components/data-table/RowActionsMenu';
+import { DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
+import { useListTableQuery } from '@/hooks/use-list-table-query';
+import type { PaginatedCollection } from '@/components/data-table/types';
+import React, { useMemo, useState, useEffect } from 'react';
 import { 
-  Search,
   Plus,
   Edit,
   Trash2,
@@ -17,7 +21,6 @@ import { Head, Link, usePage, router } from '@inertiajs/react';
 import { useForm } from '@inertiajs/react';
 import { PagePropsWithFlash } from '@/types';
 import { ToastContainer, toast, Bounce } from 'react-toastify';
-import { Button } from '@headlessui/react';
 import { can } from '@/lib/can';
 
 // Simplified interface for Program
@@ -36,23 +39,33 @@ interface Program {
 
 // Update props interface to include filter options
 interface ProgramsIndexPageProps {
-  programsData: Program[];
+  programsData: PaginatedCollection<Program>;
   facultyOptions: Array<{ label: string; value: number }>;
   departmentOptions: Array<{ label: string; value: number }>;
+  filters?: {
+    search?: string;
+    faculty_id?: string;
+    department_id?: string;
+    sort_by?: string;
+    sort_dir?: string;
+    per_page?: string;
+  };
 }
 
 const ProgramsIndexPage = ({ 
   programsData, 
   facultyOptions, 
-  departmentOptions 
+  departmentOptions,
+  filters = {},
 }: ProgramsIndexPageProps) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [facultyFilter, setFacultyFilter] = useState<number | ''>('');
-  const [departmentFilter, setDepartmentFilter] = useState<number | ''>('');
+  const [searchTerm, setSearchTerm] = useState(filters.search ?? '');
+  const [facultyFilter, setFacultyFilter] = useState<number | ''>(filters.faculty_id ? Number(filters.faculty_id) : '');
+  const [departmentFilter, setDepartmentFilter] = useState<number | ''>(filters.department_id ? Number(filters.department_id) : '');
   const [filteredDepartments, setFilteredDepartments] = useState<Array<{ label: string; value: number }>>(departmentOptions);
-  const [showFilters, setShowFilters] = useState(false);
-  const itemsPerPage = 10;
+  const [showFilters, setShowFilters] = useState(Boolean(filters.faculty_id || filters.department_id));
+  const [sortBy, setSortBy] = useState(filters.sort_by || 'name');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>(filters.sort_dir === 'desc' ? 'desc' : 'asc');
+  const [perPage, setPerPage] = useState(Number(filters.per_page || programsData.per_page || 10));
   const { flash } = usePage().props as PagePropsWithFlash;
 
   // Import/Export state
@@ -62,11 +75,39 @@ const ProgramsIndexPage = ({
   const [previewLoading, setPreviewLoading] = useState(false);
   const [confirmLoading, setConfirmLoading] = useState(false);
 
-  // Store all programs from props
-  const [allPrograms, setAllPrograms] = useState<Program[]>(programsData);
-  
-  // Filtered data based on search term and filters
-  const [filteredData, setFilteredData] = useState<Program[]>(programsData);
+  const tableFilters = useMemo(
+    () => ({
+      search: searchTerm,
+      faculty_id: facultyFilter ? String(facultyFilter) : '',
+      department_id: departmentFilter ? String(departmentFilter) : '',
+    }),
+    [searchTerm, facultyFilter, departmentFilter],
+  );
+  const { loading, onPageChange } = useListTableQuery({
+    url: route('admin.school-management.programs.index'),
+    filters: tableFilters,
+    serverFilters: {
+      search: filters.search ?? '',
+      faculty_id: filters.faculty_id ?? '',
+      department_id: filters.department_id ?? '',
+      sort_by: filters.sort_by,
+      sort_dir: filters.sort_dir,
+      per_page: filters.per_page,
+    },
+    sortBy,
+    sortDir,
+    perPage,
+    only: ['programsData', 'filters', 'facultyOptions', 'departmentOptions'],
+  });
+
+  const handleSort = (column: string) => {
+    if (sortBy === column) {
+      setSortDir((current) => (current === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setSortBy(column);
+    setSortDir('asc');
+  };
   
   // Show toast notifications based on flash messages
   useEffect(() => {
@@ -108,8 +149,6 @@ const ProgramsIndexPage = ({
             value: dept.id
           }));
           setFilteredDepartments(departments);
-          // Reset department filter when faculty changes
-          setDepartmentFilter('');
         })
         .catch((error) => {
           console.error('Error fetching departments:', error);
@@ -117,56 +156,8 @@ const ProgramsIndexPage = ({
         });
     } else {
       setFilteredDepartments(departmentOptions);
-      setDepartmentFilter('');
     }
   }, [facultyFilter]);
-
-  // Update filtered data when filters or search term changes
-  useEffect(() => {
-    let filtered = allPrograms;
-    
-    // Apply search filter
-    if (searchTerm.trim() !== '') {
-      filtered = filtered.filter(item =>
-        item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.faculty.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.department.name.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-    
-    // Apply faculty filter
-    if (facultyFilter) {
-      filtered = filtered.filter(item => item.faculty.id === facultyFilter);
-    }
-    
-    // Apply department filter
-    if (departmentFilter) {
-      filtered = filtered.filter(item => item.department.id === departmentFilter);
-    }
-    
-    setFilteredData(filtered);
-    // Reset to first page when filters change
-    setCurrentPage(1);
-  }, [searchTerm, facultyFilter, departmentFilter, allPrograms]);
-
-  // Calculate pagination based on filtered data
-  const totalItems = filteredData.length;
-  const totalPages = Math.ceil(totalItems / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedData = filteredData.slice(startIndex, endIndex);
-
-  // Function to handle pagination
-  const handlePageChange = (page: number | string) => {
-    if (typeof page === 'number' && page >= 1 && page <= totalPages) {
-      setCurrentPage(page);
-    }
-  };
-
-  // Function to clear search
-  const clearSearch = () => {
-    setSearchTerm('');
-  };
 
   // Function to clear all filters
   const clearAllFilters = () => {
@@ -181,25 +172,9 @@ const ProgramsIndexPage = ({
     if (confirm(`Are you sure you want to permanently delete "${name}"?`)) {
       router.delete(route('admin.school-management.programs.destroy', id), {
         preserveState: true,
-        onSuccess: () => {
-          // Remove the deleted item from the state
-          setAllPrograms(prevPrograms => 
-            prevPrograms.filter(program => program.id !== id)
-          );
-        }
+        preserveScroll: true,
       });
     }
-  };
-
-  // Apply filters via Inertia (reload page with filters)
-  const applyFilters = () => {
-    router.get(route('admin.school-management.programs.index'), {
-      faculty_id: facultyFilter || null,
-      department_id: departmentFilter || null,
-    }, {
-      preserveState: true,
-      preserveScroll: true,
-    });
   };
 
   // Count active filters
@@ -294,6 +269,9 @@ const ProgramsIndexPage = ({
           autoClose: 5000,
           theme: 'dark',
         });
+        setShowPreview(false);
+        setPreviewRows([]);
+        importForm.setData('file', null);
         router.reload();
       } else {
         toast.error(json.error || 'Import failed', {
@@ -503,168 +481,99 @@ const ProgramsIndexPage = ({
                   {/* Apply Filter Button */}
                   <div className="flex items-end">
                     <button
-                      onClick={applyFilters}
+                      type="button"
+                      onClick={() => setShowFilters(false)}
                       className="w-full px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
                     >
-                      Apply Filters
+                      Done
                     </button>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Programs Table */}
-            <div className="bg-white rounded-2xl shadow-lg border border-slate-200">
-              <div className="p-6 border-b border-slate-200">
-                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
-                  <h3 className="text-xl font-bold text-slate-900">Programs List</h3>
-                  <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
-                      <input
-                        type="text"
-                        placeholder="Search programs, faculty or department..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-10 pr-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-sm w-full sm:w-64 transition-shadow"
-                      />
-                      {searchTerm && (
-                        <button
-                          onClick={clearSearch}
-                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                          aria-label="Clear search"
-                        >
-                          ×
-                        </button>
+            <DataTable
+              title="Programs List"
+              records={programsData}
+              columns={[
+                {
+                  key: 'name',
+                  label: 'Program',
+                  sortable: true,
+                  render: (program) => <p className="font-medium capitalize text-sidebar-foreground">{program.name}</p>,
+                },
+                {
+                  key: 'faculty',
+                  label: 'Faculty',
+                  sortable: true,
+                  render: (program) => <p className="text-sm text-sidebar-foreground/70">{program.faculty?.name || '—'}</p>,
+                },
+                {
+                  key: 'department',
+                  label: 'Department',
+                  sortable: true,
+                  render: (program) => <p className="text-sm text-sidebar-foreground/70">{program.department?.name || '—'}</p>,
+                },
+                {
+                  key: 'actions',
+                  label: 'Actions',
+                  className: 'text-right',
+                  render: (program) => (
+                    <RowActionsMenu label={`Actions for ${program.name}`}>
+                      {can('admin.school-management.programs.edit') && (
+                        <DropdownMenuItem asChild>
+                          <Link href={route('admin.school-management.programs.edit', program.id)}>
+                            <Edit className="size-4" />
+                            Edit
+                          </Link>
+                        </DropdownMenuItem>
                       )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="overflow-x-auto">
-                <table className="w-full whitespace-nowrap">
-                  <thead className="bg-slate-50 border-b border-slate-200">
-                    <tr>
-                      <th className="px-6 py-4 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">#</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Program Name</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Faculty</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Department</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-slate-200">
-                    {paginatedData.length > 0 ? (
-                      paginatedData.map((program, index) => (
-                        <tr key={program.id} className="hover:bg-indigo-50/20 transition-colors">
-                          <td className='text-right px-4 py-4'>
-                            {index + 1 + startIndex}
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center space-x-4">
-                              <div className="text-sm font-semibold text-slate-900">
-                                <p style={{ textTransform: 'capitalize' }}>{program.name}</p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="text-sm text-slate-700">{program.faculty.name}</div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="text-sm text-slate-700">{program.department.name}</div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center space-x-1">
-                              {can('admin.school-management.programs.edit') && (
-                              <Link 
-                                title="Edit Program" 
-                                className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                href={route('admin.school-management.programs.edit', program.id)}
-                              >
-                                <Edit className="w-5 h-5" />
-                              </Link>
-                              )}
-
-                              {can('admin.school-management.programs.delete') && (
-                                <Button 
-                                  title="Delete Program" 
-                                  className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    handleDelete(program.id, program.name);
-                                  }}
-                                >
-                                  <Trash2 className="w-5 h-5" />
-                                </Button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
-                          {searchTerm || facultyFilter || departmentFilter
-                            ? `No programs found with the current filters. Try adjusting your filters.` 
-                            : 'No programs found. Add your first program!'}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              
-              {/* Pagination */}
-              {totalPages > 0 && (
-                <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-between flex-wrap gap-4">
-                  <div className="text-sm text-slate-600">
-                    Showing <span className="font-semibold text-slate-800">{totalItems > 0 ? startIndex + 1 : 0}</span> to <span className="font-semibold text-slate-800">{Math.min(endIndex, totalItems)}</span> of <span className="font-semibold text-slate-800">{totalItems}</span> Programs
-                  </div>
-                  <div className="flex space-x-2">
-                    <button 
-                      onClick={() => handlePageChange(currentPage - 1)}
-                      disabled={currentPage === 1}
-                      className={`px-4 py-2 border border-slate-300 rounded-xl text-sm font-medium ${
-                        currentPage === 1 
-                          ? 'text-slate-400 bg-slate-100 cursor-not-allowed' 
-                          : 'text-slate-700 hover:bg-slate-50 hover:border-slate-400'
-                      }`}
-                    >
-                      Previous
-                    </button>
-                    
-                    {/* Page Numbers */}
-                    <div className="hidden sm:flex space-x-1">
-                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                        <button
-                          key={page}
-                          onClick={() => handlePageChange(page)}
-                          className={`px-3 py-2 rounded-lg text-sm font-medium min-w-[40px] ${
-                            currentPage === page
-                              ? 'bg-indigo-600 text-white'
-                              : 'text-slate-700 hover:bg-slate-100 border border-slate-300 hover:border-slate-400'
-                          }`}
-                        >
-                          {page}
-                        </button>
-                      ))}
-                    </div>
-                    
-                    <button 
-                      onClick={() => handlePageChange(currentPage + 1)}
-                      disabled={currentPage === totalPages || totalPages === 0}
-                      className={`px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium ${
-                        currentPage === totalPages || totalPages === 0
-                          ? 'opacity-50 cursor-not-allowed' 
-                          : 'hover:bg-indigo-700'
-                      }`}
-                    >
-                      Next
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
+                      {can('admin.school-management.programs.delete') && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-rose-600 focus:text-rose-600"
+                            onClick={() => handleDelete(program.id, program.name)}
+                          >
+                            <Trash2 className="size-4" />
+                            Delete
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                    </RowActionsMenu>
+                  ),
+                },
+              ]}
+              sortBy={sortBy}
+              sortDir={sortDir}
+              onSort={handleSort}
+              perPage={perPage}
+              onPerPageChange={setPerPage}
+              onPageChange={onPageChange}
+              loading={loading}
+              search={searchTerm}
+              searchPlaceholder="Search programs, faculty or department..."
+              onSearchChange={setSearchTerm}
+              hasActiveQuery={activeFilterCount > 0}
+              recordLabel="programs"
+              empty={{
+                title: 'No programs yet',
+                description: 'Add a program or import a file to get started.',
+                action: can('admin.school-management.programs.create') ? (
+                  <Link
+                    href={route('admin.school-management.programs.create')}
+                    className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                  >
+                    <Plus className="mr-2 size-4" />
+                    Add Program
+                  </Link>
+                ) : undefined,
+              }}
+              noResults={{
+                title: 'No programs match the current filters',
+                description: 'Try a different search or faculty/department filter.',
+              }}
+            />
           </div>
         </div>
       </div>

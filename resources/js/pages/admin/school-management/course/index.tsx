@@ -1,3 +1,6 @@
+import DataTable from '@/components/data-table/DataTable';
+import RowActionsMenu from '@/components/data-table/RowActionsMenu';
+import { DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Search,
@@ -98,8 +101,10 @@ interface PaginationData {
   current_page: number;
   per_page: number;
   last_page: number;
-  from: number;
-  to: number;
+  from: number | null;
+  to: number | null;
+  sort_by?: string;
+  sort_dir?: 'asc' | 'desc';
 }
 
 // Update props to accept initial data and filter options
@@ -135,6 +140,8 @@ const CourseIndexPage = ({
     
   const [currentPage, setCurrentPage] = useState(initialData.current_page || 1);
   const [perPage, setPerPage] = useState(initialData.per_page || 10);
+  const [sortBy, setSortBy] = useState(initialData.sort_by || 'name');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>(initialData.sort_dir === 'desc' ? 'desc' : 'asc');
   const [showFilters, setShowFilters] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -231,6 +238,8 @@ const CourseIndexPage = ({
         ...filters,
         page: currentPage,
         per_page: perPage,
+        sort_by: sortBy,
+        sort_dir: sortDir,
         ajax: true
       };
 
@@ -302,7 +311,7 @@ const CourseIndexPage = ({
     }, 300);
 
     return () => clearTimeout(timeoutId);
-  }, [filters, currentPage, perPage]);
+  }, [filters, currentPage, perPage, sortBy, sortDir]);
 
 
   // Function to generate pagination numbers with ellipsis
@@ -357,6 +366,16 @@ const CourseIndexPage = ({
       href: '/admin/school-management/courses',
     }
   ];
+
+  const handleSort = (column: string) => {
+    if (sortBy === column) {
+      setSortDir((current) => (current === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortBy(column);
+      setSortDir('asc');
+    }
+    setCurrentPage(1);
+  };
 
   // Function to handle pagination
   const handlePageChange = (page: number | string) => {
@@ -526,6 +545,8 @@ const CourseIndexPage = ({
         });
         fetchData();
         setShowPreview(false);
+        setPreviewRows([]);
+        importForm.setData('file', null);
       } else {
         toast.error(json.error || 'Import failed', {
           position: 'top-right',
@@ -932,214 +953,145 @@ const CourseIndexPage = ({
               )}
             </div>
 
-            {/* Courses Table */}
-            <div className="bg-white rounded-2xl shadow-lg border border-slate-200">
-              <div className="p-6 border-b border-slate-200">
-                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
-                  <div>
-                    <h3 className="text-xl font-bold text-slate-900">Courses List</h3>
-                    <p className="mt-1 text-sm text-slate-500">
-                      Showing {from} to {to} of {totalCourses} courses
-                      {activeFiltersCount > 0 && ' (filtered)'}
-                    </p>
-                  </div>
-                  {isLoading && (
-                    <div className="flex items-center text-blue-600">
-                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                      <span className="text-sm">Loading courses...</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-              
-              <div className="overflow-x-auto">
-                <table className="w-full whitespace-nowrap">
-                  <thead className="bg-slate-50 border-b border-slate-200">
-                    <tr>
-                      <th className="px-6 py-4 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">#</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Course Code</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Course Name</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Program</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Level</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Academic Year</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Academic Period</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Credit Hours</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Student Size</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Faculty</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Department</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-slate-200">
-                    {coursesData.length > 0 ? (
-                      coursesData.map((course, index) => (
-                        <tr key={course.id} className="hover:bg-indigo-50/20 transition-colors">
-                          <td className='text-right px-4 py-4'>
-                            {from + index}
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                              {course.course_code}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center space-x-4">
-                              <div className="text-sm font-semibold text-slate-900">
-                                <p style={{ textTransform: 'capitalize' }}>{course.name}</p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            {formatField(course.program?.name)}
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                              course.level?.name ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                            }`}>
-                              {formatField(course.level?.name)}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4">
-                            {formatField(course.academic_year?.name)}
-                          </td>
-                          <td className="px-6 py-4">
-                            {formatField(course.academic_period?.name)}
-                          </td>
-                          <td className="px-6 py-4">
-                            {formatCreditHours(course.credit_hours)}
-                          </td>
-                          <td className="px-6 py-4">
-                            {course.student_size ? (
-                              <div className="flex items-center">
-                                <span className="text-sm font-medium text-slate-900">{course.student_size}</span>
-                                <span className="ml-1 text-xs text-slate-500">students</span>
-                              </div>
-                            ) : (
-                              <span className="text-sm text-slate-400">-</span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4">
-                            {formatField(course.program?.department?.faculty?.name)}
-                          </td>
-                          <td className="px-6 py-4">
-                            {formatField(course.program?.department?.name)}
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center space-x-1">
-                              {can('admin.school-management.courses.edit') && (
-                              <Link 
-                                title="Edit Course" 
-                                className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                href={route('admin.school-management.courses.edit', course.id)}
-                              >
-                                <Edit className="w-5 h-5" />
-                              </Link>
-                              )}
-
-                              {can('admin.school-management.courses.delete') && (
-                                <Button 
-                                  title="Delete Course" 
-                                  className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    handleDelete(course.id, course.name);
-                                  }}
-                                
-                                >
-                                  <Trash2 className="w-5 h-5" />
-                                </Button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={12} className="px-6 py-12 text-center text-slate-500">
-                          <div className="flex flex-col items-center justify-center">
-                            <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
-                              <Search className="w-8 h-8 text-slate-400" />
-                            </div>
-                            <h4 className="text-lg font-medium text-slate-700 mb-2">
-                              {isLoading ? 'Loading courses...' : 'No courses found'}
-                            </h4>
-                            <p className="text-sm text-slate-500 max-w-md mx-auto mb-4">
-                              {isLoading 
-                                ? 'Please wait while we load the courses...'
-                                : activeFiltersCount > 0 
-                                  ? 'No courses match your current filters. Try adjusting your filter criteria.'
-                                  : 'No courses have been created yet. Add your first course to get started.'}
-                            </p>
-                            {!isLoading && activeFiltersCount > 0 && (
-                              <button
-                                onClick={clearAllFilters}
-                                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"
-                              >
-                                Clear all filters
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              
-              {/* Pagination */}
-              {lastPage > 0 && (
-                <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-between flex-wrap gap-4">
-                  <div className="text-sm text-slate-600">
-                    Showing <span className="font-semibold text-slate-800">{from}</span> to <span className="font-semibold text-slate-800">{to}</span> of <span className="font-semibold text-slate-800">{totalCourses}</span> Courses
-                  </div>
-                  <div className="flex space-x-2">
-                    <button 
-                      onClick={() => handlePageChange(currentPage - 1)}
-                      disabled={currentPage === 1 || isLoading}
-                      className={`px-4 py-2 border border-slate-300 rounded-xl text-sm font-medium ${
-                        currentPage === 1 || isLoading
-                          ? 'text-slate-400 bg-slate-100 cursor-not-allowed' 
-                          : 'text-slate-700 hover:bg-slate-50 hover:border-slate-400'
-                      }`}
-                    >
-                      Previous
-                    </button>
-                    
-                    {/* Page Numbers */}
-                    <div className="hidden sm:flex space-x-1">
-                      {getPaginationNumbers().map((page, index) => (
-                        <button
-                          key={index}
-                          onClick={() => typeof page === 'number' && handlePageChange(page)}
-                          disabled={typeof page !== 'number' || isLoading}
-                          className={`px-3 py-2 rounded-lg text-sm font-medium min-w-[40px] ${
-                            currentPage === page
-                              ? 'bg-indigo-600 text-white'
-                              : typeof page === 'number'
-                                ? 'text-slate-700 hover:bg-slate-100 border border-slate-300 hover:border-slate-400'
-                                : 'text-slate-400 cursor-default'
-                          } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        >
-                          {page}
-                        </button>
-                      ))}
-                    </div>
-                    
-                    <button 
-                      onClick={() => handlePageChange(currentPage + 1)}
-                      disabled={currentPage === lastPage || lastPage === 0 || isLoading}
-                      className={`px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium ${
-                        currentPage === lastPage || lastPage === 0 || isLoading
-                          ? 'opacity-50 cursor-not-allowed' 
-                          : 'hover:bg-indigo-700'
-                      }`}
-                    >
-                      Next
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
+            <DataTable
+              title="Courses List"
+              records={paginationData}
+              columns={[
+                {
+                  key: 'course_code',
+                  label: 'Code',
+                  sortable: true,
+                  render: (course) => (
+                    <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-600/20">
+                      {course.course_code}
+                    </span>
+                  ),
+                },
+                {
+                  key: 'name',
+                  label: 'Course',
+                  sortable: true,
+                  render: (course) => <p className="font-medium capitalize text-sidebar-foreground">{course.name}</p>,
+                },
+                {
+                  key: 'program',
+                  label: 'Program',
+                  sortable: true,
+                  render: (course) => <p className="text-sm text-sidebar-foreground/70">{formatField(course.program?.name)}</p>,
+                },
+                {
+                  key: 'level',
+                  label: 'Level',
+                  sortable: true,
+                  hideOnMobile: true,
+                  render: (course) => (
+                    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${course.level?.name ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
+                      {formatField(course.level?.name)}
+                    </span>
+                  ),
+                },
+                {
+                  key: 'academic_year',
+                  label: 'Year',
+                  sortable: true,
+                  hideOnMobile: true,
+                  render: (course) => <p className="text-sm text-sidebar-foreground/70">{formatField(course.academic_year?.name)}</p>,
+                },
+                {
+                  key: 'academic_period',
+                  label: 'Period',
+                  sortable: true,
+                  hideOnMobile: true,
+                  render: (course) => <p className="text-sm text-sidebar-foreground/70">{formatField(course.academic_period?.name)}</p>,
+                },
+                {
+                  key: 'credit_hours',
+                  label: 'Credits',
+                  sortable: true,
+                  render: (course) => formatCreditHours(course.credit_hours),
+                },
+                {
+                  key: 'student_size',
+                  label: 'Size',
+                  sortable: true,
+                  hideOnMobile: true,
+                  render: (course) => <p className="text-sm text-sidebar-foreground/70">{course.student_size || '—'}</p>,
+                },
+                {
+                  key: 'faculty',
+                  label: 'Faculty',
+                  hideOnMobile: true,
+                  render: (course) => <p className="text-sm text-sidebar-foreground/70">{formatField(course.program?.department?.faculty?.name)}</p>,
+                },
+                {
+                  key: 'department',
+                  label: 'Department',
+                  hideOnMobile: true,
+                  render: (course) => <p className="text-sm text-sidebar-foreground/70">{formatField(course.program?.department?.name)}</p>,
+                },
+                {
+                  key: 'actions',
+                  label: 'Actions',
+                  className: 'text-right',
+                  render: (course) => (
+                    <RowActionsMenu label={`Actions for ${course.name}`}>
+                      {can('admin.school-management.courses.edit') && (
+                        <DropdownMenuItem asChild>
+                          <Link href={route('admin.school-management.courses.edit', course.id)}>
+                            <Edit className="size-4" />
+                            Edit
+                          </Link>
+                        </DropdownMenuItem>
+                      )}
+                      {can('admin.school-management.courses.delete') && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-rose-600 focus:text-rose-600"
+                            onClick={() => handleDelete(course.id, course.name)}
+                          >
+                            <Trash2 className="size-4" />
+                            Delete
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                    </RowActionsMenu>
+                  ),
+                },
+              ]}
+              sortBy={sortBy}
+              sortDir={sortDir}
+              onSort={handleSort}
+              perPage={perPage}
+              onPerPageChange={(size) => {
+                setPerPage(size);
+                setCurrentPage(1);
+              }}
+              onPageChange={(page) => setCurrentPage(page)}
+              loading={isLoading}
+              search={filters.search}
+              searchPlaceholder="Search by name, code, or program..."
+              onSearchChange={(value) => handleFilterChange('search', value)}
+              hasActiveQuery={activeFiltersCount > 0}
+              recordLabel="courses"
+              empty={{
+                title: 'No courses yet',
+                description: 'Add a course or import a file to get started.',
+                action: can('admin.school-management.courses.create') ? (
+                  <Link
+                    href={route('admin.school-management.courses.create')}
+                    className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                  >
+                    <Plus className="mr-2 size-4" />
+                    Add Course
+                  </Link>
+                ) : undefined,
+              }}
+              noResults={{
+                title: 'No courses match the current filters',
+                description: 'Try a different search or clear one of the filters.',
+              }}
+            />
           </div>
         </div>
       </div>

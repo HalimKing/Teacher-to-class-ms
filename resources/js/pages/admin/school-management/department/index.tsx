@@ -1,7 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import DataTable from '@/components/data-table/DataTable';
+import RowActionsMenu from '@/components/data-table/RowActionsMenu';
+import { DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
+import { useListTableQuery } from '@/hooks/use-list-table-query';
+import { useEffect, useMemo, useState } from 'react';
 import { 
   Eye,
-  Search,
   Plus,
   Edit,
   Trash2,
@@ -18,7 +21,6 @@ import { Head, Link, usePage, router } from '@inertiajs/react';
 import { PagePropsWithFlash } from '@/types';
 import { ToastContainer, toast, Bounce } from 'react-toastify';
 import { can } from '@/lib/can';
-import { simpleFilterParamsEqual } from '@/lib/list-filters';
 
 // Update interfaces
 interface Department {
@@ -44,26 +46,33 @@ interface PaginatedDepartments {
   last_page: number;
   per_page: number;
   total: number;
-  from: number;
-  to: number;
-  links: Array<{
-    url: string | null;
-    label: string;
-    active: boolean;
-  }>;
+  from: number | null;
+  to: number | null;
+}
+
+interface DepartmentFilters {
+  search?: string;
+  faculty?: string;
+  sort_by?: string;
+  sort_dir?: string;
+  per_page?: string;
 }
 
 interface TeachersIndexPageProps {
   departmentData: PaginatedDepartments;
   facultyOptions: FacultyOption[];
+  filters?: DepartmentFilters;
   search?: string;
-  faculty?: string; // Add faculty filter prop from backend
+  faculty?: string;
 }
 
-const DepartmentIndexPage = ({ departmentData, facultyOptions, search, faculty }: TeachersIndexPageProps) => {
-  const [searchTerm, setSearchTerm] = useState(search || '');
-  const [facultyFilter, setFacultyFilter] = useState(faculty || '');
+const DepartmentIndexPage = ({ departmentData, facultyOptions, filters = {}, search, faculty }: TeachersIndexPageProps) => {
+  const [searchTerm, setSearchTerm] = useState(filters.search ?? search ?? '');
+  const [facultyFilter, setFacultyFilter] = useState(filters.faculty ?? faculty ?? '');
   const [showFacultyFilter, setShowFacultyFilter] = useState(false);
+  const [sortBy, setSortBy] = useState(filters.sort_by || 'name');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>(filters.sort_dir === 'desc' ? 'desc' : 'asc');
+  const [perPage, setPerPage] = useState(Number(filters.per_page || departmentData.per_page || 10));
   const { flash } = usePage().props as PagePropsWithFlash;
   
   // Fix: Initialize with false and use useEffect to handle window resize
@@ -122,41 +131,34 @@ const DepartmentIndexPage = ({ departmentData, facultyOptions, search, faculty }
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const skipInitialFilterFetch = useRef(true);
+  const tableFilters = useMemo(
+    () => ({ search: searchTerm, faculty: facultyFilter }),
+    [searchTerm, facultyFilter],
+  );
+  const { loading, onPageChange } = useListTableQuery({
+    url: route('admin.school-management.departments.index'),
+    filters: tableFilters,
+    serverFilters: {
+      search: filters.search ?? search ?? '',
+      faculty: filters.faculty ?? faculty ?? '',
+      sort_by: filters.sort_by,
+      sort_dir: filters.sort_dir,
+      per_page: filters.per_page,
+    },
+    sortBy,
+    sortDir,
+    perPage,
+    only: ['departmentData', 'filters', 'facultyOptions'],
+  });
 
-  // Handle search and filter with debounce
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      const params = {
-        search: searchTerm || '',
-        faculty: facultyFilter || '',
-      };
-
-      const serverParams = {
-        search: search || '',
-        faculty: faculty || '',
-      };
-
-      if (skipInitialFilterFetch.current) {
-        skipInitialFilterFetch.current = false;
-        if (simpleFilterParamsEqual(params, serverParams)) {
-          return;
-        }
-      }
-
-      if (simpleFilterParamsEqual(params, serverParams)) {
-        return;
-      }
-
-      router.get(route('admin.school-management.departments.index'), params, {
-        preserveState: true,
-        replace: true,
-        preserveScroll: true,
-      });
-    }, 500);
-
-    return () => clearTimeout(timeoutId);
-  }, [searchTerm, facultyFilter, search, faculty]);
+  const handleSort = (column: string) => {
+    if (sortBy === column) {
+      setSortDir((current) => (current === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setSortBy(column);
+    setSortDir('asc');
+  };
 
   const handleSignOut = () => {
     console.log("User signed out!");
@@ -176,22 +178,6 @@ const DepartmentIndexPage = ({ departmentData, facultyOptions, search, faculty }
       href: '/admin/teachers',
     }
   ];
-
-  // Function to handle pagination with Inertia
-  const handlePageChange = (url: string | null) => {
-    if (url) {
-      router.get(url, {}, {
-        preserveState: true,
-        replace: true,
-        preserveScroll: true,
-      });
-    }
-  };
-
-  // Function to clear search
-  const clearSearch = () => {
-    setSearchTerm('');
-  };
 
   // Function to clear faculty filter
   const clearFacultyFilter = () => {
@@ -313,6 +299,9 @@ const DepartmentIndexPage = ({ departmentData, facultyOptions, search, faculty }
           autoClose: 5000,
           theme: 'dark',
         });
+        setShowPreview(false);
+        setPreviewRows([]);
+        importForm.setData('file', null);
         router.reload();
       } else {
         toast.error(json.error || 'Import failed', {
@@ -440,240 +429,147 @@ const DepartmentIndexPage = ({ departmentData, facultyOptions, search, faculty }
               </div>
             </div>
 
-            {/* Department Table Card */}
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-              <div className="border-b border-slate-200 p-5">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                  <h3 className="text-lg font-semibold text-slate-900">Department List</h3>
-                  <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4">
-                    {/* Search Input */}
-                    <div className="relative w-full sm:w-auto">
-                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                      <input
-                        type="text"
-                        placeholder="Search departments..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-10 pr-10 text-sm text-slate-900 placeholder-slate-500 transition-shadow focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:w-64"
-                      />
-                      {searchTerm && (
-                        <button
-                          onClick={clearSearch}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition-colors hover:text-slate-600"
-                          title="Clear search"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
+            <DataTable
+              title="Department List"
+              records={departments}
+              columns={[
+                {
+                  key: 'name',
+                  label: 'Name',
+                  sortable: true,
+                  render: (department) => (
+                    <p className="font-medium text-sidebar-foreground">{department.name}</p>
+                  ),
+                },
+                {
+                  key: 'faculty',
+                  label: 'Faculty',
+                  sortable: true,
+                  render: (department) => (
+                    <p className="text-sm text-sidebar-foreground/70">{department.faculty?.name || '—'}</p>
+                  ),
+                },
+                {
+                  key: 'actions',
+                  label: 'Actions',
+                  className: 'text-right',
+                  render: (department) => (
+                    <RowActionsMenu label={`Actions for ${department.name}`}>
+                      {can('admin.school-management.departments.edit') && (
+                        <DropdownMenuItem asChild>
+                          <Link href={route('admin.school-management.departments.edit', department.id)}>
+                            <Eye className="size-4" />
+                            View
+                          </Link>
+                        </DropdownMenuItem>
                       )}
-                    </div>
-
-                    {/* Faculty Filter */}
-                    <div className="relative">
-                      <button
-                        onClick={() => setShowFacultyFilter(!showFacultyFilter)}
-                        className={`flex items-center px-4 py-2.5 border rounded-xl text-sm font-medium transition-all ${
-                          facultyFilter 
-                            ? 'border-indigo-500 bg-indigo-50 text-indigo-700' 
-                            : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
-                        }`}
-                      >
-                        <Filter className="w-4 h-4 mr-2" />
-                        Faculty
+                      {can('admin.school-management.departments.edit') && (
+                        <DropdownMenuItem asChild>
+                          <Link href={route('admin.school-management.departments.edit', department.id)}>
+                            <Edit className="size-4" />
+                            Edit
+                          </Link>
+                        </DropdownMenuItem>
+                      )}
+                      {can('admin.school-management.departments.delete') && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem asChild className="text-rose-600 focus:text-rose-600">
+                            <Link
+                              href={route('admin.school-management.departments.destroy', department.id)}
+                              method="delete"
+                              as="button"
+                              onClick={(event) => {
+                                if (!confirm('Are you sure you want to permanently delete this department?')) {
+                                  event.preventDefault();
+                                }
+                              }}
+                            >
+                              <Trash2 className="size-4" />
+                              Delete
+                            </Link>
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                    </RowActionsMenu>
+                  ),
+                },
+              ]}
+              sortBy={sortBy}
+              sortDir={sortDir}
+              onSort={handleSort}
+              perPage={perPage}
+              onPerPageChange={setPerPage}
+              onPageChange={onPageChange}
+              loading={loading}
+              search={searchTerm}
+              searchPlaceholder="Search departments..."
+              onSearchChange={setSearchTerm}
+              hasActiveQuery={Boolean(hasActiveFilters)}
+              recordLabel="departments"
+              toolbar={
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowFacultyFilter(!showFacultyFilter)}
+                    className={`flex h-10 items-center rounded-lg border px-3 text-sm font-medium sm:h-9 ${
+                      facultyFilter
+                        ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                        : 'border-sidebar-border/70 bg-white text-sidebar-foreground/80 hover:bg-muted/40'
+                    }`}
+                  >
+                    <Filter className="mr-2 size-4" />
+                    Faculty
+                  </button>
+                  {showFacultyFilter && (
+                    <div className="absolute right-0 z-20 mt-2 w-64 rounded-xl border border-sidebar-border/70 bg-white shadow-lg dark:bg-sidebar-accent">
+                      <div className="flex items-center justify-between border-b border-sidebar-border/60 p-3">
+                        <h4 className="text-sm font-semibold">Filter by Faculty</h4>
                         {facultyFilter && (
-                          <span className="ml-2 bg-indigo-100 text-indigo-800 text-xs px-2 py-1 rounded-full">
-                            {facultyOptions.find(f => f.value.toString() === facultyFilter)?.label}
-                          </span>
+                          <button type="button" onClick={clearFacultyFilter} className="text-xs text-indigo-600">
+                            Clear
+                          </button>
                         )}
-                      </button>
-
-                      {showFacultyFilter && (
-                        <div className="absolute top-full left-0 mt-2 w-64 bg-white border border-slate-200 rounded-xl shadow-lg z-10">
-                          <div className="p-3 border-b border-slate-200">
-                            <div className="flex items-center justify-between">
-                              <h4 className="text-sm font-semibold text-slate-900">Filter by Faculty</h4>
-                              {facultyFilter && (
-                                <button
-                                  onClick={clearFacultyFilter}
-                                  className="text-xs text-indigo-600 hover:text-indigo-800"
-                                >
-                                  Clear
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                          <div className="max-h-60 overflow-y-auto">
-                            {facultyOptions.map((faculty) => (
-                              <button
-                                key={faculty.value}
-                                onClick={() => {
-                                  setFacultyFilter(faculty.value.toString());
-                                  setShowFacultyFilter(false);
-                                }}
-                                className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 transition-colors ${
-                                  facultyFilter === faculty.value.toString() 
-                                    ? 'bg-indigo-50 text-indigo-700' 
-                                    : 'text-slate-700'
-                                }`}
-                              >
-                                {faculty.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+                      </div>
+                      <div className="max-h-60 overflow-y-auto">
+                        {facultyOptions.map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => {
+                              setFacultyFilter(option.value.toString());
+                              setShowFacultyFilter(false);
+                            }}
+                            className={`w-full px-3 py-2 text-left text-sm hover:bg-muted/40 ${
+                              facultyFilter === option.value.toString() ? 'bg-indigo-50 text-indigo-700' : ''
+                            }`}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-
-                    {/* Clear All Filters */}
-                    {hasActiveFilters && (
-                      <button
-                        onClick={clearAllFilters}
-                        className="flex items-center px-4 py-2.5 border border-slate-300 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
-                      >
-                        <X className="w-4 h-4 mr-2" />
-                        Clear All
-                      </button>
-                    )}
-                  </div>
+                  )}
                 </div>
-
-                {/* Active Filters Display */}
-                {hasActiveFilters && (
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {searchTerm && (
-                      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                        Search: "{searchTerm}"
-                        <button
-                          onClick={clearSearch}
-                          className="ml-1 hover:text-blue-600"
-                        >
-                          ×
-                        </button>
-                      </span>
-                    )}
-                    {facultyFilter && (
-                      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                        Faculty: {facultyOptions.find(f => f.value.toString() === facultyFilter)?.label}
-                        <button
-                          onClick={clearFacultyFilter}
-                          className="ml-1 hover:text-green-600"
-                        >
-                          ×
-                        </button>
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-              
-              <div className="overflow-x-auto">
-                <table className="w-full whitespace-nowrap">
-                  <thead className="bg-slate-50 border-b border-slate-200">
-                    <tr>
-                      <th className="px-6 py-4 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">#</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Name</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Faculty Name</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-slate-200">
-                    {departments.data.length > 0 ? (
-                      departments.data.map((department, index) => (
-                        <tr key={department.id} className="hover:bg-indigo-50/20 transition-colors">
-                          <td className='text-right px-6 py-4'>
-                            <div className="text-lg text-slate-600">{departments.from + index}</div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center space-x-4">
-                              <div className="text-sm font-semibold text-slate-900">{department.name}</div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="text-sm text-slate-600 max-full text-wrap">{department.faculty.name}</div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center space-x-1">
-                             {can('admin.school-management.departments.edit') && (
-                              <Link 
-                                title="Edit Department" 
-                                className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                href={route('admin.school-management.departments.edit', department.id)}
-                              >
-                                <Edit className="w-5 h-5" />
-                              </Link>
-                             )}
-
-                             {can('admin.school-management.departments.delete') && (
-                              <Link 
-                                title="Delete Department" 
-                                method='delete'
-                                className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                onClick={() => confirm('Are you sure you want to permanently delete this department?')}
-                                href={route('admin.school-management.departments.destroy', department.id)}
-                              >
-                                <Trash2 className="w-5 h-5" />
-                              </Link>
-                             )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={4} className="px-6 py-8 text-center text-slate-500">
-                          No departments found {hasActiveFilters && 'Try adjusting your search or filter terms.'}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-between flex-wrap gap-4">
-                <div className="text-sm text-slate-600">
-                  Showing <span className="font-semibold text-slate-800">{departments.from}</span> to <span className="font-semibold text-slate-800">{departments.to}</span> of <span className="font-semibold text-slate-800">{departments.total}</span> departments
-                </div>
-                <div className="flex space-x-2">
-                  <button 
-                    onClick={() => handlePageChange(departments.links[0].url)}
-                    disabled={departments.current_page === 1}
-                    className={`px-4 py-2 border border-slate-300 rounded-xl text-sm font-medium ${
-                      departments.current_page === 1 
-                        ? 'text-slate-400 bg-slate-100 cursor-not-allowed' 
-                        : 'text-slate-700 hover:bg-slate-50'
-                    }`}
+              }
+              empty={{
+                title: 'No departments yet',
+                description: 'Add a department or import a file to get started.',
+                action: can('admin.school-management.departments.create') ? (
+                  <Link
+                    href={route('admin.school-management.departments.create')}
+                    className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
                   >
-                    Previous
-                  </button>
-                  
-                  {/* Page Numbers */}
-                  <div className="hidden sm:flex space-x-1">
-                    {departments.links.slice(1, -1).map((link, index) => (
-                      <button
-                        key={index}
-                        onClick={() => handlePageChange(link.url)}
-                        className={`px-3 py-2 rounded-lg text-sm font-medium ${
-                          link.active
-                            ? 'bg-indigo-600 text-white'
-                            : 'text-slate-700 hover:bg-slate-100 border border-slate-300'
-                        }`}
-                        dangerouslySetInnerHTML={{ __html: link.label }}
-                      />
-                    ))}
-                  </div>
-                  
-                  <button 
-                    onClick={() => handlePageChange(departments.links[departments.links.length - 1].url)}
-                    disabled={departments.current_page === departments.last_page}
-                    className={`px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium ${
-                      departments.current_page === departments.last_page 
-                        ? 'opacity-50 cursor-not-allowed' 
-                        : 'hover:bg-indigo-700'
-                    }`}
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            </div>
+                    <Plus className="mr-2 size-4" />
+                    Add Department
+                  </Link>
+                ) : undefined,
+              }}
+              noResults={{
+                title: 'No departments match the current filters',
+                description: 'Try a different search or faculty filter.',
+              }}
+            />
           </div>
         </div>
       </div>

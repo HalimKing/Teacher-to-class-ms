@@ -9,6 +9,7 @@ use App\Models\Course;
 use App\Models\Level;
 use App\Models\Program;
 use App\Models\Teacher;
+use App\Support\ListQuery;
 use App\Support\SqlDialect;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -60,17 +61,17 @@ class CourseController extends Controller
 
         // SEARCH
         if ($request->search) {
-            $search = $request->search;
-            $query->where(function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('course_code', 'like', "%{$search}%")
-                    ->orWhere('course_type', 'like', "%{$search}%")
-                    ->orWhereHas('program', function ($q) use ($search) {
-                        $q->where('name', 'like', "%{$search}%");
+            $like = SqlDialect::containsLike((string) $request->search);
+            $query->where(function ($q) use ($like) {
+                $q->whereRaw('LOWER(name) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(course_code) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(COALESCE(course_type, \'\')) LIKE ?', [$like])
+                    ->orWhereHas('program', function ($q) use ($like) {
+                        $q->whereRaw('LOWER(name) LIKE ?', [$like]);
                     })
-                    ->orWhereHas('teacher', function ($q) use ($search) {
-                        $q->where('first_name', 'like', "%{$search}%")
-                          ->orWhere('last_name', 'like', "%{$search}%");
+                    ->orWhereHas('teacher', function ($q) use ($like) {
+                        $q->whereRaw('LOWER(first_name) LIKE ?', [$like])
+                          ->orWhereRaw('LOWER(last_name) LIKE ?', [$like]);
                     });
             });
         }
@@ -121,13 +122,41 @@ class CourseController extends Controller
 
         $total = $query->count();
 
-        $sortBy = $request->get('sort_by', 'id');
-        $sortOrder = $request->get('sort_order', 'asc');
+        [$sortBy, $sortDir] = ListQuery::applySort($query, $request, [
+            'id' => 'id',
+            'name' => 'name',
+            'course_code' => 'course_code',
+            'credit_hours' => 'credit_hours',
+            'student_size' => 'student_size',
+            'created_at' => 'created_at',
+            'program' => function ($q, string $dir) {
+                $q->orderBy(
+                    Program::select('name')->whereColumn('programs.id', 'courses.program_id'),
+                    $dir
+                );
+            },
+            'level' => function ($q, string $dir) {
+                $q->orderBy(
+                    Level::select('name')->whereColumn('levels.id', 'courses.level_id'),
+                    $dir
+                );
+            },
+            'academic_year' => function ($q, string $dir) {
+                $q->orderBy(
+                    AcademicYear::select('name')->whereColumn('academic_years.id', 'courses.academic_year_id'),
+                    $dir
+                );
+            },
+            'academic_period' => function ($q, string $dir) {
+                $q->orderBy(
+                    AcademicPeriod::select('name')->whereColumn('academic_periods.id', 'courses.academic_period_id'),
+                    $dir
+                );
+            },
+        ], 'name');
 
-        $query->orderBy($sortBy, $sortOrder);
-
-        $perPage = $request->get('per_page', 10);
-        $page = $request->get('page', 1);
+        $perPage = ListQuery::perPage($request);
+        $page = max((int) $request->get('page', 1), 1);
 
         $courses = $query->paginate($perPage, ['*'], 'page', $page);
 
@@ -139,6 +168,8 @@ class CourseController extends Controller
             'last_page' => $courses->lastPage(),
             'from' => $courses->firstItem(),
             'to' => $courses->lastItem(),
+            'sort_by' => $sortBy,
+            'sort_dir' => $sortDir,
         ];
     }
 

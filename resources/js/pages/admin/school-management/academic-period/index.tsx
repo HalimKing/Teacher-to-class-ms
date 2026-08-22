@@ -1,6 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import DataTable from '@/components/data-table/DataTable';
+import RowActionsMenu from '@/components/data-table/RowActionsMenu';
+import { DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
+import type { PaginatedCollection } from '@/components/data-table/types';
+import { useListTableQuery } from '@/hooks/use-list-table-query';
+import React, { useMemo, useState, useEffect } from 'react';
 import { 
-  Search,
   Plus,
   Edit,
   Trash2
@@ -9,33 +13,30 @@ import AppLayout from '@/layouts/app-layout';
 import { Head, Link, usePage, router } from '@inertiajs/react';
 import { PagePropsWithFlash } from '@/types';
 import { ToastContainer, toast, Bounce } from 'react-toastify';
-import { Button } from '@headlessui/react';
 import { can } from '@/lib/can';
 
 // Simplified interface - now just an array of items
-interface ClassRoom {
+interface AcademicPeriodItem {
   id: number;
   name: string;
 }
 
-
-
-// Update props to accept just an array
 interface TeachersIndexPageProps {
-  academicPeriodData: ClassRoom[]; // Changed from PaginatedClassRooms to ClassRoom[]
+  academicPeriodData: PaginatedCollection<AcademicPeriodItem>;
+  filters?: {
+    search?: string;
+    sort_by?: string;
+    sort_dir?: string;
+    per_page?: string;
+  };
 }
 
-const AcademicPeriodIndexPage = ({ academicPeriodData }: TeachersIndexPageProps) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+const AcademicPeriodIndexPage = ({ academicPeriodData, filters = {} }: TeachersIndexPageProps) => {
+  const [searchTerm, setSearchTerm] = useState(filters.search ?? '');
+  const [sortBy, setSortBy] = useState(filters.sort_by || 'name');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>(filters.sort_dir === 'desc' ? 'desc' : 'asc');
+  const [perPage, setPerPage] = useState(Number(filters.per_page || academicPeriodData.per_page || 10));
   const { flash } = usePage().props as PagePropsWithFlash;
-
-  // Store all academic periods from props
-  const [allAcademicPeriods, setAllAcademicPeriods] = useState<ClassRoom[]>(academicPeriodData);
-  
-  // Filtered data based on search term
-  const [filteredData, setFilteredData] = useState<ClassRoom[]>(academicPeriodData);
 
   // Show toast notifications based on flash messages
   useEffect(() => {
@@ -67,66 +68,29 @@ const AcademicPeriodIndexPage = ({ academicPeriodData }: TeachersIndexPageProps)
     }
   }, [flash]);
 
-  // Update filtered data when search term changes
-  useEffect(() => {
-    if (searchTerm.trim() === '') {
-      setFilteredData(allAcademicPeriods);
-    } else {
-      const filtered = allAcademicPeriods.filter(item =>
-        item.name.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      setFilteredData(filtered);
-    }
-    // Reset to first page when search term changes
-    setCurrentPage(1);
-  }, [searchTerm, allAcademicPeriods]);
+  const tableFilters = useMemo(() => ({ search: searchTerm }), [searchTerm]);
+  const { loading, onPageChange } = useListTableQuery({
+    url: route('admin.school-management.academic-periods.index'),
+    filters: tableFilters,
+    serverFilters: {
+      search: filters.search ?? '',
+      sort_by: filters.sort_by,
+      sort_dir: filters.sort_dir,
+      per_page: filters.per_page,
+    },
+    sortBy,
+    sortDir,
+    perPage,
+    only: ['academicPeriodData', 'filters'],
+  });
 
-  // Calculate pagination based on filtered data
-  const totalItems = filteredData.length;
-  const totalPages = Math.ceil(totalItems / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedData = filteredData.slice(startIndex, endIndex);
-
-  // Function to generate pagination numbers with ellipsis
-  const getPaginationNumbers = () => {
-    const pageNumbers = [];
-    const maxVisiblePages = 5;
-    
-    if (totalPages <= maxVisiblePages) {
-      // Show all pages if total pages is less than or equal to maxVisiblePages
-      for (let i = 1; i <= totalPages; i++) {
-        pageNumbers.push(i);
-      }
-    } else {
-      // Show first page, last page, and pages around current page
-      if (currentPage <= 3) {
-        // Near the start
-        for (let i = 1; i <= 4; i++) {
-          pageNumbers.push(i);
-        }
-        pageNumbers.push('...');
-        pageNumbers.push(totalPages);
-      } else if (currentPage >= totalPages - 2) {
-        // Near the end
-        pageNumbers.push(1);
-        pageNumbers.push('...');
-        for (let i = totalPages - 3; i <= totalPages; i++) {
-          pageNumbers.push(i);
-        }
-      } else {
-        // In the middle
-        pageNumbers.push(1);
-        pageNumbers.push('...');
-        for (let i = currentPage - 1; i <= currentPage + 1; i++) {
-          pageNumbers.push(i);
-        }
-        pageNumbers.push('...');
-        pageNumbers.push(totalPages);
-      }
+  const handleSort = (column: string) => {
+    if (sortBy === column) {
+      setSortDir((current) => (current === 'asc' ? 'desc' : 'asc'));
+      return;
     }
-    
-    return pageNumbers;
+    setSortBy(column);
+    setSortDir('asc');
   };
 
   const breadcrumbs = [
@@ -140,29 +104,11 @@ const AcademicPeriodIndexPage = ({ academicPeriodData }: TeachersIndexPageProps)
     }
   ];
 
-  // Function to handle pagination
-  const handlePageChange = (page: number | string) => {
-    if (typeof page === 'number' && page >= 1 && page <= totalPages) {
-      setCurrentPage(page);
-    }
-  };
-
-  // Function to clear search
-  const clearSearch = () => {
-    setSearchTerm('');
-  };
-
-  // Function to handle delete (you might want to add confirmation and update state)
   const handleDelete = (id: number, name: string) => {
    if ( confirm(`Are you sure you want to permanently delete "${name} Academic period"?`) ) {
         router.delete(route('admin.school-management.academic-periods.destroy', id), {
             preserveState: true,
-            onSuccess: () => {
-              // Remove the deleted item from the state
-              setAllAcademicPeriods(prevPeriods => 
-                prevPeriods.filter(period => period.id !== id)
-              );
-            }
+            preserveScroll: true,
           });
     }
   };
@@ -192,153 +138,76 @@ const AcademicPeriodIndexPage = ({ academicPeriodData }: TeachersIndexPageProps)
             </div>
 
             {/* Academic Periods Table */}
-            <div className="bg-white rounded-2xl shadow-lg border border-slate-200">
-              <div className="p-6 border-b border-slate-200">
-                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
-                  <h3 className="text-xl font-bold text-slate-900">Academic Periods List</h3>
-                  <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
-                      <input
-                        type="text"
-                        placeholder="Search academic periods..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-10 pr-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-sm w-full sm:w-64 transition-shadow"
-                      />
-                      {searchTerm && (
-                        <button
-                          onClick={clearSearch}
-                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                          aria-label="Clear search"
-                        >
-                          ×
-                        </button>
+            <DataTable
+              title="Academic Periods List"
+              records={academicPeriodData}
+              columns={[
+                {
+                  key: 'name',
+                  label: 'Name',
+                  sortable: true,
+                  render: (period) => <p className="font-medium capitalize text-sidebar-foreground">{period.name}</p>,
+                },
+                {
+                  key: 'actions',
+                  label: 'Actions',
+                  className: 'text-right',
+                  render: (period) => (
+                    <RowActionsMenu label={`Actions for ${period.name}`}>
+                      {can('admin.school-management.academic-periods.edit') && (
+                        <DropdownMenuItem asChild>
+                          <Link href={route('admin.school-management.academic-periods.edit', period.id)}>
+                            <Edit className="size-4" />
+                            Edit
+                          </Link>
+                        </DropdownMenuItem>
                       )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="overflow-x-auto">
-                <table className="w-full whitespace-nowrap">
-                  <thead className="bg-slate-50 border-b border-slate-200">
-                    <tr>
-                      <th className="px-6 py-4 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">#</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Name</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-slate-200">
-                    {paginatedData.length > 0 ? (
-                      paginatedData.map((academic_period, index) => (
-                        <tr key={academic_period.id} className="hover:bg-indigo-50/20 transition-colors">
-                          <td className='text-right px-4 py-4'>
-                            {index + 1 + startIndex}
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center space-x-4">
-                              <div className="text-sm font-semibold text-slate-900">
-                                <p style={{ textTransform: 'capitalize' }}>{academic_period.name}</p>
-                              </div>
-                            </div>
-                          </td>
-                          
-                          <td className="px-6 py-4">
-                            <div className="flex items-center space-x-1">
-                              {can('admin.school-management.academic-periods.edit') && (
-                              <Link 
-                                title="Edit Academic Period" 
-                                className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                href={route('admin.school-management.academic-periods.edit', academic_period.id)}
-                              >
-                                <Edit className="w-5 h-5" />
-                              </Link>
-                              )}
-                              {can('admin.school-management.academic-periods.delete') && (
-                              <Button 
-                                title="Delete Academic Period" 
-                                className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  handleDelete(academic_period.id, academic_period.name);
-                                }}
-                               
-                              >
-                                <Trash2 className="w-5 h-5" />
-                              </Button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={3} className="px-6 py-8 text-center text-slate-500">
-                          {searchTerm 
-                            ? `No academic periods found for "${searchTerm}". Try adjusting your search terms.` 
-                            : 'No academic periods found. Add your first academic period!'}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              
-              {/* Pagination */}
-              {totalPages > 0 && (
-                <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-between flex-wrap gap-4">
-                  <div className="text-sm text-slate-600">
-                    Showing <span className="font-semibold text-slate-800">{totalItems > 0 ? startIndex + 1 : 0}</span> to <span className="font-semibold text-slate-800">{Math.min(endIndex, totalItems)}</span> of <span className="font-semibold text-slate-800">{totalItems}</span> Academic Periods
-                  </div>
-                  <div className="flex space-x-2">
-                    <button 
-                      onClick={() => handlePageChange(currentPage - 1)}
-                      disabled={currentPage === 1}
-                      className={`px-4 py-2 border border-slate-300 rounded-xl text-sm font-medium ${
-                        currentPage === 1 
-                          ? 'text-slate-400 bg-slate-100 cursor-not-allowed' 
-                          : 'text-slate-700 hover:bg-slate-50 hover:border-slate-400'
-                      }`}
-                    >
-                      Previous
-                    </button>
-                    
-                    {/* Page Numbers */}
-                    <div className="hidden sm:flex space-x-1">
-                      {getPaginationNumbers().map((page, index) => (
-                        <button
-                          key={index}
-                          onClick={() => typeof page === 'number' && handlePageChange(page)}
-                          disabled={typeof page !== 'number'}
-                          className={`px-3 py-2 rounded-lg text-sm font-medium min-w-[40px] ${
-                            currentPage === page
-                              ? 'bg-indigo-600 text-white'
-                              : typeof page === 'number'
-                                ? 'text-slate-700 hover:bg-slate-100 border border-slate-300 hover:border-slate-400'
-                                : 'text-slate-400 cursor-default'
-                          }`}
-                        >
-                          {page}
-                        </button>
-                      ))}
-                    </div>
-                    
-                    <button 
-                      onClick={() => handlePageChange(currentPage + 1)}
-                      disabled={currentPage === totalPages || totalPages === 0}
-                      className={`px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium ${
-                        currentPage === totalPages || totalPages === 0
-                          ? 'opacity-50 cursor-not-allowed' 
-                          : 'hover:bg-indigo-700'
-                      }`}
-                    >
-                      Next
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
+                      {can('admin.school-management.academic-periods.delete') && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-rose-600 focus:text-rose-600"
+                            onClick={() => handleDelete(period.id, period.name)}
+                          >
+                            <Trash2 className="size-4" />
+                            Delete
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                    </RowActionsMenu>
+                  ),
+                },
+              ]}
+              sortBy={sortBy}
+              sortDir={sortDir}
+              onSort={handleSort}
+              perPage={perPage}
+              onPerPageChange={setPerPage}
+              onPageChange={onPageChange}
+              loading={loading}
+              search={searchTerm}
+              searchPlaceholder="Search academic periods..."
+              onSearchChange={setSearchTerm}
+              hasActiveQuery={Boolean(searchTerm)}
+              recordLabel="academic periods"
+              empty={{
+                title: 'No academic periods yet',
+                description: 'Add an academic period such as Semester 1 or Term 2.',
+                action: can('admin.school-management.academic-periods.create') ? (
+                  <Link
+                    href={route('admin.school-management.academic-periods.create')}
+                    className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                  >
+                    <Plus className="mr-2 size-4" />
+                    Add Academic Period
+                  </Link>
+                ) : undefined,
+              }}
+              noResults={{
+                title: 'No academic periods match your search',
+                description: 'Try a different name or clear the search.',
+              }}
+            />
           </div>
         </div>
       </div>

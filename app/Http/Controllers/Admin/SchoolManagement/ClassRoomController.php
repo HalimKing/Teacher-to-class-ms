@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Admin\SchoolManagement;
 
 use App\Http\Controllers\Controller;
 use App\Models\ClassRoom;
+use App\Support\ListQuery;
+use App\Support\SqlDialect;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Maatwebsite\Excel\Facades\Excel;
@@ -17,23 +19,29 @@ class ClassRoomController extends Controller
     {
         //
         $query = ClassRoom::query();
-        
-        // Search filter
-        if ($request->has('search') && !empty($request->search)) {
-            $searchTerm = $request->search;
-            $query->where(function ($q) use ($searchTerm) {
-                $q->where('name', 'like', '%' . $searchTerm . '%');
-            });
+        $search = trim((string) $request->get('search', ''));
+
+        if ($search !== '') {
+            $like = SqlDialect::containsLike($search);
+            $query->whereRaw('LOWER(name) LIKE ?', [$like]);
         }
-        
-      
-        
-        $classRoomData = $query->paginate(10);
-        
-  
-        
-        return Inertia::render('admin/school-management/class-room/index', 
-            compact('classRoomData'));
+
+        [$sortBy, $sortDir] = ListQuery::applySort($query, $request, [
+            'name' => 'name',
+            'capacity' => 'capacity',
+            'is_active' => 'is_active',
+            'created_at' => 'created_at',
+        ], 'name');
+
+        $perPage = ListQuery::perPage($request);
+        $classRoomData = $query->paginate($perPage)->withQueryString();
+
+        return Inertia::render('admin/school-management/class-room/index', [
+            'classRoomData' => $classRoomData,
+            'filters' => ListQuery::meta([
+                'search' => $search,
+            ], $sortBy, $sortDir, $perPage),
+        ]);
     }
 
     /**

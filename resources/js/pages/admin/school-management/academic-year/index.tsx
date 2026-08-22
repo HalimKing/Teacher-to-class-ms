@@ -1,6 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import DataTable from '@/components/data-table/DataTable';
+import RowActionsMenu from '@/components/data-table/RowActionsMenu';
+import { DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
+import type { PaginatedCollection } from '@/components/data-table/types';
+import { useListTableQuery } from '@/hooks/use-list-table-query';
+import React, { useMemo, useState, useEffect } from 'react';
 import { 
-  Search,
   Plus,
   Edit,
   Trash2,
@@ -12,31 +16,34 @@ import AppLayout from '@/layouts/app-layout';
 import { Head, Link, usePage, router } from '@inertiajs/react';
 import { PagePropsWithFlash } from '@/types';
 import { ToastContainer, toast, Bounce } from 'react-toastify';
-import { Button } from '@headlessui/react';
 import { can } from '@/lib/can';
 
-interface ClassRoom {
+interface AcademicYearItem {
   id: number;
   name: string;
   status: string;
 }
 
 interface TeachersIndexPageProps {
-  academicYearData: ClassRoom[];
+  academicYearData: PaginatedCollection<AcademicYearItem>;
+  activeCount?: number;
+  totalCount?: number;
+  filters?: {
+    search?: string;
+    sort_by?: string;
+    sort_dir?: string;
+    per_page?: string;
+  };
 }
 
-const AcademicYearIndexPage = ({ academicYearData }: TeachersIndexPageProps) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+const AcademicYearIndexPage = ({ academicYearData, activeCount = 0, totalCount = 0, filters = {} }: TeachersIndexPageProps) => {
+  const [searchTerm, setSearchTerm] = useState(filters.search ?? '');
+  const [sortBy, setSortBy] = useState(filters.sort_by || 'name');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>(filters.sort_dir === 'desc' ? 'desc' : 'asc');
+  const [perPage, setPerPage] = useState(Number(filters.per_page || academicYearData.per_page || 10));
   const { flash } = usePage().props as PagePropsWithFlash;
-  
-  const [allAcademicYears, setAllAcademicYears] = useState<ClassRoom[]>(academicYearData);
-  const [filteredData, setFilteredData] = useState<ClassRoom[]>(academicYearData);
   const [isToggling, setIsToggling] = useState<number | null>(null);
-
-  // Count active academic years
-  const activeAcademicYearCount = allAcademicYears.filter(year => year.status.toLowerCase() === 'active').length;
+  const activeAcademicYearCount = activeCount;
 
   // Show toast notifications based on flash messages
   useEffect(() => {
@@ -68,60 +75,29 @@ const AcademicYearIndexPage = ({ academicYearData }: TeachersIndexPageProps) => 
     }
   }, [flash]);
 
-  // Update filtered data when search term changes
-  useEffect(() => {
-    if (searchTerm.trim() === '') {
-      setFilteredData(allAcademicYears);
-    } else {
-      const filtered = allAcademicYears.filter(item =>
-        item.name.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      setFilteredData(filtered);
-    }
-    setCurrentPage(1);
-  }, [searchTerm, allAcademicYears]);
+  const tableFilters = useMemo(() => ({ search: searchTerm }), [searchTerm]);
+  const { loading, onPageChange } = useListTableQuery({
+    url: route('admin.school-management.academic-years.index'),
+    filters: tableFilters,
+    serverFilters: {
+      search: filters.search ?? '',
+      sort_by: filters.sort_by,
+      sort_dir: filters.sort_dir,
+      per_page: filters.per_page,
+    },
+    sortBy,
+    sortDir,
+    perPage,
+    only: ['academicYearData', 'filters', 'activeCount', 'totalCount'],
+  });
 
-  // Calculate pagination based on filtered data
-  const totalItems = filteredData.length;
-  const totalPages = Math.ceil(totalItems / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedData = filteredData.slice(startIndex, endIndex);
-
-  // Function to generate pagination numbers with ellipsis
-  const getPaginationNumbers = () => {
-    const pageNumbers = [];
-    const maxVisiblePages = 5;
-    
-    if (totalPages <= maxVisiblePages) {
-      for (let i = 1; i <= totalPages; i++) {
-        pageNumbers.push(i);
-      }
-    } else {
-      if (currentPage <= 3) {
-        for (let i = 1; i <= 4; i++) {
-          pageNumbers.push(i);
-        }
-        pageNumbers.push('...');
-        pageNumbers.push(totalPages);
-      } else if (currentPage >= totalPages - 2) {
-        pageNumbers.push(1);
-        pageNumbers.push('...');
-        for (let i = totalPages - 3; i <= totalPages; i++) {
-          pageNumbers.push(i);
-        }
-      } else {
-        pageNumbers.push(1);
-        pageNumbers.push('...');
-        for (let i = currentPage - 1; i <= currentPage + 1; i++) {
-          pageNumbers.push(i);
-        }
-        pageNumbers.push('...');
-        pageNumbers.push(totalPages);
-      }
+  const handleSort = (column: string) => {
+    if (sortBy === column) {
+      setSortDir((current) => (current === 'asc' ? 'desc' : 'asc'));
+      return;
     }
-    
-    return pageNumbers;
+    setSortBy(column);
+    setSortDir('asc');
   };
 
   const breadcrumbs = [
@@ -134,16 +110,6 @@ const AcademicYearIndexPage = ({ academicYearData }: TeachersIndexPageProps) => 
       href: '/admin/school-management/academic-years',
     }
   ];
-
-  const handlePageChange = (page: number | string) => {
-    if (typeof page === 'number' && page >= 1 && page <= totalPages) {
-      setCurrentPage(page);
-    }
-  };
-
-  const clearSearch = () => {
-    setSearchTerm('');
-  };
 
   // Function to get status badge styles
   const getStatusBadge = (status: string) => {
@@ -212,23 +178,6 @@ const AcademicYearIndexPage = ({ academicYearData }: TeachersIndexPageProps) => 
       }, {
         preserveState: true,
         onSuccess: () => {
-          // Update all records based on the backend logic
-          if (newStatus === 'active') {
-            // Set clicked one to active, all others to inactive
-            setAllAcademicYears(prevYears =>
-              prevYears.map(year => ({
-                ...year,
-                status: year.id === id ? 'active' : 'inactive'
-              }))
-            );
-          } else {
-            // Set clicked one to inactive, keep others as they are
-            setAllAcademicYears(prevYears =>
-              prevYears.map(year =>
-                year.id === id ? { ...year, status: 'inactive' } : year
-              )
-            );
-          }
           setIsToggling(null);
         },
         onError: () => {
@@ -245,7 +194,7 @@ const AcademicYearIndexPage = ({ academicYearData }: TeachersIndexPageProps) => 
   // Function to handle delete
   const handleDelete = (id: number, name: string) => {
     // Check if trying to delete the only active academic year
-    const academicYearToDelete = allAcademicYears.find(year => year.id === id);
+    const academicYearToDelete = academicYearData.data.find(year => year.id === id);
     if (academicYearToDelete?.status.toLowerCase() === 'active' && activeAcademicYearCount === 1) {
       toast.error('Cannot delete the only active academic year. Please activate another one first.', {
         position: "top-right",
@@ -257,11 +206,7 @@ const AcademicYearIndexPage = ({ academicYearData }: TeachersIndexPageProps) => 
     if (confirm(`Are you sure you want to permanently delete "${name}" academic year?`)) {
       router.delete(route('admin.school-management.academic-years.destroy', id), {
         preserveState: true,
-        onSuccess: () => {
-          setAllAcademicYears(prevYears => 
-            prevYears.filter(year => year.id !== id)
-          );
-        }
+        preserveScroll: true,
       });
     }
   };
@@ -282,7 +227,7 @@ const AcademicYearIndexPage = ({ academicYearData }: TeachersIndexPageProps) => 
                 <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg border border-blue-200">
                   <Check className="w-4 h-4" />
                   <span className="text-sm font-medium">
-                    Active: {activeAcademicYearCount} of {allAcademicYears.length}
+                    Active: {activeAcademicYearCount} of {totalCount}
                   </span>
                 </div>
                 {can('admin.school-management.academic-years.create') && (
@@ -313,197 +258,124 @@ const AcademicYearIndexPage = ({ academicYearData }: TeachersIndexPageProps) => 
               </div>
             )}
 
-            <div className="bg-white rounded-2xl shadow-lg border border-slate-200">
-              <div className="p-6 border-b border-slate-200">
-                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
-                  <h3 className="text-xl font-bold text-slate-900">Academic Years List</h3>
-                  <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
-                      <input
-                        type="text"
-                        placeholder="Search academic years..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-10 pr-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-sm w-full sm:w-64 transition-shadow"
-                      />
-                      {searchTerm && (
-                        <button
-                          onClick={clearSearch}
-                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                          aria-label="Clear search"
-                        >
-                          ×
-                        </button>
+            <DataTable
+              title="Academic Years List"
+              records={academicYearData}
+              columns={[
+                {
+                  key: 'name',
+                  label: 'Name',
+                  sortable: true,
+                  render: (year) => (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium capitalize text-sidebar-foreground">{year.name}</p>
+                      {year.status.toLowerCase() === 'active' && (
+                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800">
+                          Currently Active
+                        </span>
                       )}
                     </div>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="overflow-x-auto">
-                <table className="w-full whitespace-nowrap">
-                  <thead className="bg-slate-50 border-b border-slate-200">
-                    <tr>
-                      <th className="px-6 py-4 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">#</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Name</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Status</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-slate-200">
-                    {paginatedData.length > 0 ? (
-                      paginatedData.map((academic_year, index) => {
-                        const isOnlyActive = academic_year.status.toLowerCase() === 'active' && activeAcademicYearCount === 1;
-                        const isTogglingThis = isToggling === academic_year.id;
-                        
-                        return (
-                          <tr key={academic_year.id} className="hover:bg-indigo-50/20 transition-colors">
-                            <td className='text-right px-4 py-4'>
-                              {index + 1 + startIndex}
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="flex items-center space-x-4">
-                                <div className="text-sm font-semibold text-slate-900">
-                                  <p style={{ textTransform: 'capitalize' }}>{academic_year.name}</p>
-                                </div>
-                                {academic_year.status.toLowerCase() === 'active' && (
-                                  <span className="px-2 py-0.5 bg-green-100 text-green-800 text-xs font-semibold rounded-full border border-green-200">
-                                    Currently Active
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <button
-                                onClick={() => handleToggleStatus(academic_year.id, academic_year.status, academic_year.name)}
-                                disabled={isTogglingThis || isOnlyActive}
-                                className="transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
-                                title={
-                                  isOnlyActive 
-                                    ? 'Cannot deactivate the only active academic year' 
-                                    : `Click to ${academic_year.status.toLowerCase() === 'active' ? 'deactivate' : 'activate'}`
+                  ),
+                },
+                {
+                  key: 'status',
+                  label: 'Status',
+                  sortable: true,
+                  render: (year) => {
+                    const isOnlyActive = year.status.toLowerCase() === 'active' && activeAcademicYearCount === 1;
+                    const isTogglingThis = isToggling === year.id;
+                    const badge = getStatusBadge(year.status);
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => handleToggleStatus(year.id, year.status, year.name)}
+                        disabled={isTogglingThis || isOnlyActive}
+                        className="disabled:cursor-not-allowed disabled:opacity-50"
+                        title={
+                          isOnlyActive
+                            ? 'Cannot deactivate the only active academic year'
+                            : `Click to ${year.status.toLowerCase() === 'active' ? 'deactivate' : 'activate'}`
+                        }
+                      >
+                        <span className={badge.classes}>
+                          {badge.icon}
+                          {badge.label}
+                          {isTogglingThis && (
+                            <span className="ml-1 inline-block size-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                          )}
+                        </span>
+                      </button>
+                    );
+                  },
+                },
+                {
+                  key: 'actions',
+                  label: 'Actions',
+                  className: 'text-right',
+                  render: (year) => {
+                    const isOnlyActive = year.status.toLowerCase() === 'active' && activeAcademicYearCount === 1;
+                    return (
+                      <RowActionsMenu label={`Actions for ${year.name}`}>
+                        {can('admin.school-management.academic-years.edit') && (
+                          <DropdownMenuItem asChild>
+                            <Link href={route('admin.school-management.academic-years.edit', year.id)}>
+                              <Edit className="size-4" />
+                              Edit
+                            </Link>
+                          </DropdownMenuItem>
+                        )}
+                        {can('admin.school-management.academic-years.delete') && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-rose-600 focus:text-rose-600"
+                              disabled={isOnlyActive}
+                              onClick={() => {
+                                if (!isOnlyActive) {
+                                  handleDelete(year.id, year.name);
                                 }
-                              >
-                                <span className={getStatusBadge(academic_year.status).classes}>
-                                  {getStatusBadge(academic_year.status).icon}
-                                  {getStatusBadge(academic_year.status).label}
-                                  {isTogglingThis && (
-                                    <span className="ml-1">
-                                      <svg className="animate-spin h-3 w-3 text-current" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                      </svg>
-                                    </span>
-                                  )}
-                                </span>
-                              </button>
-                            </td>
-                            
-                            <td className="px-6 py-4">
-                              <div className="flex items-center space-x-1">
-                                {can('admin.school-management.academic-years.edit') && (
-                                <Link 
-                                  title="Edit Academic Year" 
-                                  className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                  href={route('admin.school-management.academic-years.edit', academic_year.id)}
-                                >
-                                  <Edit className="w-5 h-5" />
-                                </Link>
-                                )}
-                                {can('admin.school-management.academic-years.delete') && (
-                                <Button 
-                                  title={
-                                    isOnlyActive 
-                                      ? 'Cannot delete the only active academic year' 
-                                      : 'Delete Academic Year'
-                                  }
-                                  disabled={isOnlyActive}
-                                  className={`p-2 rounded-lg transition-colors ${
-                                    isOnlyActive
-                                      ? 'text-slate-300 cursor-not-allowed'
-                                      : 'text-slate-500 hover:text-red-600 hover:bg-red-50'
-                                  }`}
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    if (!isOnlyActive) {
-                                      handleDelete(academic_year.id, academic_year.name);
-                                    }
-                                  }}
-                                >
-                                  <Trash2 className="w-5 h-5" />
-                                </Button>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    ) : (
-                      <tr>
-                        <td colSpan={4} className="px-6 py-8 text-center text-slate-500">
-                          {searchTerm 
-                            ? `No academic years found for "${searchTerm}". Try adjusting your search terms.` 
-                            : 'No academic years found. Add your first academic year!'}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              
-              {totalPages > 0 && (
-                <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-between flex-wrap gap-4">
-                  <div className="text-sm text-slate-600">
-                    Showing <span className="font-semibold text-slate-800">{totalItems > 0 ? startIndex + 1 : 0}</span> to <span className="font-semibold text-slate-800">{Math.min(endIndex, totalItems)}</span> of <span className="font-semibold text-slate-800">{totalItems}</span> Academic Years
-                  </div>
-                  <div className="flex space-x-2">
-                    <button 
-                      onClick={() => handlePageChange(currentPage - 1)}
-                      disabled={currentPage === 1}
-                      className={`px-4 py-2 border border-slate-300 rounded-xl text-sm font-medium ${
-                        currentPage === 1 
-                          ? 'text-slate-400 bg-slate-100 cursor-not-allowed' 
-                          : 'text-slate-700 hover:bg-slate-50 hover:border-slate-400'
-                      }`}
-                    >
-                      Previous
-                    </button>
-                    
-                    <div className="hidden sm:flex space-x-1">
-                      {getPaginationNumbers().map((page, index) => (
-                        <button
-                          key={index}
-                          onClick={() => typeof page === 'number' && handlePageChange(page)}
-                          disabled={typeof page !== 'number'}
-                          className={`px-3 py-2 rounded-lg text-sm font-medium min-w-[40px] ${
-                            currentPage === page
-                              ? 'bg-indigo-600 text-white'
-                              : typeof page === 'number'
-                                ? 'text-slate-700 hover:bg-slate-100 border border-slate-300 hover:border-slate-400'
-                                : 'text-slate-400 cursor-default'
-                          }`}
-                        >
-                          {page}
-                        </button>
-                      ))}
-                    </div>
-                    
-                    <button 
-                      onClick={() => handlePageChange(currentPage + 1)}
-                      disabled={currentPage === totalPages || totalPages === 0}
-                      className={`px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium ${
-                        currentPage === totalPages || totalPages === 0
-                          ? 'opacity-50 cursor-not-allowed' 
-                          : 'hover:bg-indigo-700'
-                      }`}
-                    >
-                      Next
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
+                              }}
+                            >
+                              <Trash2 className="size-4" />
+                              Delete
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                      </RowActionsMenu>
+                    );
+                  },
+                },
+              ]}
+              sortBy={sortBy}
+              sortDir={sortDir}
+              onSort={handleSort}
+              perPage={perPage}
+              onPerPageChange={setPerPage}
+              onPageChange={onPageChange}
+              loading={loading}
+              search={searchTerm}
+              searchPlaceholder="Search academic years..."
+              onSearchChange={setSearchTerm}
+              hasActiveQuery={Boolean(searchTerm)}
+              recordLabel="academic years"
+              empty={{
+                title: 'No academic years yet',
+                description: 'Add an academic year to start scheduling.',
+                action: can('admin.school-management.academic-years.create') ? (
+                  <Link
+                    href={route('admin.school-management.academic-years.create')}
+                    className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                  >
+                    <Plus className="mr-2 size-4" />
+                    Add Academic Year
+                  </Link>
+                ) : undefined,
+              }}
+              noResults={{
+                title: 'No academic years match your search',
+                description: 'Try a different year name or clear the search.',
+              }}
+            />
           </div>
         </div>
       </div>

@@ -1,6 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import DataTable from '@/components/data-table/DataTable';
+import RowActionsMenu from '@/components/data-table/RowActionsMenu';
+import { DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
+import { useListTableQuery } from '@/hooks/use-list-table-query';
+import { useEffect, useMemo, useState } from 'react';
 import { 
-  Search,
   Plus,
   Edit,
   Trash2,
@@ -19,7 +22,6 @@ import { useForm } from '@inertiajs/react';
 import { PagePropsWithFlash } from '@/types';
 import { ToastContainer, toast, Bounce } from 'react-toastify';
 import { can } from '@/lib/can';
-import { simpleFilterParamsEqual } from '@/lib/list-filters';
 
 // Update interface for paginated data
 interface ClassRoom {
@@ -38,22 +40,28 @@ interface PaginatedClassRooms {
   last_page: number;
   per_page: number;
   total: number;
-  from: number;
-  to: number;
-  links: Array<{
-    url: string | null;
-    label: string;
-    active: boolean;
-  }>;
+  from: number | null;
+  to: number | null;
+}
+
+interface ClassRoomFilters {
+  search?: string;
+  sort_by?: string;
+  sort_dir?: string;
+  per_page?: string;
 }
 
 interface TeachersIndexPageProps {
   classRoomData: PaginatedClassRooms;
-  search?: string; // Add search prop from backend
+  filters?: ClassRoomFilters;
+  search?: string;
 }
 
-const ClassRoomIndexPage = ({ classRoomData, search }: TeachersIndexPageProps) => {
-  const [searchTerm, setSearchTerm] = useState(search || '');
+const ClassRoomIndexPage = ({ classRoomData, filters = {}, search }: TeachersIndexPageProps) => {
+  const [searchTerm, setSearchTerm] = useState(filters.search ?? search ?? '');
+  const [sortBy, setSortBy] = useState(filters.sort_by || 'name');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>(filters.sort_dir === 'desc' ? 'desc' : 'asc');
+  const [perPage, setPerPage] = useState(Number(filters.per_page || classRoomData.per_page || 10));
   const { flash } = usePage().props as PagePropsWithFlash;
 
   const importForm = useForm({ file: null as File | null });
@@ -92,34 +100,30 @@ const ClassRoomIndexPage = ({ classRoomData, search }: TeachersIndexPageProps) =
     }
   },[flash]);
 
-  const skipInitialFilterFetch = useRef(true);
+  const tableFilters = useMemo(() => ({ search: searchTerm }), [searchTerm]);
+  const { loading, onPageChange } = useListTableQuery({
+    url: route('admin.school-management.class-rooms.index'),
+    filters: tableFilters,
+    serverFilters: {
+      search: filters.search ?? search ?? '',
+      sort_by: filters.sort_by,
+      sort_dir: filters.sort_dir,
+      per_page: filters.per_page,
+    },
+    sortBy,
+    sortDir,
+    perPage,
+    only: ['classRoomData', 'filters'],
+  });
 
-  // Handle search with debounce
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      const params = { search: searchTerm || '' };
-      const serverParams = { search: search || '' };
-
-      if (skipInitialFilterFetch.current) {
-        skipInitialFilterFetch.current = false;
-        if (simpleFilterParamsEqual(params, serverParams)) {
-          return;
-        }
-      }
-
-      if (simpleFilterParamsEqual(params, serverParams)) {
-        return;
-      }
-
-      router.get(route('admin.school-management.class-rooms.index'), params, {
-        preserveState: true,
-        replace: true,
-        preserveScroll: true,
-      });
-    }, 500);
-
-    return () => clearTimeout(timeoutId);
-  }, [searchTerm, search]);
+  const handleSort = (column: string) => {
+    if (sortBy === column) {
+      setSortDir((current) => (current === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setSortBy(column);
+    setSortDir('asc');
+  };
 
   
   const class_rooms: PaginatedClassRooms = classRoomData;
@@ -134,22 +138,6 @@ const ClassRoomIndexPage = ({ classRoomData, search }: TeachersIndexPageProps) =
       href: '/admin/school-management/class-rooms',
     }
   ];
-
-  // Function to handle pagination with Inertia
-  const handlePageChange = (url: string | null) => {
-    if (url) {
-      router.get(url, {}, {
-        preserveState: true,
-        replace: true,
-        preserveScroll: true,
-      });
-    }
-  };
-
-  // Function to clear search
-  const clearSearch = () => {
-    setSearchTerm('');
-  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -235,6 +223,9 @@ const ClassRoomIndexPage = ({ classRoomData, search }: TeachersIndexPageProps) =
           autoClose: 5000,
           theme: 'dark',
         });
+        setShowPreview(false);
+        setPreviewRows([]);
+        importForm.setData('file', null);
         router.reload();
       } else {
         toast.error(json.error || 'Import failed', {
@@ -378,192 +369,126 @@ const ClassRoomIndexPage = ({ classRoomData, search }: TeachersIndexPageProps) =
               </div>
             </div>
 
-            {/* Venues Table */}
-            <div className="bg-white rounded-2xl shadow-lg border border-slate-200">
-              <div className="p-6 border-b border-slate-200">
-                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
-                  <h3 className="text-xl font-bold text-slate-900">Venue List</h3>
-                  <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
-                      <input
-                        type="text"
-                        placeholder="Search Venues..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-10 pr-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-sm w-full sm:w-64 transition-shadow"
-                      />
-                      {searchTerm && (
-                        <button
-                          onClick={clearSearch}
-                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                          title="Clear search"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      )}
+            <DataTable
+              title="Venue List"
+              records={class_rooms}
+              columns={[
+                {
+                  key: 'name',
+                  label: 'Name',
+                  sortable: true,
+                  render: (room) => <p className="font-medium capitalize text-sidebar-foreground">{room.name}</p>,
+                },
+                {
+                  key: 'capacity',
+                  label: 'Capacity',
+                  sortable: true,
+                  render: (room) => (
+                    <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-600/20 dark:bg-blue-950/40 dark:text-blue-300">
+                      {room.capacity} seats
+                    </span>
+                  ),
+                },
+                {
+                  key: 'location',
+                  label: 'Location',
+                  render: (room) => (
+                    <div className="flex items-center gap-2 text-sm text-sidebar-foreground/70">
+                      <MapPin className="size-4 text-sidebar-foreground/40" />
+                      <span className="font-mono">{formatLocation(room)}</span>
                     </div>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="overflow-x-auto">
-                <table className="w-full whitespace-nowrap">
-                  <thead className="bg-slate-50 border-b border-slate-200">
-                    <tr>
-                      <th className="px-6 py-4 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">#</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Name</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Capacity</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Location</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Radius</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Status</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-slate-200">
-                    {class_rooms.data.length > 0 ? (
-                      class_rooms.data.map((class_room, index) => (
-                        <tr key={class_room.id} className="hover:bg-indigo-50/20 transition-colors">
-                          <td className='text-right px-4 py-4'>
-                            {index + 1 + (class_rooms.current_page - 1) * class_rooms.per_page}
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center space-x-4">
-                              <div className="text-sm font-semibold text-slate-900">
-                                <p style={{ textTransform: 'capitalize' }}>{class_room.name}</p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-50 text-blue-700">
-                              {class_room.capacity} seats
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center space-x-2">
-                              <MapPin className="w-4 h-4 text-slate-400" />
-                              <span className="text-sm text-slate-700 font-mono">
-                                {formatLocation(class_room)}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="text-sm text-slate-700">
-                              {formatRadius(class_room)}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                              class_room.is_active 
-                                ? 'bg-green-50 text-green-700' 
-                                : 'bg-red-50 text-red-700'
-                            }`}>
-                              {class_room.is_active ? (
-                                <>
-                                  <CheckCircle className="w-4 h-4 mr-1" />
-                                  Active
-                                </>
-                              ) : (
-                                <>
-                                  <XCircle className="w-4 h-4 mr-1" />
-                                  Inactive
-                                </>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center space-x-1">
-                              {can('admin.school-management.class-rooms.edit') && (
-                              <Link 
-                                title="Edit Venue" 
-                                className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                href={route('admin.school-management.class-rooms.edit', class_room.id)}
-                              >
-                                <Edit className="w-5 h-5" />
-                              </Link>
-                              )}
-
-                              {can('admin.school-management.class-rooms.delete') && (
-                              <Link 
-                                title="Delete Venue" 
-                                method='delete'
-                                className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                onClick={() => confirm('Are you sure you want to permanently delete this Venue?')}
-                                href={route('admin.school-management.class-rooms.destroy', class_room.id)}
-                              >
-                                <Trash2 className="w-5 h-5" />
-                              </Link>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={7} className="px-6 py-8 text-center text-slate-500">
-                          No Venues Found. {searchTerm && 'Try adjusting your search terms.'}
-                          <div className="mt-4">
-                            <Link 
-                              href={route('admin.school-management.class-rooms.create')}
-                              className="inline-flex items-center text-indigo-600 hover:text-indigo-800 font-medium"
+                  ),
+                },
+                {
+                  key: 'radius',
+                  label: 'Radius',
+                  render: (room) => <span className="text-sm text-sidebar-foreground/70">{formatRadius(room)}</span>,
+                },
+                {
+                  key: 'is_active',
+                  label: 'Status',
+                  sortable: true,
+                  render: (room) => (
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${
+                        room.is_active
+                          ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-950/40 dark:text-emerald-300'
+                          : 'bg-rose-50 text-rose-700 ring-rose-600/20 dark:bg-rose-950/40 dark:text-rose-300'
+                      }`}
+                    >
+                      {room.is_active ? <CheckCircle className="size-3.5" /> : <XCircle className="size-3.5" />}
+                      {room.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                  ),
+                },
+                {
+                  key: 'actions',
+                  label: 'Actions',
+                  className: 'text-right',
+                  render: (room) => (
+                    <RowActionsMenu label={`Actions for ${room.name}`}>
+                      {can('admin.school-management.class-rooms.edit') && (
+                        <DropdownMenuItem asChild>
+                          <Link href={route('admin.school-management.class-rooms.edit', room.id)}>
+                            <Edit className="size-4" />
+                            Edit
+                          </Link>
+                        </DropdownMenuItem>
+                      )}
+                      {can('admin.school-management.class-rooms.delete') && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem asChild className="text-rose-600 focus:text-rose-600">
+                            <Link
+                              href={route('admin.school-management.class-rooms.destroy', room.id)}
+                              method="delete"
+                              as="button"
+                              onClick={(event) => {
+                                if (!confirm('Are you sure you want to permanently delete this venue?')) {
+                                  event.preventDefault();
+                                }
+                              }}
                             >
-                              <Plus className="w-4 h-4 mr-2" />
-                              Create your first Venue
+                              <Trash2 className="size-4" />
+                              Delete
                             </Link>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-between flex-wrap gap-4">
-                <div className="text-sm text-slate-600">
-                  Showing <span className="font-semibold text-slate-800">{class_rooms.from}</span> to <span className="font-semibold text-slate-800">{class_rooms.to}</span> of <span className="font-semibold text-slate-800">{class_rooms.total}</span> Venues
-                </div>
-                <div className="flex space-x-2">
-                  <button 
-                    onClick={() => handlePageChange(class_rooms.links[0].url)}
-                    disabled={class_rooms.current_page === 1}
-                    className={`px-4 py-2 border border-slate-300 rounded-xl text-sm font-medium ${
-                      class_rooms.current_page === 1 
-                        ? 'text-slate-400 bg-slate-100 cursor-not-allowed' 
-                        : 'text-slate-700 hover:bg-slate-50'
-                    }`}
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                    </RowActionsMenu>
+                  ),
+                },
+              ]}
+              sortBy={sortBy}
+              sortDir={sortDir}
+              onSort={handleSort}
+              perPage={perPage}
+              onPerPageChange={setPerPage}
+              onPageChange={onPageChange}
+              loading={loading}
+              search={searchTerm}
+              searchPlaceholder="Search venues..."
+              onSearchChange={setSearchTerm}
+              hasActiveQuery={Boolean(searchTerm)}
+              recordLabel="venues"
+              empty={{
+                title: 'No venues yet',
+                description: 'Add a venue to start assigning classes.',
+                action: can('admin.school-management.class-rooms.create') ? (
+                  <Link
+                    href={route('admin.school-management.class-rooms.create')}
+                    className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
                   >
-                    Previous
-                  </button>
-                  
-                  {/* Page Numbers */}
-                  <div className="hidden sm:flex space-x-1">
-                    {class_rooms.links.slice(1, -1).map((link, index) => (
-                      <button
-                        key={index}
-                        onClick={() => handlePageChange(link.url)}
-                        className={`px-3 py-2 rounded-lg text-sm font-medium ${
-                          link.active
-                            ? 'bg-indigo-600 text-white'
-                            : 'text-slate-700 hover:bg-slate-100 border border-slate-300'
-                        }`}
-                        dangerouslySetInnerHTML={{ __html: link.label }}
-                      />
-                    ))}
-                  </div>
-                  
-                  <button 
-                    onClick={() => handlePageChange(class_rooms.links[class_rooms.links.length - 1].url)}
-                    disabled={class_rooms.current_page === class_rooms.last_page}
-                    className={`px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium ${
-                      class_rooms.current_page === class_rooms.last_page 
-                        ? 'opacity-50 cursor-not-allowed' 
-                        : 'hover:bg-indigo-700'
-                    }`}
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            </div>
+                    <Plus className="mr-2 size-4" />
+                    Add Venue
+                  </Link>
+                ) : undefined,
+              }}
+              noResults={{
+                title: 'No venues match your search',
+                description: 'Try a different venue name or clear the search.',
+              }}
+            />
           </div>
         </div>
       </div>

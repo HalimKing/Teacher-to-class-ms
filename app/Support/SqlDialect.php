@@ -13,6 +13,14 @@ class SqlDialect
     }
 
     /**
+     * Case-insensitive LIKE pattern that works on PostgreSQL and SQLite.
+     */
+    public static function containsLike(string $term): string
+    {
+        return '%' . mb_strtolower(trim($term), 'UTF-8') . '%';
+    }
+
+    /**
      * Portable concatenation that works on PostgreSQL and SQLite.
      *
      * @param  list<string>  $columns

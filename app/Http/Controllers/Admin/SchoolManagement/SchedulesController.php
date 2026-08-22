@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin\SchoolManagement;
 
 use App\Http\Controllers\Controller;
 use App\Services\RescheduleNotificationService;
+use App\Support\SqlDialect;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use App\Models\RescheduledSession;
@@ -28,10 +29,13 @@ class SchedulesController extends Controller
         }
 
         if ($search = $request->get('search')) {
-            $q->whereHas('timetable.course', function ($qq) use ($search) {
-                $qq->where('name', 'like', "%{$search}%")->orWhere('course_code', 'like', "%{$search}%");
-            })->orWhereHas('timetable.course.teacher', function ($qq) use ($search) {
-                $qq->where('first_name', 'like', "%{$search}%")->orWhere('last_name', 'like', "%{$search}%");
+            $like = SqlDialect::containsLike((string) $search);
+            $q->whereHas('timetable.course', function ($qq) use ($like) {
+                $qq->whereRaw('LOWER(name) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(course_code) LIKE ?', [$like]);
+            })->orWhereHas('timetable.course.teacher', function ($qq) use ($like) {
+                $qq->whereRaw('LOWER(first_name) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(last_name) LIKE ?', [$like]);
             });
         }
 

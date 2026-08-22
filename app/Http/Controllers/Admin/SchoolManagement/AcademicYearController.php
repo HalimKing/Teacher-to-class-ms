@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Admin\SchoolManagement;
 
 use App\Http\Controllers\Controller;
 use App\Models\AcademicYear;
+use App\Support\ListQuery;
+use App\Support\SqlDialect;
 use Exception;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -13,12 +15,31 @@ class AcademicYearController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request)
     {
-        //
-        $academicYears = \App\Models\AcademicYear::all();
+        $query = AcademicYear::query();
+        $search = trim((string) $request->get('search', ''));
+
+        if ($search !== '') {
+            $like = SqlDialect::containsLike($search);
+            $query->whereRaw('LOWER(name) LIKE ?', [$like]);
+        }
+
+        [$sortBy, $sortDir] = ListQuery::applySort($query, $request, [
+            'name' => 'name',
+            'status' => 'status',
+            'created_at' => 'created_at',
+        ], 'name');
+
+        $perPage = ListQuery::perPage($request);
+
         return Inertia::render('admin/school-management/academic-year/index', [
-            'academicYearData' => $academicYears,
+            'academicYearData' => $query->paginate($perPage)->withQueryString(),
+            'activeCount' => AcademicYear::query()->whereRaw('LOWER(status) = ?', ['active'])->count(),
+            'totalCount' => AcademicYear::query()->count(),
+            'filters' => ListQuery::meta([
+                'search' => $search,
+            ], $sortBy, $sortDir, $perPage),
         ]);
     }
 

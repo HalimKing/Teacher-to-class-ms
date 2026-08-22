@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Admin\SchoolManagement;
 
 use App\Http\Controllers\Controller;
 use App\Models\AcademicPeriod;
+use App\Support\ListQuery;
+use App\Support\SqlDialect;
 use Exception;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -13,12 +15,28 @@ class AcademicPeriodController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request)
     {
-        //
-        $academicPeriods = AcademicPeriod::all();
+        $query = AcademicPeriod::query();
+        $search = trim((string) $request->get('search', ''));
+
+        if ($search !== '') {
+            $like = SqlDialect::containsLike($search);
+            $query->whereRaw('LOWER(name) LIKE ?', [$like]);
+        }
+
+        [$sortBy, $sortDir] = ListQuery::applySort($query, $request, [
+            'name' => 'name',
+            'created_at' => 'created_at',
+        ], 'name');
+
+        $perPage = ListQuery::perPage($request);
+
         return Inertia::render('admin/school-management/academic-period/index', [
-            'academicPeriodData' => $academicPeriods,
+            'academicPeriodData' => $query->paginate($perPage)->withQueryString(),
+            'filters' => ListQuery::meta([
+                'search' => $search,
+            ], $sortBy, $sortDir, $perPage),
         ]);
     }
 

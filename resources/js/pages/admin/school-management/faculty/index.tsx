@@ -1,10 +1,13 @@
+import DataTable from '@/components/data-table/DataTable';
+import RowActionsMenu from '@/components/data-table/RowActionsMenu';
+import { DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
+import { useListTableQuery } from '@/hooks/use-list-table-query';
 import AppLayout from '@/layouts/app-layout';
 import { can } from '@/lib/can';
 import { PagePropsWithFlash } from '@/types';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
-import { Edit, Eye, Plus, Search, Trash2, Download, Upload, FileSpreadsheet, FileText, X } from 'lucide-react';
-import React, { useEffect, useRef, useState } from 'react';
-import { simpleFilterParamsEqual } from '@/lib/list-filters';
+import { Edit, Eye, Plus, Trash2, Download, Upload, FileSpreadsheet, FileText, X } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Bounce, ToastContainer, toast } from 'react-toastify';
 
 // Update interface for paginated data
@@ -20,22 +23,29 @@ interface PaginatedFaculties {
     last_page: number;
     per_page: number;
     total: number;
-    from: number;
-    to: number;
-    links: Array<{
-        url: string | null;
-        label: string;
-        active: boolean;
-    }>;
+    from: number | null;
+    to: number | null;
+}
+
+interface FacultyFilters {
+    search?: string;
+    sort_by?: string;
+    sort_dir?: string;
+    per_page?: string;
 }
 
 interface TeachersIndexPageProps {
     facultiesData: PaginatedFaculties;
-    search?: string; // Add search prop from backend
+    filters?: FacultyFilters;
+    search?: string;
 }
 
-const TeachersIndexPage = ({ facultiesData, search }: TeachersIndexPageProps) => {
-    const [searchTerm, setSearchTerm] = useState(search || '');
+const TeachersIndexPage = ({ facultiesData, filters = {}, search }: TeachersIndexPageProps) => {
+    const initialSearch = filters.search ?? search ?? '';
+    const [searchTerm, setSearchTerm] = useState(initialSearch);
+    const [sortBy, setSortBy] = useState(filters.sort_by || 'name');
+    const [sortDir, setSortDir] = useState<'asc' | 'desc'>(filters.sort_dir === 'desc' ? 'desc' : 'asc');
+    const [perPage, setPerPage] = useState(Number(filters.per_page || facultiesData.per_page || 10));
     const { flash } = usePage().props as PagePropsWithFlash;
 
     // Fix: Initialize with false and use useEffect to handle window resize
@@ -87,34 +97,31 @@ const TeachersIndexPage = ({ facultiesData, search }: TeachersIndexPageProps) =>
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
-    const skipInitialFilterFetch = useRef(true);
+    const tableFilters = useMemo(() => ({ search: searchTerm }), [searchTerm]);
+    const { loading, onPageChange } = useListTableQuery({
+        url: route('admin.school-management.faculties.index'),
+        filters: tableFilters,
+        serverFilters: {
+            search: filters.search ?? search ?? '',
+            sort_by: filters.sort_by,
+            sort_dir: filters.sort_dir,
+            per_page: filters.per_page,
+        },
+        sortBy,
+        sortDir,
+        perPage,
+        only: ['facultiesData', 'filters'],
+    });
 
-    // Handle search with debounce
-    useEffect(() => {
-        const timeoutId = setTimeout(() => {
-            const params = { search: searchTerm || '' };
-            const serverParams = { search: search || '' };
+    const handleSort = (column: string) => {
+        if (sortBy === column) {
+            setSortDir((current) => (current === 'asc' ? 'desc' : 'asc'));
+            return;
+        }
 
-            if (skipInitialFilterFetch.current) {
-                skipInitialFilterFetch.current = false;
-                if (simpleFilterParamsEqual(params, serverParams)) {
-                    return;
-                }
-            }
-
-            if (simpleFilterParamsEqual(params, serverParams)) {
-                return;
-            }
-
-            router.get(route('admin.school-management.faculties.index'), params, {
-                preserveState: true,
-                replace: true,
-                preserveScroll: true,
-            });
-        }, 500);
-
-        return () => clearTimeout(timeoutId);
-    }, [searchTerm, search]);
+        setSortBy(column);
+        setSortDir('asc');
+    };
 
     const handleSignOut = () => {
         console.log('User signed out!');
@@ -262,6 +269,9 @@ const TeachersIndexPage = ({ facultiesData, search }: TeachersIndexPageProps) =>
             const json = await res.json();
             if (res.ok) {
                 toast.success(`Imported ${json.imported} rows, skipped ${json.skipped}`);
+                setShowPreview(false);
+                setPreviewRows([]);
+                importForm.setData('file', null);
                 router.reload();
             } else {
                 alert(json.error || 'Import failed');
@@ -274,25 +284,13 @@ const TeachersIndexPage = ({ facultiesData, search }: TeachersIndexPageProps) =>
         }
     };
 
-    // Function to handle pagination with Inertia
-    const handlePageChange = (url: string | null) => {
-        if (url) {
-            router.get(
-                url,
-                {},
-                {
-                    preserveState: true,
-                    replace: true,
-                    preserveScroll: true,
-                },
-            );
-        }
-    };
-
-    // Function to clear search
-    const clearSearch = () => {
-        setSearchTerm('');
-    };
+    const facultyInitials = (name: string) =>
+        name
+            .split(' ')
+            .map((word) => word[0])
+            .join('')
+            .substring(0, 2)
+            .toUpperCase();
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -401,166 +399,110 @@ const TeachersIndexPage = ({ facultiesData, search }: TeachersIndexPageProps) =>
                             </div>
                         </div>
 
-                        {/* Faculty Table Card */}
-                        <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-                            <div className="border-b border-slate-200 p-5">
-                                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                                    <h3 className="text-lg font-semibold text-slate-900">Faculty List</h3>
-                                    <div className="relative w-full sm:w-auto">
-                                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                                        <input
-                                            type="text"
-                                            placeholder="Search faculty..."
-                                            value={searchTerm}
-                                            onChange={(e) => setSearchTerm(e.target.value)}
-                                            className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-10 pr-10 text-sm text-slate-900 placeholder-slate-500 transition-shadow focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:w-64"
-                                        />
-                                        {searchTerm && (
-                                            <button
-                                                onClick={clearSearch}
-                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition-colors hover:text-slate-600"
-                                                title="Clear search"
-                                            >
-                                                <X className="h-4 w-4" />
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="overflow-x-auto">
-                                <table className="w-full">
-                                    <thead className="bg-slate-50">
-                                        <tr>
-                                            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-700">
-                                                Name
-                                            </th>
-                                            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-700">
-                                                Description
-                                            </th>
-                                            <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-700">
-                                                Actions
-                                            </th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-200 bg-white">
-                                        {faculties.data.length > 0 ? (
-                                            faculties.data.map((faculty) => (
-                                                <tr key={faculty.id} className="transition-colors hover:bg-slate-50">
-                                                    <td className="whitespace-nowrap px-6 py-4">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 shadow-sm">
-                                                                <span className="text-sm font-semibold text-white">
-                                                                    {faculty.name
-                                                                        .split(' ')
-                                                                        .map((word) => word[0])
-                                                                        .join('')
-                                                                        .substring(0, 2)
-                                                                        .toUpperCase()}
-                                                                </span>
-                                                            </div>
-                                                            <div className="min-w-0">
-                                                                <div className="text-sm font-medium text-slate-900">{faculty.name}</div>
-                                                            </div>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <div className="max-w-md text-sm text-slate-600 line-clamp-2">
-                                                            {faculty.description || <span className="text-slate-400">No description</span>}
-                                                        </div>
-                                                    </td>
-                                                    <td className="whitespace-nowrap px-6 py-4 text-right">
-                                                        <div className="flex items-center justify-end gap-1">
-                                                            <button
-                                                                title="View Details"
-                                                                className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                                            >
-                                                                <Eye className="h-4 w-4" />
-                                                            </button>
-                                                            <Link
-                                                                title="Edit Faculty"
-                                                                className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-blue-50 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                                                href={route('admin.school-management.faculties.edit', faculty.id)}
-                                                            >
-                                                                <Edit className="h-4 w-4" />
-                                                            </Link>
-                                                            <Link
-                                                                title="Delete Faculty"
-                                                                method="delete"
-                                                                className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-red-50 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500"
-                                                                onClick={() => confirm('Are you sure you want to permanently delete this faculty? ')}
-                                                                href={route('admin.school-management.faculties.destroy', faculty.id)}
-                                                            >
-                                                                <Trash2 className="h-4 w-4" />
-                                                            </Link>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            ))
-                                        ) : (
-                                            <tr>
-                                                <td colSpan={3} className="px-6 py-12 text-center">
-                                                    <div className="flex flex-col items-center justify-center text-slate-500">
-                                                        <div className="mb-2 text-sm font-medium">No faculties found</div>
-                                                        {searchTerm && (
-                                                            <div className="text-xs text-slate-400">Try adjusting your search terms</div>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                            <div className="flex flex-col gap-4 border-t border-slate-200 bg-slate-50 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-                                <div className="text-sm text-slate-600">
-                                    Showing <span className="font-medium text-slate-900">{faculties.from}</span> to{' '}
-                                    <span className="font-medium text-slate-900">{faculties.to}</span> of{' '}
-                                    <span className="font-medium text-slate-900">{faculties.total}</span> faculties
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        onClick={() => handlePageChange(faculties.links[0].url)}
-                                        disabled={faculties.current_page === 1}
-                                        className={`rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium transition-colors ${
-                                            faculties.current_page === 1
-                                                ? 'cursor-not-allowed bg-white text-slate-400'
-                                                : 'bg-white text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500'
-                                        }`}
+                        <DataTable
+                            title="Faculty List"
+                            records={faculties}
+                            columns={[
+                                {
+                                    key: 'name',
+                                    label: 'Name',
+                                    sortable: true,
+                                    render: (faculty) => (
+                                        <div className="flex min-w-0 items-center gap-3">
+                                            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-sm font-semibold text-white shadow-sm">
+                                                {facultyInitials(faculty.name)}
+                                            </div>
+                                            <p className="truncate font-medium text-sidebar-foreground">{faculty.name}</p>
+                                        </div>
+                                    ),
+                                },
+                                {
+                                    key: 'description',
+                                    label: 'Description',
+                                    sortable: true,
+                                    className: 'max-w-xl',
+                                    render: (faculty) => (
+                                        <p className="line-clamp-2 text-sm text-sidebar-foreground/70">
+                                            {faculty.description || <span className="text-sidebar-foreground/40">No description</span>}
+                                        </p>
+                                    ),
+                                },
+                                {
+                                    key: 'actions',
+                                    label: 'Actions',
+                                    className: 'text-right',
+                                    render: (faculty) => (
+                                        <RowActionsMenu label={`Actions for ${faculty.name}`}>
+                                            {can('admin.school-management.faculties.edit') && (
+                                                <DropdownMenuItem asChild>
+                                                    <Link href={route('admin.school-management.faculties.edit', faculty.id)}>
+                                                        <Eye className="size-4" />
+                                                        View
+                                                    </Link>
+                                                </DropdownMenuItem>
+                                            )}
+                                            {can('admin.school-management.faculties.edit') && (
+                                                <DropdownMenuItem asChild>
+                                                    <Link href={route('admin.school-management.faculties.edit', faculty.id)}>
+                                                        <Edit className="size-4" />
+                                                        Edit
+                                                    </Link>
+                                                </DropdownMenuItem>
+                                            )}
+                                            {can('admin.school-management.faculties.delete') && (
+                                                <>
+                                                    <DropdownMenuSeparator />
+                                                    <DropdownMenuItem asChild className="text-rose-600 focus:text-rose-600">
+                                                        <Link
+                                                            href={route('admin.school-management.faculties.destroy', faculty.id)}
+                                                            method="delete"
+                                                            as="button"
+                                                            onClick={(event) => {
+                                                                if (!confirm('Are you sure you want to permanently delete this faculty?')) {
+                                                                    event.preventDefault();
+                                                                }
+                                                            }}
+                                                        >
+                                                            <Trash2 className="size-4" />
+                                                            Delete
+                                                        </Link>
+                                                    </DropdownMenuItem>
+                                                </>
+                                            )}
+                                        </RowActionsMenu>
+                                    ),
+                                },
+                            ]}
+                            sortBy={sortBy}
+                            sortDir={sortDir}
+                            onSort={handleSort}
+                            perPage={perPage}
+                            onPerPageChange={setPerPage}
+                            onPageChange={onPageChange}
+                            loading={loading}
+                            search={searchTerm}
+                            searchPlaceholder="Search faculty..."
+                            onSearchChange={setSearchTerm}
+                            hasActiveQuery={Boolean(searchTerm)}
+                            recordLabel="faculties"
+                            empty={{
+                                title: 'No faculties yet',
+                                description: 'Add a faculty or import a file to get started.',
+                                action: can('admin.school-management.faculties.create') ? (
+                                    <Link
+                                        href={route('admin.school-management.faculties.create')}
+                                        className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
                                     >
-                                        Previous
-                                    </button>
-
-                                    {/* Page Numbers */}
-                                    <div className="hidden gap-1 sm:flex">
-                                        {faculties.links.slice(1, -1).map((link, index) => (
-                                            <button
-                                                key={index}
-                                                onClick={() => handlePageChange(link.url)}
-                                                className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                                                    link.active
-                                                        ? 'bg-indigo-600 text-white shadow-sm'
-                                                        : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
-                                                }`}
-                                                dangerouslySetInnerHTML={{ __html: link.label }}
-                                            />
-                                        ))}
-                                    </div>
-
-                                    <button
-                                        onClick={() => handlePageChange(faculties.links[faculties.links.length - 1].url)}
-                                        disabled={faculties.current_page === faculties.last_page}
-                                        className={`rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                                            faculties.current_page === faculties.last_page
-                                                ? 'cursor-not-allowed text-slate-400'
-                                                : 'text-slate-700 hover:bg-slate-50'
-                                        }`}
-                                    >
-                                        Next
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
+                                        <Plus className="mr-2 size-4" />
+                                        Add Faculty
+                                    </Link>
+                                ) : undefined,
+                            }}
+                            noResults={{
+                                title: 'No faculties match your search',
+                                description: 'Try a different name or description, or clear the search to see all faculties.',
+                            }}
+                        />
                     </div>
                 </div>
 

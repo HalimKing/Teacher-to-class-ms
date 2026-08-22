@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Faculty;
 use App\Exports\FacultiesExport;
 use App\Imports\FacultiesImport;
+use App\Support\ListQuery;
+use App\Support\SqlDialect;
 use Exception;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -19,21 +21,31 @@ class FacultyController extends Controller
     public function index(Request $request)
     {
         $query = Faculty::query();
+        $search = trim((string) $request->get('search', ''));
 
-        // Only apply search filter if search term is provided and not empty
-        if ($request->has('search') && !empty($request->search)) {
-            $searchTerm = $request->search;
-            $query->where(function ($q) use ($searchTerm) {
-                $q->where('name', 'like', '%' . $searchTerm . '%')
-                    ->orWhere('description', 'like', '%' . $searchTerm . '%');
+        if ($search !== '') {
+            $like = SqlDialect::containsLike($search);
+            $query->where(function ($q) use ($like) {
+                $q->whereRaw('LOWER(name) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(COALESCE(description, \'\')) LIKE ?', [$like]);
             });
         }
 
-        $facultiesData = $query->paginate(10);
-        return Inertia::render(
-            'admin/school-management/faculty/index',
-            compact('facultiesData')
-        );
+        [$sortBy, $sortDir] = ListQuery::applySort($query, $request, [
+            'name' => 'name',
+            'description' => 'description',
+            'created_at' => 'created_at',
+        ], 'name');
+
+        $perPage = ListQuery::perPage($request);
+        $facultiesData = $query->paginate($perPage)->withQueryString();
+
+        return Inertia::render('admin/school-management/faculty/index', [
+            'facultiesData' => $facultiesData,
+            'filters' => ListQuery::meta([
+                'search' => $search,
+            ], $sortBy, $sortDir, $perPage),
+        ]);
     }
 
     /**

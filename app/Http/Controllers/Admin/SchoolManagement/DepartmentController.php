@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Admin\SchoolManagement;
 use App\Http\Controllers\Controller;
 use App\Models\Department;
 use App\Models\Faculty;
+use App\Support\ListQuery;
+use App\Support\SqlDialect;
 use Exception;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -18,37 +20,54 @@ class DepartmentController extends Controller
     public function index(Request $request)
     {
         $query = Department::query()->with('faculty');
-        
-        // Search filter
-        if ($request->has('search') && !empty($request->search)) {
-            $searchTerm = $request->search;
-            $query->where(function ($q) use ($searchTerm) {
-                $q->where('name', 'like', '%' . $searchTerm . '%')
-                ->orWhereHas('faculty', function ($q) use ($searchTerm) {
-                    $q->where('name', 'like', '%' . $searchTerm . '%');
-                });
+        $search = trim((string) $request->get('search', ''));
+        $faculty = (string) $request->get('faculty', '');
+
+        if ($search !== '') {
+            $like = SqlDialect::containsLike($search);
+            $query->where(function ($q) use ($like) {
+                $q->whereRaw('LOWER(name) LIKE ?', [$like])
+                    ->orWhereHas('faculty', function ($q) use ($like) {
+                        $q->whereRaw('LOWER(name) LIKE ?', [$like]);
+                    });
             });
         }
-        
-        // Faculty filter
-        if ($request->has('faculty') && !empty($request->faculty)) {
-            $query->where('faculty_id', $request->faculty);
+
+        if ($faculty !== '') {
+            $query->where('faculty_id', $faculty);
         }
-        
-        $departmentData = $query->paginate(10);
-        
-        // Get faculties for filter dropdown
+
+        [$sortBy, $sortDir] = ListQuery::applySort($query, $request, [
+            'name' => 'name',
+            'faculty' => function ($q, string $dir) {
+                $q->orderBy(
+                    Faculty::select('name')->whereColumn('faculties.id', 'departments.faculty_id'),
+                    $dir
+                );
+            },
+            'created_at' => 'created_at',
+        ], 'name');
+
+        $perPage = ListQuery::perPage($request);
+        $departmentData = $query->paginate($perPage)->withQueryString();
+
         $faculties = Faculty::select('id', 'name')->orderBy('name')->get();
         $facultyOptions = [];
-        foreach($faculties as $faculty){
+        foreach ($faculties as $facultyOption) {
             $facultyOptions[] = [
-                'label' => $faculty->name,
-                'value' => $faculty->id
+                'label' => $facultyOption->name,
+                'value' => $facultyOption->id,
             ];
         }
-        
-        return Inertia::render('admin/school-management/department/index', 
-            compact('departmentData', 'facultyOptions'));
+
+        return Inertia::render('admin/school-management/department/index', [
+            'departmentData' => $departmentData,
+            'facultyOptions' => $facultyOptions,
+            'filters' => ListQuery::meta([
+                'search' => $search,
+                'faculty' => $faculty,
+            ], $sortBy, $sortDir, $perPage),
+        ]);
     }
 
     /**

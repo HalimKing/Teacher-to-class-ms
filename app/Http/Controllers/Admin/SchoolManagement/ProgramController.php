@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Faculty;
 use App\Models\Program;
 use App\Models\Department;
+use App\Support\ListQuery;
+use App\Support\SqlDialect;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Maatwebsite\Excel\Facades\Excel;
@@ -17,45 +19,76 @@ class ProgramController extends Controller
      */
     public function index(Request $request)
     {
-        // Get filter parameters from request
+        $search = trim((string) $request->get('search', ''));
         $facultyId = $request->input('faculty_id');
         $departmentId = $request->input('department_id');
-        
-        // Start query
+
         $query = Program::with('faculty', 'department');
-        
-        // Apply filters if provided
+
+        if ($search !== '') {
+            $like = SqlDialect::containsLike($search);
+            $query->where(function ($q) use ($like) {
+                $q->whereRaw('LOWER(name) LIKE ?', [$like])
+                    ->orWhereHas('faculty', fn ($faculty) => $faculty->whereRaw('LOWER(name) LIKE ?', [$like]))
+                    ->orWhereHas('department', fn ($department) => $department->whereRaw('LOWER(name) LIKE ?', [$like]));
+            });
+        }
+
         if ($facultyId) {
             $query->where('faculty_id', $facultyId);
         }
-        
+
         if ($departmentId) {
             $query->where('department_id', $departmentId);
         }
-        
-        $programsData = $query->orderBy('name')->get();
-        
-        // Get all faculties and departments for filters
+
+        [$sortBy, $sortDir] = ListQuery::applySort($query, $request, [
+            'name' => 'name',
+            'faculty' => function ($q, string $dir) {
+                $q->orderBy(
+                    Faculty::select('name')->whereColumn('faculties.id', 'programs.faculty_id'),
+                    $dir
+                );
+            },
+            'department' => function ($q, string $dir) {
+                $q->orderBy(
+                    Department::select('name')->whereColumn('departments.id', 'programs.department_id'),
+                    $dir
+                );
+            },
+            'created_at' => 'created_at',
+        ], 'name');
+
+        $perPage = ListQuery::perPage($request);
+        $programsData = $query->paginate($perPage)->withQueryString();
+
         $faculties = Faculty::select('id', 'name')->orderBy('name')->get();
         $departments = Department::select('id', 'name')->orderBy('name')->get();
-        
-        // Transform for frontend dropdowns
+
         $facultyOptions = $faculties->map(function ($faculty) {
             return [
                 'label' => $faculty->name,
                 'value' => $faculty->id
             ];
         })->toArray();
-        
+
         $departmentOptions = $departments->map(function ($department) {
             return [
                 'label' => $department->name,
                 'value' => $department->id
             ];
         })->toArray();
-    
-        return Inertia::render('admin/school-management/programs/index', 
-            compact('programsData', 'facultyOptions', 'departmentOptions'));
+
+        return Inertia::render('admin/school-management/programs/index', [
+            'programsData' => $programsData,
+            'facultyOptions' => $facultyOptions,
+            'departmentOptions' => $departmentOptions,
+            'filters' => ListQuery::meta([
+                'search' => $search,
+                'faculty_id' => $facultyId ? (string) $facultyId : '',
+                'department_id' => $departmentId ? (string) $departmentId : '',
+            ], $sortBy, $sortDir, $perPage),
+        ]);
     }
 
     /**
