@@ -3,6 +3,7 @@ import FaceCaptureModal from '@/components/face/FaceCaptureModal';
 import { buildFaceVerificationPayload } from '@/lib/teacher-api';
 import { apiJsonRequest, getApiErrorMessage } from '@/lib/http';
 import { type FaceCaptureResult } from '@/lib/face-recognition';
+import { formatOutOfRangeAttendanceMessage } from '@/lib/geo';
 import { getBooleanSetting } from '@/lib/system-settings';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react';
@@ -173,6 +174,20 @@ export default function StaffAttendancePage({
         () => todaySchedulesState.find((schedule) => schedule.attendance_status?.status === 'checked_in') || null,
         [todaySchedulesState],
     );
+
+    const verificationSchedule =
+        pendingAttendanceAction === 'check-out' && activeSchedule ? activeSchedule : selectedSchedule;
+    const faceLocationGate =
+        verificationSchedule?.coordinates?.lat != null &&
+        verificationSchedule?.coordinates?.lng != null &&
+        Number(verificationSchedule.radius) > 0
+            ? {
+                  latitude: Number(verificationSchedule.coordinates.lat),
+                  longitude: Number(verificationSchedule.coordinates.lng),
+                  radiusMeters: Number(verificationSchedule.radius),
+                  venueName: verificationSchedule.classroom || undefined,
+              }
+            : null;
 
     const selectedTiming = selectedSchedule?.timing;
     const canCheckInNow = Boolean(selectedTiming?.can_check_in_now);
@@ -348,7 +363,7 @@ export default function StaffAttendancePage({
         setIsWithinRange(nextWithinRange);
 
         if (gpsEnforcementEnabled && !nextWithinRange) {
-            throw new Error('You are too far from your work location. Move closer and try again.');
+            throw new Error(formatOutOfRangeAttendanceMessage(nextDistance, Number(schedule.radius)));
         }
 
         return {
@@ -806,6 +821,8 @@ export default function StaffAttendancePage({
                 title="Verify your face"
                 description="Look at the camera to confirm it is you before attendance is saved."
                 captureLabel="Verify and continue"
+                requireLocation={gpsEnforcementEnabled}
+                locationGate={faceLocationGate}
                 onCapture={handleFaceVerified}
             />
         </AppLayout>

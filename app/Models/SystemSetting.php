@@ -129,6 +129,15 @@ class SystemSetting extends Model
         return (bool) self::getValue('administrator_venue_change_requests_enabled', true);
     }
 
+    /**
+     * Whether lecturers and administrators should be emailed when marked absent.
+     * Does not affect absence recording or in-app notifications.
+     */
+    public static function sendEmailOnAutoAbsence(): bool
+    {
+        return (bool) self::getValue('send_email_on_auto_absence', true);
+    }
+
     public static function appName(): string
     {
         $name = self::getValue('app_name', config('app.name', 'UBIDS ATTENDANCE'));

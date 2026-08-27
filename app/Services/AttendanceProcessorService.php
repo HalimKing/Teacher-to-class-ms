@@ -479,19 +479,23 @@ class AttendanceProcessorService
 
         $courseName = $schedule->course?->name ?? 'your scheduled session';
 
-        $this->notifications->notify($teacher, LecturerNotificationPayload::make(
-            type: 'auto_absence_recorded',
-            category: LecturerNotificationPayload::CATEGORY_ATTENDANCE,
-            priority: LecturerNotificationPayload::PRIORITY_HIGH,
-            title: 'Automatic Absence Recorded',
-            message: "You were marked absent for {$courseName} because attendance was not completed before the attendance window expired.",
-            url: '/teacher/attendance',
-            meta: [
-                'timetable_id' => $schedule->id,
-                'date' => $today,
-                'reason' => AttendanceRecordSource::REASON_SESSION_EXPIRED,
-            ],
-        ));
+        $this->notifications->notify(
+            $teacher,
+            LecturerNotificationPayload::make(
+                type: 'auto_absence_recorded',
+                category: LecturerNotificationPayload::CATEGORY_ATTENDANCE,
+                priority: LecturerNotificationPayload::PRIORITY_HIGH,
+                title: 'Automatic Absence Recorded',
+                message: "You were marked absent for {$courseName} because attendance was not completed before the attendance window expired.",
+                url: '/teacher/attendance',
+                meta: [
+                    'timetable_id' => $schedule->id,
+                    'date' => $today,
+                    'reason' => AttendanceRecordSource::REASON_SESSION_EXPIRED,
+                ],
+            ),
+            $this->shouldEmailAutoAbsence(),
+        );
     }
 
     private function notifyAdministratorAutoAbsence(TimeTable $schedule, string $today): void
@@ -501,19 +505,23 @@ class AttendanceProcessorService
             return;
         }
 
-        $this->notifications->notify($administrator, LecturerNotificationPayload::make(
-            type: 'auto_absence_recorded',
-            category: LecturerNotificationPayload::CATEGORY_ATTENDANCE,
-            priority: LecturerNotificationPayload::PRIORITY_HIGH,
-            title: 'Automatic Absence Recorded',
-            message: 'You were marked absent because your attendance session expired without a successful check-in.',
-            url: '/teacher/staff-attendance',
-            meta: [
-                'timetable_id' => $schedule->id,
-                'date' => $today,
-                'reason' => AttendanceRecordSource::REASON_SESSION_EXPIRED,
-            ],
-        ));
+        $this->notifications->notify(
+            $administrator,
+            LecturerNotificationPayload::make(
+                type: 'auto_absence_recorded',
+                category: LecturerNotificationPayload::CATEGORY_ATTENDANCE,
+                priority: LecturerNotificationPayload::PRIORITY_HIGH,
+                title: 'Automatic Absence Recorded',
+                message: 'You were marked absent because your attendance session expired without a successful check-in.',
+                url: '/teacher/staff-attendance',
+                meta: [
+                    'timetable_id' => $schedule->id,
+                    'date' => $today,
+                    'reason' => AttendanceRecordSource::REASON_SESSION_EXPIRED,
+                ],
+            ),
+            $this->shouldEmailAutoAbsence(),
+        );
     }
 
     private function findTeacherAttendance(
@@ -625,6 +633,11 @@ class AttendanceProcessorService
     private function shouldAutoMarkAbsent(): bool
     {
         return (bool) SystemSetting::getValue('auto_mark_absent_after_end', true);
+    }
+
+    private function shouldEmailAutoAbsence(): bool
+    {
+        return SystemSetting::sendEmailOnAutoAbsence();
     }
 
     private function emptyStats(): array

@@ -63,7 +63,7 @@ const DETECT_MIN_CONFIDENCE = 0.5;
 /** Quality gate for accepted frames — keeps false positives in check. */
 const ACCEPT_MIN_CONFIDENCE = 0.62;
 const IDEAL_MIN_FACE_SIZE = 100;
-const MAX_FACE_SIZE = 320;
+const MAX_FACE_SIZE = 520;
 const MAX_DESCRIPTOR_VARIANCE = 0.16;
 const FRAME_INTERVAL_MS = 220;
 
@@ -304,7 +304,12 @@ function classifyFaceBox(
         return 'too_small';
     }
 
-    if (box.width > MAX_FACE_SIZE || box.height > MAX_FACE_SIZE) {
+    const minDim = Math.min(frameWidth, frameHeight);
+    const maxFace = frameWidth > 0 && frameHeight > 0
+        ? Math.max(MAX_FACE_SIZE, minDim * 0.88)
+        : MAX_FACE_SIZE;
+
+    if (box.width > maxFace || box.height > maxFace) {
         return 'too_large';
     }
 

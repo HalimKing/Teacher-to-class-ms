@@ -26,19 +26,28 @@ class UnifiedLoginController extends Controller
 
     public function login(Request $request): RedirectResponse
     {
-        $credentials = $request->validate([
+        $request->validate([
             'email' => 'required|email',
             'password' => 'required',
+            'remember' => 'sometimes|boolean',
         ]);
 
+        $credentials = $request->only('email', 'password');
+        $remember = $request->boolean('remember');
+
+        // Match the login form: "Remember me for 30 days"
+        $rememberMinutes = 60 * 24 * 30;
+        Auth::guard('web')->setRememberDuration($rememberMinutes);
+        Auth::guard('teacher')->setRememberDuration($rememberMinutes);
+
         // 1️⃣ Try admin login
-        if (Auth::guard('web')->attempt($credentials)) {
+        if (Auth::guard('web')->attempt($credentials, $remember)) {
             $request->session()->regenerate();
             return redirect()->route('admin.dashboard');
         }
 
         // 2️⃣ Try teacher login
-        if (Auth::guard('teacher')->attempt($credentials)) {
+        if (Auth::guard('teacher')->attempt($credentials, $remember)) {
             $request->session()->regenerate();
             return redirect()->route('teacher.dashboard');
         }

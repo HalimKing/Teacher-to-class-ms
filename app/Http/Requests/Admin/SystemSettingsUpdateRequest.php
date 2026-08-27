@@ -29,6 +29,7 @@ class SystemSettingsUpdateRequest extends FormRequest
             'checkout_grace_period_minutes'         => 'nullable|integer|min:0|max:180',
             'early_leave_minutes'         => 'nullable|integer|min:0|max:120',
             'auto_mark_absent_after_end' => 'nullable|boolean',
+            'send_email_on_auto_absence' => 'nullable|boolean',
             'allow_manual_override'       => 'nullable|boolean',
             'facial_recognition_enabled'  => 'nullable|boolean',
             'face_match_threshold'         => 'nullable|numeric|min:0.1|max:2',

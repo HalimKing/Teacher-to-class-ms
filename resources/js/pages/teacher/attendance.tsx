@@ -2,6 +2,7 @@ import AppLayout from '@/layouts/app-layout';
 import { RescheduleSessionBanner } from '@/components/attendance/RescheduleSessionBanner';
 import FaceCaptureModal from '@/components/face/FaceCaptureModal';
 import { type FaceCaptureResult } from '@/lib/face-recognition';
+import { formatOutOfRangeAttendanceMessage } from '@/lib/geo';
 import { buildFaceVerificationPayload, getApiErrorMessage, teacherJsonRequest } from '@/lib/teacher-api';
 import { getBooleanSetting } from '@/lib/system-settings';
 import { BreadcrumbItem } from '@/types';
@@ -556,7 +557,7 @@ export default function AttendancePage() {
         setIsWithinRange(nextWithinRange);
 
         if (gpsEnforcementEnabled && !nextWithinRange) {
-            throw new Error('Cannot continue: Location is out of range');
+            throw new Error(formatOutOfRangeAttendanceMessage(nextDistance, targetClass.radius));
         }
 
         return {
@@ -1631,6 +1632,17 @@ export default function AttendancePage() {
                 title="Facial Verification Required"
                 description="Please verify your identity with a live face capture before attendance is submitted."
                 captureLabel="Verify Face"
+                requireLocation={gpsEnforcementEnabled}
+                locationGate={
+                    selectedClass && Number(selectedClass.radius) > 0
+                        ? {
+                              latitude: selectedClass.coordinates.lat,
+                              longitude: selectedClass.coordinates.lng,
+                              radiusMeters: Number(selectedClass.radius),
+                              venueName: selectedClass.building || selectedClass.name,
+                          }
+                        : null
+                }
                 onCapture={handleFaceVerified}
             />
         </AppLayout>

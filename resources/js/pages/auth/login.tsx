@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import AuthLayout from '@/layouts/auth-layout';
 import { Form, Head, Link } from '@inertiajs/react';
 import { Clock, Github, LoaderCircle, Mail } from 'lucide-react';
+import { useState } from 'react';
 
 interface LoginProps {
     status?: string;
@@ -15,6 +16,7 @@ interface LoginProps {
 }
 
 export default function Login({ status, canResetPassword }: LoginProps) {
+    const [remember, setRemember] = useState(false);
     return (
         <AuthLayout
             title="Sign in to your account"
@@ -74,7 +76,13 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                                 />
 
                                 <div className="flex items-center gap-3">
-                                    <Checkbox id="remember" name="remember" tabIndex={3} />
+                                    <input type="hidden" name="remember" value={remember ? '1' : '0'} />
+                                    <Checkbox
+                                        id="remember"
+                                        tabIndex={3}
+                                        checked={remember}
+                                        onCheckedChange={(checked) => setRemember(checked === true)}
+                                    />
                                     <Label
                                         htmlFor="remember"
                                         className="cursor-pointer text-sm font-normal text-muted-foreground"

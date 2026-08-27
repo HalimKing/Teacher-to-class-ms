@@ -31,6 +31,7 @@ const SETTING_LABELS: Record<string, string> = {
     facial_recognition_enabled: 'Facial Recognition Enabled',
     face_enrollment_required: 'Face Enrollment Required',
     auto_mark_absent_after_end: 'Auto Mark Absent After End',
+    send_email_on_auto_absence: 'Send Email for Absent Lecturer/Administrator',
     allow_manual_override: 'Allow Manual Override',
     attendance_logs_enabled: 'Attendance Logs Enabled',
     log_gps_attempts: 'Log GPS Attempts',
@@ -43,11 +44,11 @@ function settingLabel(key: string): string {
 }
 
 const TAB_GROUPS = [
-    { id: 'general', label: 'General', icon: Building2 },
-    { id: 'attendance', label: 'Attendance', icon: Clock },
-    { id: 'map', label: 'Map & Location', icon: MapPin },
-    { id: 'notifications', label: 'Notifications & Logs', icon: Bell },
-    { id: 'security', label: 'Security', icon: Shield },
+    { id: 'general', label: 'General', shortLabel: 'General', icon: Building2 },
+    { id: 'attendance', label: 'Attendance', shortLabel: 'Attendance', icon: Clock },
+    { id: 'map', label: 'Map & Location', shortLabel: 'Map', icon: MapPin },
+    { id: 'notifications', label: 'Notifications & Logs', shortLabel: 'Notifications', icon: Bell },
+    { id: 'security', label: 'Security', shortLabel: 'Security', icon: Shield },
 ] as const;
 
 export default function AdminSystemSettingsPage() {
@@ -161,7 +162,7 @@ export default function AdminSystemSettingsPage() {
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="System Settings" />
             <ToastContainer />
-            <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto rounded-xl p-4 md:p-6">
+            <div className="flex h-full min-w-0 flex-1 flex-col gap-6 overflow-x-hidden rounded-xl p-4 md:p-6">
                 <div>
                     <h1 className="text-2xl font-bold text-sidebar-foreground dark:text-sidebar-foreground">System Settings</h1>
                     <p className="mt-1 text-sm text-sidebar-foreground/60">Configure institution, attendance, map, security, and logging options.</p>
@@ -180,26 +181,33 @@ export default function AdminSystemSettingsPage() {
                     </div>
                 )}
 
-                <div className="flex gap-2 border-b border-sidebar-border/50 pb-2">
+                <div
+                    role="tablist"
+                    aria-label="Settings sections"
+                    className="flex flex-wrap gap-1.5 border-b border-sidebar-border/50 pb-3 sm:gap-2"
+                >
                     {TAB_GROUPS.map((tab) => (
                         <button
                             key={tab.id}
                             type="button"
+                            role="tab"
+                            aria-selected={activeTab === tab.id}
                             onClick={() => setActiveTab(tab.id)}
                             className={cn(
-                                'flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors',
+                                'inline-flex min-h-10 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-colors sm:min-h-0 sm:gap-2 sm:px-4 sm:text-sm',
                                 activeTab === tab.id
                                     ? 'bg-sidebar-accent text-sidebar-foreground dark:bg-sidebar-accent'
                                     : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50',
                             )}
                         >
-                            <tab.icon className="h-4 w-4" />
-                            {tab.label}
+                            <tab.icon className="h-4 w-4 shrink-0" />
+                            <span className="sm:hidden">{tab.shortLabel}</span>
+                            <span className="hidden sm:inline">{tab.label}</span>
                         </button>
                     ))}
                 </div>
 
-                <Card className="border-sidebar-border/70 dark:border-sidebar-border">
+                <Card className="min-w-0 border-sidebar-border/70 dark:border-sidebar-border">
                     <CardHeader>
                         <CardTitle className="text-lg">{TAB_GROUPS.find((t) => t.id === activeTab)?.label ?? activeTab}</CardTitle>
                     </CardHeader>
@@ -221,6 +229,12 @@ export default function AdminSystemSettingsPage() {
                                             directly.
                                         </p>
                                     )}
+                                    {key === 'send_email_on_auto_absence' && (
+                                        <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-sidebar-border dark:bg-sidebar-accent dark:text-sidebar-foreground/70">
+                                            This only controls absence emails. Lecturers and administrators are still marked
+                                            absent as usual, and in-app alerts are still recorded.
+                                        </p>
+                                    )}
                                     {isBoolean(key) ? (
                                         <div className="flex items-center gap-2">
                                             <input
@@ -236,7 +250,7 @@ export default function AdminSystemSettingsPage() {
                                         </div>
                                     ) : isLogoField(key) ? (
                                         <div className="space-y-3">
-                                            <div className="flex items-center gap-4">
+                                            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                                                 <div className="flex size-20 items-center justify-center overflow-hidden rounded-xl border border-sidebar-border/60 bg-white p-2">
                                                     <img src={currentLogoUrl} alt="Current app logo" className="max-h-full max-w-full object-contain" />
                                                 </div>
@@ -329,7 +343,7 @@ export default function AdminSystemSettingsPage() {
                                 </div>
                             ))}
                             <div className="flex items-center gap-4 pt-4">
-                                <Button type="submit" disabled={processing} className="gap-2">
+                                <Button type="submit" disabled={processing} className="w-full gap-2 sm:w-auto">
                                     {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                                     Save changes
                                 </Button>

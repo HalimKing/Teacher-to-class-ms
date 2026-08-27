@@ -12,12 +12,28 @@ import {
     type FaceCaptureResult,
     type FaceDetectionIssue,
 } from '@/lib/face-recognition';
-import { Camera, ImageUp, Loader2 } from 'lucide-react';
+import { distanceInMeters, formatOutOfRangeAttendanceMessage } from '@/lib/geo';
+import { Camera, ImageUp, Loader2, MapPin, RefreshCw } from 'lucide-react';
 import { type ChangeEvent, useEffect, useRef, useState } from 'react';
 import FaceVerificationStatus, { type FaceStatus } from './FaceVerificationStatus';
 
 /** Consecutive “ok” coaching ticks required before auto-verification starts. */
 const AUTO_VERIFY_STABLE_TICKS = 3;
+
+export type FaceLocationGate = {
+    latitude: number;
+    longitude: number;
+    radiusMeters: number;
+    venueName?: string;
+};
+
+type LocationPhase = 'skipped' | 'checking' | 'allowed' | 'blocked';
+
+type LocationBlock = {
+    title: string;
+    message: string;
+    tips?: string[];
+};
 
 interface FaceCaptureModalProps {
     open: boolean;
@@ -27,6 +43,10 @@ interface FaceCaptureModalProps {
     /** When true (default), verification starts automatically once the face is stable and well positioned. */
     autoCapture?: boolean;
     captureLabel?: string;
+    /** When true, location must be confirmed before the camera starts. */
+    requireLocation?: boolean;
+    /** Venue coordinates used when requireLocation is true. */
+    locationGate?: FaceLocationGate | null;
     onOpenChange: (open: boolean) => void;
     onCapture: (result: FaceCaptureResult) => Promise<void> | void;
 }
@@ -38,16 +58,22 @@ export default function FaceCaptureModal({
     allowUpload = false,
     autoCapture = true,
     captureLabel = 'Capture Face',
+    requireLocation = false,
+    locationGate = null,
     onOpenChange,
     onCapture,
 }: FaceCaptureModalProps) {
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
     const coachingTimerRef = useRef<number | null>(null);
+    const watchIdRef = useRef<number | null>(null);
     const processingRef = useRef(false);
+    const locationBlockedRef = useRef(false);
+    const successRef = useRef(false);
     const keepFailureBannerRef = useRef(false);
     const goodFrameStreakRef = useRef(0);
     const handleCaptureRef = useRef<() => Promise<void>>(async () => undefined);
+    const locationGateRef = useRef<FaceLocationGate | null>(locationGate);
     const [status, setStatus] = useState<FaceStatus>('idle');
     const [statusTitle, setStatusTitle] = useState<string | undefined>();
     const [statusMessage, setStatusMessage] = useState<string | undefined>();
@@ -55,23 +81,54 @@ export default function FaceCaptureModal({
     const [liveGuidance, setLiveGuidance] = useState('Center your face in the oval guide.');
     const [guidanceTone, setGuidanceTone] = useState<'neutral' | 'good' | 'warn'>('neutral');
     const [processing, setProcessing] = useState(false);
+    const [locationPhase, setLocationPhase] = useState<LocationPhase>(requireLocation ? 'checking' : 'skipped');
+    const [locationBlock, setLocationBlock] = useState<LocationBlock | null>(null);
+
+    locationGateRef.current = locationGate;
+
+    const locationEnabled = Boolean(requireLocation);
+    const gateKey = locationGate
+        ? `${locationGate.latitude},${locationGate.longitude},${locationGate.radiusMeters}`
+        : '';
 
     useEffect(() => {
         if (!open) {
+            stopWatch();
             stopCoaching();
             stopCamera();
             resetStatus();
+            setLocationPhase(locationEnabled ? 'checking' : 'skipped');
+            setLocationBlock(null);
+            locationBlockedRef.current = false;
+            successRef.current = false;
             return;
         }
 
-        startCamera();
+        let cancelled = false;
         void ensureFreshCsrfToken({ force: true }).catch(() => undefined);
 
+        const boot = async () => {
+            const allowed = await confirmLocation();
+            if (cancelled) {
+                return;
+            }
+            if (!allowed) {
+                return;
+            }
+            await startCamera();
+            startWatch();
+        };
+
+        void boot();
+
         return () => {
+            cancelled = true;
+            stopWatch();
             stopCoaching();
             stopCamera();
         };
-    }, [open]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open, locationEnabled, gateKey]);
 
     const resetStatus = () => {
         setStatus('idle');
@@ -84,6 +141,7 @@ export default function FaceCaptureModal({
         processingRef.current = false;
         keepFailureBannerRef.current = false;
         goodFrameStreakRef.current = 0;
+        successRef.current = false;
     };
 
     const setProcessingState = (value: boolean) => {
@@ -91,7 +149,137 @@ export default function FaceCaptureModal({
         setProcessing(value);
     };
 
+    const blockLocation = (block: LocationBlock) => {
+        locationBlockedRef.current = true;
+        setLocationPhase('blocked');
+        setLocationBlock(block);
+        setProcessingState(false);
+        stopCoaching();
+        stopCamera();
+        stopWatch();
+    };
+
+    const requestCurrentPosition = (): Promise<{ lat: number; lng: number }> => {
+        return new Promise((resolve, reject) => {
+            if (!navigator.geolocation) {
+                reject(new Error('Location is not available on this device.'));
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                (position) =>
+                    resolve({
+                        lat: position.coords.latitude,
+                        lng: position.coords.longitude,
+                    }),
+                (error) => {
+                    if (error.code === error.PERMISSION_DENIED) {
+                        reject(new Error('Please allow location access to mark attendance.'));
+                        return;
+                    }
+                    reject(new Error('We could not confirm your location. Please try again.'));
+                },
+                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+            );
+        });
+    };
+
+    const applyCoordinates = (lat: number, lng: number): boolean => {
+        const gate = locationGateRef.current;
+        if (!gate || !Number.isFinite(gate.latitude) || !Number.isFinite(gate.longitude) || gate.radiusMeters <= 0) {
+            blockLocation({
+                title: 'Location Not Configured',
+                message: 'This session does not have a valid attendance location configured. Contact an administrator if this continues.',
+            });
+            return false;
+        }
+
+        const distance = distanceInMeters(lat, lng, gate.latitude, gate.longitude);
+        if (distance > gate.radiusMeters) {
+            blockLocation({
+                title: 'Outside Permitted Location',
+                message: formatOutOfRangeAttendanceMessage(distance, gate.radiusMeters),
+                tips: [
+                    gate.venueName ? `Move closer to ${gate.venueName}.` : 'Move closer to the permitted attendance venue.',
+                    `Required range: ${Math.round(gate.radiusMeters)}m.`,
+                    `Your current distance: ${Math.round(distance)}m.`,
+                ],
+            });
+            return false;
+        }
+
+        locationBlockedRef.current = false;
+        setLocationBlock(null);
+        setLocationPhase((current) => (current === 'allowed' ? current : 'allowed'));
+        return true;
+    };
+
+    const confirmLocation = async (): Promise<boolean> => {
+        if (!locationEnabled) {
+            locationBlockedRef.current = false;
+            setLocationPhase('skipped');
+            setLocationBlock(null);
+            return true;
+        }
+
+        const gate = locationGateRef.current;
+        if (!gate || !Number.isFinite(gate.latitude) || !Number.isFinite(gate.longitude) || gate.radiusMeters <= 0) {
+            blockLocation({
+                title: 'Location Not Configured',
+                message: 'This session does not have a valid attendance location configured. Contact an administrator if this continues.',
+            });
+            return false;
+        }
+
+        setLocationPhase('checking');
+        setLocationBlock(null);
+        locationBlockedRef.current = false;
+
+        try {
+            const position = await requestCurrentPosition();
+            return applyCoordinates(position.lat, position.lng);
+        } catch (error) {
+            blockLocation({
+                title: 'Location Needed',
+                message: getApiErrorMessage(error, 'We could not confirm your location. Please try again.'),
+                tips: ['Allow location access in your browser settings.', 'Move to an open area and tap Try Again.'],
+            });
+            return false;
+        }
+    };
+
+    const startWatch = () => {
+        stopWatch();
+        if (!locationEnabled || !navigator.geolocation) {
+            return;
+        }
+
+        watchIdRef.current = navigator.geolocation.watchPosition(
+            (position) => {
+                if (locationBlockedRef.current || successRef.current) {
+                    return;
+                }
+                applyCoordinates(position.coords.latitude, position.coords.longitude);
+            },
+            () => {
+                // Keep the last known location state if a watch update fails.
+            },
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 3000 },
+        );
+    };
+
+    const stopWatch = () => {
+        if (watchIdRef.current != null && navigator.geolocation) {
+            navigator.geolocation.clearWatch(watchIdRef.current);
+            watchIdRef.current = null;
+        }
+    };
+
     const startCamera = async () => {
+        if (locationBlockedRef.current) {
+            return;
+        }
+
         setStatus('camera_initializing');
         setStatusTitle(undefined);
         setStatusMessage('Please allow camera access if prompted.');
@@ -105,6 +293,12 @@ export default function FaceCaptureModal({
                 },
                 audio: false,
             });
+
+            if (locationBlockedRef.current) {
+                stream.getTracks().forEach((track) => track.stop());
+                return;
+            }
+
             streamRef.current = stream;
             if (videoRef.current) {
                 videoRef.current.srcObject = stream;
@@ -113,8 +307,8 @@ export default function FaceCaptureModal({
             setStatus('idle');
             setStatusMessage(
                 autoCapture
-                    ? 'Camera ready. Center your face in the oval — verification starts automatically.'
-                    : 'Camera ready. Center your face, then capture.',
+                    ? 'Location confirmed. Center your face in the oval — verification starts automatically.'
+                    : 'Location confirmed. Center your face, then capture.',
             );
             startCoaching();
         } catch {
@@ -132,19 +326,22 @@ export default function FaceCaptureModal({
     const stopCamera = () => {
         streamRef.current?.getTracks().forEach((track) => track.stop());
         streamRef.current = null;
+        if (videoRef.current) {
+            videoRef.current.srcObject = null;
+        }
     };
 
     const startCoaching = () => {
         stopCoaching();
 
         const tick = async () => {
-            if (!videoRef.current || processingRef.current) {
+            if (!videoRef.current || processingRef.current || locationBlockedRef.current) {
                 return;
             }
 
             try {
                 const assessment = await assessVideoFrame(videoRef.current);
-                if (processingRef.current) {
+                if (processingRef.current || locationBlockedRef.current) {
                     return;
                 }
 
@@ -218,6 +415,10 @@ export default function FaceCaptureModal({
     };
 
     const handleCapture = async () => {
+        if (locationBlockedRef.current || locationPhase === 'blocked' || locationPhase === 'checking') {
+            return;
+        }
+
         if (!videoRef.current || processingRef.current) {
             if (!videoRef.current) {
                 setStatus('failed');
@@ -246,17 +447,34 @@ export default function FaceCaptureModal({
                 setGuidanceTone('good');
             });
 
+            if (locationBlockedRef.current) {
+                return;
+            }
+
             setStatus('verifying');
             setStatusMessage('Comparing your face with the enrolled profile…');
             await onCapture(result);
 
+            if (locationBlockedRef.current) {
+                return;
+            }
+
             setStatus('success');
-            setStatusMessage('Your identity has been confirmed.');
+            setStatusTitle('Face Verified Successfully');
+            setStatusMessage('Face verified successfully. You can now proceed with attendance.');
+            setLiveGuidance('Face verified successfully. You can now proceed with attendance.');
+            setGuidanceTone('good');
+            successRef.current = true;
         } catch (error) {
+            if (locationBlockedRef.current) {
+                return;
+            }
             applyCaptureFailure(error);
             startCoaching();
         } finally {
-            setProcessingState(false);
+            if (!locationBlockedRef.current) {
+                setProcessingState(false);
+            }
         }
     };
 
@@ -264,7 +482,7 @@ export default function FaceCaptureModal({
 
     const handleUpload = async (event: ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
-        if (!file) {
+        if (!file || locationBlockedRef.current) {
             return;
         }
 
@@ -278,16 +496,29 @@ export default function FaceCaptureModal({
         try {
             await ensureFreshCsrfToken({ force: true });
             const result = await captureDescriptorFromImage(file);
+            if (locationBlockedRef.current) {
+                return;
+            }
             setStatus('verifying');
             setStatusMessage('Comparing your face with the enrolled profile…');
             await onCapture(result);
+            if (locationBlockedRef.current) {
+                return;
+            }
             setStatus('success');
-            setStatusMessage('Your identity has been confirmed.');
+            setStatusTitle('Face Verified Successfully');
+            setStatusMessage('Face verified successfully. You can now proceed with attendance.');
+            successRef.current = true;
         } catch (error) {
+            if (locationBlockedRef.current) {
+                return;
+            }
             applyCaptureFailure(error);
             startCoaching();
         } finally {
-            setProcessingState(false);
+            if (!locationBlockedRef.current) {
+                setProcessingState(false);
+            }
             event.target.value = '';
         }
     };
@@ -314,13 +545,21 @@ export default function FaceCaptureModal({
             return;
         }
 
-        const message = getApiErrorMessage(error, 'Unable to capture face.');
+        const message = getApiErrorMessage(error, 'We could not verify your face. Please try again.');
+
+        if (message.toLowerCase().includes('outside the permitted attendance location')) {
+            blockLocation({
+                title: 'Outside Permitted Location',
+                message,
+            });
+            return;
+        }
 
         if (isFaceMismatchMessage(message)) {
             setStatus('mismatch');
-            setStatusTitle('Face Does Not Match');
+            setStatusTitle('Face Could Not Be Verified');
             setStatusMessage(
-                'A face was detected, but it does not match the enrolled profile for this account. Please try again or contact an administrator if this continues.',
+                'We could not verify your face because it does not match the enrolled profile for this account. Please try again.',
             );
             setStatusTips([
                 'Make sure you are verifying with the correct staff account.',
@@ -333,11 +572,41 @@ export default function FaceCaptureModal({
         }
 
         setStatus('failed');
-        setStatusTitle('Unable to Verify');
+        setStatusTitle('Face Could Not Be Verified');
         setStatusMessage(message);
-        setStatusTips(undefined);
+        setStatusTips(['Look directly at the camera, improve the lighting, and tap Try Again.']);
         setLiveGuidance(message);
         setGuidanceTone('warn');
+    };
+
+    const handleLocationRetry = async () => {
+        stopWatch();
+        stopCoaching();
+        stopCamera();
+        resetStatus();
+        locationBlockedRef.current = false;
+        setLocationPhase('checking');
+        setLocationBlock(null);
+        const allowed = await confirmLocation();
+        if (!allowed) {
+            return;
+        }
+        await startCamera();
+        startWatch();
+    };
+
+    const handleFaceRetry = async () => {
+        if (locationPhase === 'blocked' || locationPhase === 'checking') {
+            await handleLocationRetry();
+            return;
+        }
+
+        resetStatus();
+        if (!streamRef.current) {
+            await startCamera();
+            return;
+        }
+        startCoaching();
     };
 
     const guidanceClass =
@@ -347,48 +616,87 @@ export default function FaceCaptureModal({
               ? 'border-amber-300 bg-amber-500/95 text-white'
               : 'border-white/30 bg-black/55 text-white';
 
+    const showCamera = locationPhase === 'skipped' || locationPhase === 'allowed';
+    const showLocationRetry = locationPhase === 'blocked' || locationPhase === 'checking';
+    const showFaceRetry = showCamera && (status === 'failed' || status === 'mismatch' || status === 'no_face');
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-2xl">
+            <DialogContent className="max-h-[min(96dvh,52rem)] w-[calc(100%-0.5rem)] max-w-[calc(100%-0.5rem)] gap-3 overflow-y-auto p-3 sm:max-w-2xl sm:p-6">
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
                     <DialogDescription>{description}</DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-4">
-                    <FaceVerificationStatus
-                        status={status}
-                        title={statusTitle}
-                        message={statusMessage}
-                        tips={statusTips}
-                    />
+                    {locationPhase === 'checking' ? (
+                        <div className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-3 text-sm text-sky-800 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-200">
+                            <div className="flex items-start gap-2.5">
+                                <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
+                                <div>
+                                    <p className="font-semibold leading-tight">Checking Location</p>
+                                    <p className="mt-1 leading-snug opacity-90">
+                                        Confirming you are within the permitted attendance range before face verification starts.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    ) : null}
 
-                    <div className="relative overflow-hidden rounded-xl border bg-black">
-                        {/*
-                          Mirror preview only (selfie-style). face-api reads raw video frames,
-                          so CSS scaleX does not affect detection or descriptor quality.
-                        */}
-                        <video
-                            ref={videoRef}
-                            className="aspect-video w-full -scale-x-100 object-cover"
-                            muted
-                            playsInline
+                    {locationPhase === 'blocked' && locationBlock ? (
+                        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+                            <div className="flex items-start gap-2.5">
+                                <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
+                                <div className="min-w-0 flex-1 space-y-1.5">
+                                    <p className="font-semibold leading-tight">{locationBlock.title}</p>
+                                    <p className="leading-snug">{locationBlock.message}</p>
+                                    {locationBlock.tips?.length ? (
+                                        <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-relaxed">
+                                            {locationBlock.tips.map((tip) => (
+                                                <li key={tip}>{tip}</li>
+                                            ))}
+                                        </ul>
+                                    ) : null}
+                                </div>
+                            </div>
+                        </div>
+                    ) : null}
+
+                    {showCamera ? (
+                        <FaceVerificationStatus
+                            status={status}
+                            title={statusTitle}
+                            message={statusMessage}
+                            tips={statusTips}
                         />
-                        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                            <div
-                                className={`h-[58%] w-[42%] rounded-[50%] border-2 ${
-                                    guidanceTone === 'good'
-                                        ? 'border-emerald-400 shadow-[0_0_0_9999px_rgba(0,0,0,0.28)]'
-                                        : 'border-white/70 shadow-[0_0_0_9999px_rgba(0,0,0,0.28)]'
-                                }`}
-                            />
-                        </div>
-                        <div className={`absolute inset-x-3 bottom-3 rounded-lg border px-3 py-2 text-center text-sm font-medium backdrop-blur-sm ${guidanceClass}`}>
-                            {liveGuidance}
-                        </div>
-                    </div>
+                    ) : null}
 
-                    {status === 'no_face' && !statusTips?.length ? (
+                    <div className={showCamera ? 'relative -mx-0.5 overflow-hidden rounded-xl border bg-black sm:mx-0' : 'hidden'}>
+                            {/*
+                              Mirror preview only (selfie-style). face-api reads raw video frames,
+                              so CSS scaleX does not affect detection or descriptor quality.
+                            */}
+                            <video
+                                ref={videoRef}
+                                className="h-[min(64dvh,34rem)] w-full -scale-x-100 object-cover sm:h-auto sm:aspect-video"
+                                muted
+                                playsInline
+                            />
+                            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                                <div
+                                    className={`h-[82%] w-[86%] rounded-[50%] border-2 sm:h-[64%] sm:w-[48%] ${
+                                        guidanceTone === 'good'
+                                            ? 'border-emerald-400 shadow-[0_0_0_9999px_rgba(0,0,0,0.28)]'
+                                            : 'border-white/70 shadow-[0_0_0_9999px_rgba(0,0,0,0.28)]'
+                                    }`}
+                                />
+                            </div>
+                            <div className={`absolute inset-x-2 bottom-2 rounded-lg border px-2.5 py-1.5 text-center text-xs font-medium backdrop-blur-sm sm:inset-x-3 sm:bottom-3 sm:px-3 sm:py-2 sm:text-sm ${guidanceClass}`}>
+                                {liveGuidance}
+                            </div>
+                        </div>
+
+                    {status === 'no_face' && showCamera && !statusTips?.length ? (
                         <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-900 dark:border-orange-900 dark:bg-orange-950/30 dark:text-orange-100">
                             <p className="font-semibold">Please try the following:</p>
                             <ul className="mt-2 list-disc space-y-1 pl-4 text-xs">
@@ -399,25 +707,55 @@ export default function FaceCaptureModal({
                         </div>
                     ) : null}
 
-                    <p className="text-xs text-muted-foreground">
-                        {autoCapture
-                            ? 'Keep only one face in frame. Verification starts automatically when your face is centered, clearly lit, and steady. You can also verify manually if needed.'
-                            : 'Keep only one face in frame. Use good lighting, look straight at the camera, and hold still during capture.'}
-                    </p>
+                    {showCamera ? (
+                        <p className="text-xs text-muted-foreground">
+                            {autoCapture
+                                ? 'Keep only one face in frame. Verification starts automatically when your face is centered, clearly lit, and steady. You can also verify manually if needed.'
+                                : 'Keep only one face in frame. Use good lighting, look straight at the camera, and hold still during capture.'}
+                        </p>
+                    ) : (
+                        <p className="text-xs text-muted-foreground">
+                            Face verification will start only after your location is within the permitted range. You can try again as many times as you need.
+                        </p>
+                    )}
                 </div>
 
                 <DialogFooter>
-                    {allowUpload && (
-                        <label className="inline-flex cursor-pointer items-center justify-center rounded-md border px-4 py-2 text-sm font-medium hover:bg-accent">
-                            <ImageUp className="mr-2 h-4 w-4" />
-                            Upload Image
-                            <input type="file" accept="image/*" className="hidden" onChange={handleUpload} disabled={processing} />
-                        </label>
+                    {showLocationRetry ? (
+                        <Button type="button" onClick={() => void handleLocationRetry()} disabled={locationPhase === 'checking'}>
+                            {locationPhase === 'checking' ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                                <RefreshCw className="mr-2 h-4 w-4" />
+                            )}
+                            {locationPhase === 'checking' ? 'Checking location…' : 'Try Again'}
+                        </Button>
+                    ) : (
+                        <>
+                            {allowUpload && (
+                                <label className="inline-flex cursor-pointer items-center justify-center rounded-md border px-4 py-2 text-sm font-medium hover:bg-accent">
+                                    <ImageUp className="mr-2 h-4 w-4" />
+                                    Upload Image
+                                    <input type="file" accept="image/*" className="hidden" onChange={handleUpload} disabled={processing} />
+                                </label>
+                            )}
+                            {showFaceRetry ? (
+                                <Button type="button" variant="outline" onClick={() => void handleFaceRetry()} disabled={processing}>
+                                    <RefreshCw className="mr-2 h-4 w-4" />
+                                    Try Again
+                                </Button>
+                            ) : null}
+                            <Button
+                                type="button"
+                                variant={autoCapture ? 'outline' : 'default'}
+                                onClick={() => void handleCapture()}
+                                disabled={processing || status === 'success'}
+                            >
+                                {processing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Camera className="mr-2 h-4 w-4" />}
+                                {processing ? 'Verifying…' : captureLabel}
+                            </Button>
+                        </>
                     )}
-                    <Button type="button" variant={autoCapture ? 'outline' : 'default'} onClick={handleCapture} disabled={processing}>
-                        {processing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Camera className="mr-2 h-4 w-4" />}
-                        {processing ? 'Verifying…' : captureLabel}
-                    </Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

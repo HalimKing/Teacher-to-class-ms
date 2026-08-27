@@ -11,10 +11,14 @@ use App\Models\SystemSetting;
 use App\Models\Teacher;
 use App\Models\TeacherAttendance;
 use App\Models\TimeTable;
+use App\Models\User;
+use App\Notifications\LecturerAlertNotification;
 use App\Services\AttendanceProcessorService;
 use App\Support\AttendanceRecordSource;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Notification;
+use Spatie\Permission\Models\Permission;
 
 function seedAttendanceProcessorSettings(): void
 {
@@ -34,6 +38,13 @@ function seedAttendanceProcessorSettings(): void
             'group' => 'attendance',
             'type' => 'integer',
             'description' => 'Checkout grace period',
+        ],
+        [
+            'key' => 'send_email_on_auto_absence',
+            'value' => '1',
+            'group' => 'attendance',
+            'type' => 'boolean',
+            'description' => 'Send email when auto-absence is recorded',
         ],
     ] as $setting) {
         SystemSetting::query()->updateOrCreate(
@@ -261,6 +272,174 @@ it('skips auto-absence when the setting is disabled', function () {
         ->and($stats['teachers']['skipped'])->toBe(1);
 
     $this->assertDatabaseCount('teacher_attendances', 0);
+});
+
+it('emails lecturers when they are auto-marked absent and the setting is enabled', function () {
+    Notification::fake();
+
+    $reference = Carbon::parse('2026-06-12 10:31:00');
+    Carbon::setTestNow($reference);
+
+    createExpiredSchedule(
+        $this->fixtures,
+        $this->fixtures['lecturer'],
+        Teacher::STAFF_TYPE_LECTURER,
+        $this->fixtures['course'],
+        $reference,
+    );
+
+    $this->processor->process($reference);
+
+    Notification::assertSentTo(
+        $this->fixtures['lecturer'],
+        LecturerAlertNotification::class,
+        fn (LecturerAlertNotification $notification) => in_array('mail', $notification->channels, true)
+            && ($notification->payload['type'] ?? null) === 'auto_absence_recorded',
+    );
+});
+
+it('does not email lecturers when the absent email setting is disabled', function () {
+    Notification::fake();
+
+    SystemSetting::query()->where('key', 'send_email_on_auto_absence')->update(['value' => '0']);
+    Cache::forget('system_settings');
+
+    $reference = Carbon::parse('2026-06-12 10:31:00');
+    Carbon::setTestNow($reference);
+
+    $schedule = createExpiredSchedule(
+        $this->fixtures,
+        $this->fixtures['lecturer'],
+        Teacher::STAFF_TYPE_LECTURER,
+        $this->fixtures['course'],
+        $reference,
+    );
+
+    $stats = $this->processor->process($reference);
+
+    expect($stats['teachers']['absent'])->toBe(1);
+    $this->assertDatabaseHas('teacher_attendances', [
+        'teacher_id' => $this->fixtures['lecturer']->id,
+        'timetable_id' => $schedule->id,
+        'status' => 'absent',
+    ]);
+
+    Notification::assertSentTo(
+        $this->fixtures['lecturer'],
+        LecturerAlertNotification::class,
+        fn (LecturerAlertNotification $notification) => $notification->channels === ['database'],
+    );
+    Notification::assertNotSentTo(
+        $this->fixtures['lecturer'],
+        LecturerAlertNotification::class,
+        fn (LecturerAlertNotification $notification) => in_array('mail', $notification->channels, true),
+    );
+});
+
+it('emails administrators when they are auto-marked absent and the setting is enabled', function () {
+    Notification::fake();
+
+    $reference = Carbon::parse('2026-06-12 17:31:00');
+    Carbon::setTestNow($reference);
+
+    createExpiredSchedule(
+        $this->fixtures,
+        $this->fixtures['administrator'],
+        Teacher::STAFF_TYPE_ADMINISTRATOR,
+        null,
+        $reference,
+    );
+
+    $this->processor->process($reference);
+
+    Notification::assertSentTo(
+        $this->fixtures['administrator'],
+        LecturerAlertNotification::class,
+        fn (LecturerAlertNotification $notification) => in_array('mail', $notification->channels, true)
+            && ($notification->payload['type'] ?? null) === 'auto_absence_recorded',
+    );
+});
+
+it('does not email administrators when the absent email setting is disabled', function () {
+    Notification::fake();
+
+    SystemSetting::query()->where('key', 'send_email_on_auto_absence')->update(['value' => '0']);
+    Cache::forget('system_settings');
+
+    $reference = Carbon::parse('2026-06-12 17:31:00');
+    Carbon::setTestNow($reference);
+
+    $schedule = createExpiredSchedule(
+        $this->fixtures,
+        $this->fixtures['administrator'],
+        Teacher::STAFF_TYPE_ADMINISTRATOR,
+        null,
+        $reference,
+    );
+
+    $stats = $this->processor->process($reference);
+
+    expect($stats['administrators']['absent'])->toBe(1);
+    $this->assertDatabaseHas('staff_attendances', [
+        'staff_id' => $this->fixtures['administrator']->id,
+        'timetable_id' => $schedule->id,
+        'attendance_status' => 'absent',
+    ]);
+
+    Notification::assertNotSentTo(
+        $this->fixtures['administrator'],
+        LecturerAlertNotification::class,
+        fn (LecturerAlertNotification $notification) => in_array('mail', $notification->channels, true),
+    );
+});
+
+it('persists the absent email setting from attendance system settings', function () {
+    Permission::firstOrCreate(['name' => 'admin.settings.edit', 'guard_name' => 'web']);
+    Permission::firstOrCreate(['name' => 'admin.settings.view', 'guard_name' => 'web']);
+
+    $admin = User::factory()->create();
+    $admin->givePermissionTo(['admin.settings.edit', 'admin.settings.view']);
+
+    $this->actingAs($admin)
+        ->get(route('admin.settings-reports.settings.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('admin/settings/index')
+            ->where('settings.attendance.send_email_on_auto_absence.key', 'send_email_on_auto_absence')
+            ->where('settings.attendance.send_email_on_auto_absence.value', true)
+            ->where('settings.attendance.send_email_on_auto_absence.type', 'boolean')
+        );
+
+    expect(SystemSetting::sendEmailOnAutoAbsence())->toBeTrue();
+
+    $this->actingAs($admin)
+        ->put(route('admin.settings-reports.settings.update'), [
+            'group' => 'attendance',
+            'settings' => [
+                'send_email_on_auto_absence' => false,
+            ],
+        ])
+        ->assertRedirect(route('admin.settings-reports.settings.index'));
+
+    expect(SystemSetting::sendEmailOnAutoAbsence())->toBeFalse();
+
+    $this->actingAs($admin)
+        ->get(route('admin.settings-reports.settings.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('settings.attendance.send_email_on_auto_absence.value', false)
+        );
+
+    $this->actingAs($admin)
+        ->put(route('admin.settings-reports.settings.update'), [
+            'group' => 'attendance',
+            'settings' => [
+                'send_email_on_auto_absence' => true,
+            ],
+        ])
+        ->assertRedirect(route('admin.settings-reports.settings.index'));
+
+    expect(SystemSetting::sendEmailOnAutoAbsence())->toBeTrue();
 });
 
 afterEach(function () {

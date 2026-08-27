@@ -3,6 +3,7 @@ import { RescheduleSessionBanner, type RescheduleBannerInfo } from '@/components
 import { buildFaceVerificationPayload } from '@/lib/teacher-api';
 import { apiJsonRequest, getApiErrorMessage } from '@/lib/http';
 import { type FaceCaptureResult } from '@/lib/face-recognition';
+import { distanceInMeters, formatOutOfRangeAttendanceMessage } from '@/lib/geo';
 import { getBooleanSetting } from '@/lib/system-settings';
 import AttendancePortalLayout from '@/layouts/attendance-portal-layout';
 import { Head, Link, router, usePage } from '@inertiajs/react';
@@ -86,16 +87,6 @@ function formatTime(time: string) {
         minute: '2-digit',
         hour12: true,
     });
-}
-
-function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
-    const R = 6371e3;
-    const phi1 = (lat1 * Math.PI) / 180;
-    const phi2 = (lat2 * Math.PI) / 180;
-    const deltaPhi = ((lat2 - lat1) * Math.PI) / 180;
-    const deltaLambda = ((lon2 - lon1) * Math.PI) / 180;
-    const a = Math.sin(deltaPhi / 2) ** 2 + Math.cos(phi1) * Math.cos(phi2) * Math.sin(deltaLambda / 2) ** 2;
-    return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
 export default function AttendancePortalMarkPage({
@@ -300,11 +291,11 @@ export default function AttendancePortalMarkPage({
             };
         }
 
-        const distance = calculateDistance(location.lat, location.lng, Number(lat), Number(lng));
+        const distance = distanceInMeters(location.lat, location.lng, Number(lat), Number(lng));
         const within_range = distance <= radius;
 
         if (gpsEnforcementEnabled && !within_range) {
-            throw new Error(`You are too far from the work location (${Math.round(distance)}m away).`);
+            throw new Error(formatOutOfRangeAttendanceMessage(distance, radius));
         }
 
         return {
@@ -492,6 +483,19 @@ export default function AttendancePortalMarkPage({
     };
 
     const actionsLocked = submitting || checkInComplete || faceModalOpen;
+
+    const verificationSession = pendingAction === 'check-out' && activeSession ? activeSession : selected;
+    const faceLocationGate =
+        verificationSession?.coordinates?.lat != null &&
+        verificationSession?.coordinates?.lng != null &&
+        Number(verificationSession.radius) > 0
+            ? {
+                  latitude: Number(verificationSession.coordinates.lat),
+                  longitude: Number(verificationSession.coordinates.lng),
+                  radiusMeters: Number(verificationSession.radius),
+                  venueName: verificationSession.classroom ?? verificationSession.building ?? undefined,
+              }
+            : null;
 
     const holiday = holidayContext || {
         mode: 'open',
@@ -774,6 +778,8 @@ export default function AttendancePortalMarkPage({
                 title="Verify your face"
                 description="Confirm your identity to save attendance."
                 captureLabel="Verify and continue"
+                requireLocation={gpsEnforcementEnabled}
+                locationGate={faceLocationGate}
                 onCapture={handleFaceVerified}
             />
         </AttendancePortalLayout>

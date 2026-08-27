@@ -31,6 +31,7 @@ class SystemSettingsSeeder extends Seeder
             ['key' => 'checkout_grace_period_minutes', 'value' => '30', 'group' => 'attendance', 'type' => 'integer', 'description' => 'Number of minutes after scheduled end time that check-out is still considered compliant.'],
             ['key' => 'early_leave_minutes', 'value' => '15', 'group' => 'attendance', 'type' => 'integer', 'description' => 'Minutes before class end to count as early leave'],
             ['key' => 'auto_mark_absent_after_end', 'value' => '1', 'group' => 'attendance', 'type' => 'boolean', 'description' => 'Auto-mark absent after class end time'],
+            ['key' => 'send_email_on_auto_absence', 'value' => '1', 'group' => 'attendance', 'type' => 'boolean', 'description' => 'When enabled, lecturers and administrators automatically receive an email after they are marked absent. When disabled, absence records and in-app alerts are unchanged, but no absence emails are sent.'],
             ['key' => 'allow_manual_override', 'value' => '1', 'group' => 'attendance', 'type' => 'boolean', 'description' => 'Allow admin to manually override attendance'],
             ['key' => 'facial_recognition_enabled', 'value' => '1', 'group' => 'attendance', 'type' => 'boolean', 'description' => 'Require facial recognition as an additional attendance verification layer.'],
             ['key' => 'face_match_threshold', 'value' => '0.45', 'group' => 'attendance', 'type' => 'string', 'description' => 'Maximum descriptor distance accepted for a face match.'],

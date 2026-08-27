@@ -89,8 +89,8 @@ function statusConfig(status: FaceStatus): {
             };
         case 'success':
             return {
-                title: 'Verification Successful',
-                message: 'Your identity has been confirmed.',
+                title: 'Face Verified Successfully',
+                message: 'Face verified successfully. You can now proceed with attendance.',
                 className: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200',
                 icon: <CheckCircle className="h-4 w-4" />,
             };
@@ -110,8 +110,8 @@ function statusConfig(status: FaceStatus): {
             };
         case 'failed':
             return {
-                title: 'Unable to Verify',
-                message: 'Something went wrong during verification. Please try again.',
+                title: 'Unable to Verify Face',
+                message: 'We could not verify your face. Please try again, look directly at the camera, and make sure you are using the correct account.',
                 className: 'border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200',
                 icon: <AlertCircle className="h-4 w-4" />,
             };
