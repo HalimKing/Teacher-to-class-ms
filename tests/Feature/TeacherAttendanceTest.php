@@ -69,7 +69,10 @@ it('allows a teacher to check in successfully', function () {
         'academic_year_id' => $this->academicYear->id,
         'course_id' => $this->course->id,
         'class_room_id' => $this->classroom->id,
+        'teacher_id' => $this->teacher->id,
+        'staff_type' => Teacher::STAFF_TYPE_LECTURER,
         'day' => Carbon::now()->format('l'),
+        'day_of_week' => Carbon::now()->format('l'),
         'start_time' => $start,
         'end_time' => $end,
     ]);
@@ -96,12 +99,15 @@ it('allows a teacher to check in successfully', function () {
     $response->assertStatus(200)
         ->assertJson(['success' => true]);
 
-    $this->assertDatabaseHas('teacher_attendances', [
-        'teacher_id' => $this->teacher->id,
-        'timetable_id' => $timetable->id,
-        'course_id' => $this->course->id,
-        'date' => Carbon::now()->format('Y-m-d'),
-    ]);
+    $record = TeacherAttendance::query()
+        ->where('teacher_id', $this->teacher->id)
+        ->where('timetable_id', $timetable->id)
+        ->where('course_id', $this->course->id)
+        ->whereDate('date', Carbon::now()->toDateString())
+        ->first();
+
+    expect($record)->not->toBeNull()
+        ->and($record->check_in_time)->not->toBeNull();
 });
 
 it('allows a teacher to check out successfully after class end', function () {

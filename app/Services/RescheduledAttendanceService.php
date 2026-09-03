@@ -6,6 +6,7 @@ use App\Models\ClassRoom;
 use App\Models\RescheduledSession;
 use App\Models\TeacherAttendance;
 use App\Models\TimeTable;
+use App\Support\AttendanceLock;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
@@ -254,11 +255,7 @@ class RescheduledAttendanceService
         );
 
         if ($this->isMissedAttendance($attendance)) {
-            return [
-                'success' => false,
-                'message' => 'This session was marked as missed. Attendance is no longer available.',
-                'state' => 'missed',
-            ];
+            return AttendanceLock::blockedPayload();
         }
 
         $isRescheduledAway = $context['state'] === self::STATE_RESCHEDULED_AWAY;
@@ -282,7 +279,7 @@ class RescheduledAttendanceService
 
     public function isMissedAttendance(?TeacherAttendance $attendance): bool
     {
-        return $attendance !== null && $attendance->status === 'absent';
+        return $attendance !== null && $attendance->isAbsenceLocked();
     }
 
     /**
@@ -394,7 +391,7 @@ class RescheduledAttendanceService
 
         if ($isMissed) {
             $canTakeAttendance = false;
-            $attendanceBlockedMessage = 'This session was marked as missed. Attendance is no longer available.';
+            $attendanceBlockedMessage = AttendanceLock::MESSAGE;
         }
 
         $timing = $this->timingService->buildScheduleTiming(

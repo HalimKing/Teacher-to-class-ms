@@ -3,6 +3,7 @@ import { RescheduleSessionBanner, type RescheduleBannerInfo } from '@/components
 import { buildFaceVerificationPayload } from '@/lib/teacher-api';
 import { apiJsonRequest, getApiErrorMessage } from '@/lib/http';
 import { type FaceCaptureResult } from '@/lib/face-recognition';
+import { ATTENDANCE_LOCK_MESSAGE } from '@/lib/attendance-lock';
 import { distanceInMeters, formatOutOfRangeAttendanceMessage } from '@/lib/geo';
 import { getBooleanSetting } from '@/lib/system-settings';
 import AttendancePortalLayout from '@/layouts/attendance-portal-layout';
@@ -190,8 +191,10 @@ export default function AttendancePortalMarkPage({
 
     const sessionKey = (session: PortalSession) => session.timetable_id;
 
-    const loadSessions = async () => {
-        setLoading(true);
+    const loadSessions = async (options: { silent?: boolean } = {}) => {
+        if (!options.silent) {
+            setLoading(true);
+        }
         try {
             const response = await requestJson<ApiResponse>(endpoints.list);
             const normalized = normalizeSessions(response.data || []);
@@ -202,24 +205,51 @@ export default function AttendancePortalMarkPage({
                     !session.attendance_status?.check_out_time &&
                     session.attendance_status?.status === 'checked_in',
             );
-            setSelected(
-                checkedIn ||
+            setSelected((current) => {
+                if (checkedIn) {
+                    return checkedIn;
+                }
+
+                const stillSelected = current
+                    ? normalized.find((session) => sessionKey(session) === sessionKey(current))
+                    : undefined;
+                if (stillSelected) {
+                    return stillSelected;
+                }
+
+                return (
                     normalized.find((session) => !session.is_completed && !isSessionMissed(session) && session.can_take_attendance !== false) ||
                     normalized[0] ||
-                    null,
-            );
-        } catch (error) {
-            setMessage({
-                type: 'error',
-                text: getApiErrorMessage(error, 'Unable to load today’s sessions.'),
+                    null
+                );
             });
+        } catch (error) {
+            if (!options.silent) {
+                setMessage({
+                    type: 'error',
+                    text: getApiErrorMessage(error, 'Unable to load today’s sessions.'),
+                });
+            }
         } finally {
-            setLoading(false);
+            if (!options.silent) {
+                setLoading(false);
+            }
         }
     };
 
     useEffect(() => {
         loadSessions();
+        // Refresh when the portal switches between lecturer and administrator endpoints.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [endpoints.list]);
+
+    useEffect(() => {
+        const interval = window.setInterval(() => {
+            void loadSessions({ silent: true });
+        }, 30000);
+
+        return () => window.clearInterval(interval);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [endpoints.list]);
 
     useEffect(() => {
@@ -339,7 +369,7 @@ export default function AttendancePortalMarkPage({
                 text:
                     selected.attendance_blocked_message ||
                     (isSessionMissed(selected)
-                        ? 'This session was marked as missed. Attendance is no longer available.'
+                        ? ATTENDANCE_LOCK_MESSAGE
                         : 'Attendance is not available for this session.'),
             });
             return;
@@ -393,6 +423,14 @@ export default function AttendancePortalMarkPage({
 
         if (!activeSession?.attendance_status?.id) {
             setMessage({ type: 'error', text: 'You are not checked in yet.' });
+            return;
+        }
+
+        if (isSessionMissed(activeSession) || activeSession.can_take_attendance === false) {
+            setMessage({
+                type: 'error',
+                text: activeSession.attendance_blocked_message || ATTENDANCE_LOCK_MESSAGE,
+            });
             return;
         }
 
@@ -680,8 +718,7 @@ export default function AttendancePortalMarkPage({
                                 <div className="flex gap-2">
                                     <AlertTriangle className="mt-0.5 size-4 shrink-0" />
                                     <p>
-                                        {selected?.attendance_blocked_message ||
-                                            'This session was marked as missed. Attendance is no longer available.'}
+                                        {selected?.attendance_blocked_message || ATTENDANCE_LOCK_MESSAGE}
                                     </p>
                                 </div>
                             </div>

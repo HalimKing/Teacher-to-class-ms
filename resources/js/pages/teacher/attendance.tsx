@@ -3,6 +3,7 @@ import { RescheduleSessionBanner } from '@/components/attendance/RescheduleSessi
 import FaceCaptureModal from '@/components/face/FaceCaptureModal';
 import { type FaceCaptureResult } from '@/lib/face-recognition';
 import { formatOutOfRangeAttendanceMessage } from '@/lib/geo';
+import { ATTENDANCE_LOCK_MESSAGE } from '@/lib/attendance-lock';
 import { buildFaceVerificationPayload, getApiErrorMessage, teacherJsonRequest } from '@/lib/teacher-api';
 import { getBooleanSetting } from '@/lib/system-settings';
 import { BreadcrumbItem } from '@/types';
@@ -284,9 +285,11 @@ export default function AttendancePage() {
             ? facialRecognitionEnabledProp
             : getBooleanSetting(systemSettings?.attendance, 'facial_recognition_enabled');
 
-    const fetchTodaysClasses = async () => {
-        setIsLoadingClasses(true);
-        setApiError(null);
+    const fetchTodaysClasses = async (options: { silent?: boolean } = {}) => {
+        if (!options.silent) {
+            setIsLoadingClasses(true);
+            setApiError(null);
+        }
         try {
             const response = await teacherJsonRequest<ApiResponse>('/teacher/attendance/todays-classes');
 
@@ -294,12 +297,9 @@ export default function AttendancePage() {
                 const classesData = response.data;
                 setTodaysClasses(classesData);
 
-                let foundActiveCheckIn = false;
-
                 const checkedInClass = classesData.find((cls: ClassLocation) => cls.attendance_status?.status === 'checked_in');
 
                 if (checkedInClass) {
-                    foundActiveCheckIn = true;
                     setSelectedClass(checkedInClass);
                     setCheckedInClass(checkedInClass);
                     setCurrentStatus('checked_in');
@@ -315,23 +315,35 @@ export default function AttendancePage() {
                     setActiveAttendanceId(null);
                     setCheckInTime(null);
 
-                    const firstNonCompleted = classesData.find(
-                        (cls: ClassLocation) => !cls.is_completed && !cls.is_missed && cls.can_take_attendance !== false,
-                    );
-                    if (firstNonCompleted) {
-                        setSelectedClass(firstNonCompleted);
-                    } else if (classesData.length > 0) {
-                        setSelectedClass(classesData[0]);
-                    }
+                    setSelectedClass((current) => {
+                        const stillSelected = current
+                            ? classesData.find((cls: ClassLocation) => cls.timetable_id === current.timetable_id)
+                            : undefined;
+                        if (stillSelected) {
+                            return stillSelected;
+                        }
+
+                        return (
+                            classesData.find(
+                                (cls: ClassLocation) => !cls.is_completed && !cls.is_missed && cls.can_take_attendance !== false,
+                            ) ||
+                            classesData[0] ||
+                            null
+                        );
+                    });
                 }
-            } else {
+            } else if (!options.silent) {
                 setApiError(response.message || "Failed to fetch today's classes");
             }
         } catch (error: any) {
             console.error("Error fetching today's classes:", error);
-            setApiError("Unable to load today's classes. Please try again.");
+            if (!options.silent) {
+                setApiError("Unable to load today's classes. Please try again.");
+            }
         } finally {
-            setIsLoadingClasses(false);
+            if (!options.silent) {
+                setIsLoadingClasses(false);
+            }
         }
     };
 
@@ -488,7 +500,7 @@ export default function AttendancePage() {
                 setApiError(
                     cls.attendance_blocked_message ||
                         (cls.is_missed
-                            ? 'This session was marked as missed. Attendance is no longer available.'
+                            ? ATTENDANCE_LOCK_MESSAGE
                             : 'Attendance is unavailable because this session has been rescheduled.'),
                 );
                 return;
@@ -586,7 +598,7 @@ export default function AttendancePage() {
             setApiError(
                 selectedClass.attendance_blocked_message ||
                     (selectedClass.is_missed
-                        ? 'This session was marked as missed. Attendance is no longer available.'
+                        ? ATTENDANCE_LOCK_MESSAGE
                         : 'Attendance is unavailable because this session has been rescheduled.'),
             );
             return;
@@ -777,6 +789,11 @@ export default function AttendancePage() {
             return;
         }
 
+        if (selectedClass?.is_missed || selectedClass?.can_take_attendance === false) {
+            setApiError(selectedClass.attendance_blocked_message || ATTENDANCE_LOCK_MESSAGE);
+            return;
+        }
+
         setIsLoadingApi(true);
         setApiError(null);
         setApiSuccess(null);
@@ -877,10 +894,11 @@ export default function AttendancePage() {
 
     useEffect(() => {
         const interval = setInterval(() => {
+            void fetchTodaysClasses({ silent: true });
             if (selectedClass && !selectedClass.is_completed) {
                 updateTimeValidation(selectedClass);
             }
-        }, 60000);
+        }, 30000);
 
         return () => clearInterval(interval);
     }, [selectedClass, updateTimeValidation]);
@@ -1004,8 +1022,7 @@ export default function AttendancePage() {
                                         <div>
                                             <p className="font-semibold">Session Missed</p>
                                             <p className="mt-1">
-                                                {selectedClass.attendance_blocked_message ||
-                                                    'This session was marked as missed. Attendance is no longer available.'}
+                                                {selectedClass.attendance_blocked_message || ATTENDANCE_LOCK_MESSAGE}
                                             </p>
                                         </div>
                                     </div>
@@ -1291,7 +1308,7 @@ export default function AttendancePage() {
 
                                                         {isMissed && (
                                                             <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-800">
-                                                                This session was marked as missed. Attendance is no longer available.
+                                                                {c.attendance_blocked_message || ATTENDANCE_LOCK_MESSAGE}
                                                             </div>
                                                         )}
 

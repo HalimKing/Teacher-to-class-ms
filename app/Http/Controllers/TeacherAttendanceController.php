@@ -12,6 +12,7 @@ use App\Services\FacialRecognitionService;
 use App\Services\HolidayBreakService;
 use App\Services\LecturerNotificationService;
 use App\Services\RescheduledAttendanceService;
+use App\Support\AttendanceLock;
 use App\Support\LecturerNotificationPayload;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -369,6 +370,11 @@ class TeacherAttendanceController extends Controller
             ], 400);
         }
 
+        // A recorded absence closes the session: no check-out can follow it.
+        if ($this->rescheduledAttendance->isMissedAttendance($attendance)) {
+            return response()->json(AttendanceLock::blockedPayload(), 422);
+        }
+
         $timetable = TimeTable::find($attendance->timetable_id);
         if (!$timetable) {
             return response()->json(['success' => false, 'message' => 'Invalid timetable for this attendance record.'], 400);
@@ -386,13 +392,6 @@ class TeacherAttendanceController extends Controller
                 'success' => false,
                 'message' => $attendanceContext['attendance_blocked_message']
                     ?? 'Attendance is unavailable because this session has been rescheduled.',
-            ], 422);
-        }
-
-        if ($this->rescheduledAttendance->isMissedAttendance($attendance)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'This session was marked as missed. Attendance is no longer available.',
             ], 422);
         }
 

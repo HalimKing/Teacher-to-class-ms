@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\AttendanceLock;
 use Illuminate\Database\Eloquent\Model;
 
 class TeacherAttendance extends Model
@@ -100,6 +101,15 @@ class TeacherAttendance extends Model
         return $query
             ->whereNotNull('check_in_time')
             ->whereNull('check_out_time')
-            ->whereNotIn('status', ['absent']);
+            ->whereNotIn('status', AttendanceLock::LOCKED_STATUSES);
+    }
+
+    /**
+     * True once the session has been finalized as an absence, which closes it
+     * for further check-in or check-out.
+     */
+    public function isAbsenceLocked(): bool
+    {
+        return AttendanceLock::isLocked($this->status);
     }
 }

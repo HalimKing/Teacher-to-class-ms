@@ -4,11 +4,14 @@ namespace App\Http\Controllers\Teacher;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Teacher\VerifyFaceRequest;
+use App\Models\StaffAttendance;
 use App\Models\Teacher;
 use App\Models\TimeTable;
+use App\Services\AttendanceTimingService;
 use App\Services\FacialRecognitionService;
 use App\Services\LecturerNotificationService;
 use App\Services\RescheduledAttendanceService;
+use App\Support\AttendanceLock;
 use App\Support\LecturerNotificationPayload;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Validation\ValidationException;
@@ -18,6 +21,7 @@ class FaceVerificationController extends Controller
     public function __construct(
         private LecturerNotificationService $lecturerNotifications,
         private RescheduledAttendanceService $rescheduledAttendance,
+        private AttendanceTimingService $timingService,
     ) {}
 
     public function verify(VerifyFaceRequest $request, FacialRecognitionService $facialRecognition): JsonResponse
@@ -86,6 +90,21 @@ class FaceVerificationController extends Controller
                 'success' => false,
                 'message' => 'Invalid staff schedule for facial verification.',
             ], 404);
+        }
+
+        $existingAttendance = StaffAttendance::query()
+            ->where('staff_id', $teacher->id)
+            ->where('timetable_id', $timetable->id)
+            ->whereDate('date', now())
+            ->first();
+
+        if ($existingAttendance?->isAbsenceLocked()) {
+            return response()->json(AttendanceLock::blockedPayload(), 422);
+        }
+
+        $scheduledEnd = $this->timingService->parseScheduleTime((string) $timetable->end_time, now());
+        if ($existingAttendance === null && $this->timingService->hasCheckoutGraceExpired(now(), $scheduledEnd)) {
+            return response()->json(AttendanceLock::blockedPayload(), 422);
         }
 
         if (!$facialRecognition->isEnabled()) {

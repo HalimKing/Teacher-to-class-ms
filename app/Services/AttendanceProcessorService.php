@@ -9,6 +9,7 @@ use App\Models\Teacher;
 use App\Models\TeacherAttendance;
 use App\Models\TimeTable;
 use App\Support\AttendanceExceptionCategory;
+use App\Support\AttendanceLock;
 use App\Support\AttendanceRecordSource;
 use App\Support\LecturerNotificationPayload;
 use Carbon\Carbon;
@@ -606,7 +607,7 @@ class AttendanceProcessorService
 
     private function isTeacherTerminal(TeacherAttendance $attendance): bool
     {
-        if (in_array($attendance->status, ['absent', 'incomplete'], true)) {
+        if (AttendanceLock::isLocked($attendance->status) || $attendance->status === 'incomplete') {
             return true;
         }
 
@@ -619,7 +620,7 @@ class AttendanceProcessorService
 
     private function isStaffTerminal(StaffAttendance $attendance): bool
     {
-        if (in_array($attendance->attendance_status, ['absent', 'incomplete'], true)) {
+        if (AttendanceLock::isLocked($attendance->attendance_status) || $attendance->attendance_status === 'incomplete') {
             return true;
         }
 

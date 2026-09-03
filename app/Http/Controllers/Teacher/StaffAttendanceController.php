@@ -13,6 +13,7 @@ use App\Services\ActivityLogService;
 use App\Services\HolidayBreakService;
 use App\Services\VenueChangeAuthorizationService;
 use App\Support\AttendanceExceptionCategory;
+use App\Support\AttendanceLock;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -38,6 +39,7 @@ class StaffAttendanceController extends Controller
             ->get();
 
         $today = now()->format('l');
+        $date = now()->format('Y-m-d');
 
         return Inertia::render('teacher/staff-attendance', [
             'staffMember' => [
@@ -48,7 +50,9 @@ class StaffAttendanceController extends Controller
                 'department' => $teacher->department?->name,
             ],
             'assignedSchedules' => $schedules->map(fn (TimeTable $schedule) => $this->formatSchedule($schedule))->values(),
-            'todaySchedules' => $schedules->where('day_of_week', $today)->map(fn (TimeTable $schedule) => $this->formatSchedule($schedule))->values(),
+            'todaySchedules' => $schedules->where('day_of_week', $today)->map(function (TimeTable $schedule) use ($teacher, $date) {
+                return $this->formatSchedule($schedule, $this->todayAttendanceFor($teacher->id, $schedule->id, $date));
+            })->values(),
             'upcomingSchedules' => $schedules->filter(fn (TimeTable $schedule) => $this->isUpcoming($schedule))->map(fn (TimeTable $schedule) => $this->formatSchedule($schedule))->values(),
             'facialRecognitionEnabled' => $facialRecognition->isEnabled(),
         ]);
@@ -77,12 +81,7 @@ class StaffAttendanceController extends Controller
             ->get();
 
         $data = $schedules->map(function (TimeTable $schedule) use ($staff, $date) {
-            $attendance = StaffAttendance::where('staff_id', $staff->id)
-                ->where('timetable_id', $schedule->id)
-                ->whereDate('date', $date)
-                ->first();
-
-            return $this->formatSchedule($schedule, $attendance);
+            return $this->formatSchedule($schedule, $this->todayAttendanceFor($staff->id, $schedule->id, $date));
         })->values();
 
         return response()->json([
@@ -151,12 +150,14 @@ class StaffAttendanceController extends Controller
         $faceVerificationPayload = null;
         $faceMatchScore = null;
 
-        $existingAttendance = StaffAttendance::where('staff_id', $staff->id)
-            ->where('timetable_id', $timetable->id)
-            ->whereDate('date', $today)
-            ->first();
+        $existingAttendance = $this->todayAttendanceFor($staff->id, $timetable->id, $today);
 
         if ($existingAttendance) {
+            // A recorded absence closes the session: no check-in can follow it.
+            if ($existingAttendance->isAbsenceLocked()) {
+                return response()->json(AttendanceLock::blockedPayload(), 422);
+            }
+
             if ($existingAttendance->check_out_time) {
                 return response()->json([
                     'success' => false,
@@ -170,6 +171,11 @@ class StaffAttendanceController extends Controller
                 'attendance_id' => $existingAttendance->id,
                 'attendance' => $existingAttendance,
             ]);
+        }
+
+        $scheduledEnd = $this->timingService->parseScheduleTime((string) $timetable->end_time, $now);
+        if ($this->timingService->hasCheckoutGraceExpired($now, $scheduledEnd)) {
+            return response()->json(AttendanceLock::blockedPayload(), 422);
         }
 
         $activeAttendance = StaffAttendance::query()
@@ -314,6 +320,18 @@ class StaffAttendanceController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Already checked out.',
+            ], 400);
+        }
+
+        // A recorded absence closes the session: no check-out can follow it.
+        if ($attendance->isAbsenceLocked()) {
+            return response()->json(AttendanceLock::blockedPayload(), 422);
+        }
+
+        if (!$attendance->check_in_time) {
+            return response()->json([
+                'success' => false,
+                'message' => 'You have not checked in for this session yet.',
             ], 400);
         }
 
@@ -474,6 +492,20 @@ class StaffAttendanceController extends Controller
 
         $displayClassroom = $venueContext['classroom'] ?? $schedule->classRoom;
         $authorization = $venueContext['authorization'];
+        $isMissed = $attendance !== null && $attendance->isAbsenceLocked();
+        $afterCheckoutGrace = (bool) ($timing['is_after_checkout_grace'] ?? false);
+
+        if (
+            !$isMissed
+            && $attendance === null
+            && $isToday
+            && $afterCheckoutGrace
+        ) {
+            $isMissed = true;
+        }
+
+        $canTakeAttendance = !$isMissed;
+        $attendanceBlockedMessage = $isMissed ? AttendanceLock::MESSAGE : null;
 
         return [
             'id' => $schedule->id,
@@ -502,7 +534,9 @@ class StaffAttendanceController extends Controller
                 'id' => $attendance->id,
                 'check_in_time' => $attendance->check_in_time,
                 'check_out_time' => $attendance->check_out_time,
-                'status' => $attendance->check_out_time ? 'completed' : 'checked_in',
+                'status' => $isMissed
+                    ? 'absent'
+                    : ($attendance->check_out_time ? 'completed' : 'checked_in'),
                 'attendance_status' => $attendance->attendance_status,
                 'arrival_category' => $attendance->arrival_category,
                 'minutes_early' => $attendance->minutes_early,
@@ -511,6 +545,10 @@ class StaffAttendanceController extends Controller
                 'exception_category' => $attendance->exception_category,
             ] : null,
             'is_completed' => $attendance && $attendance->check_out_time !== null,
+            'is_missed' => $isMissed,
+            'can_take_attendance' => $canTakeAttendance,
+            'attendance_blocked_message' => $attendanceBlockedMessage,
+            'attendance_state' => $isMissed ? 'missed' : null,
             'needs_explanation' => $attendance
                 && !in_array($attendance->attendance_status, ['excused_absence'], true)
                 && !in_array($attendance->exception_category, [
@@ -547,6 +585,15 @@ class StaffAttendanceController extends Controller
             'late' => 'Staff check-in recorded as late (' . $checkInOutcome['minutes_late'] . ' minute(s) after scheduled start).',
             default => 'Staff check-in successful. You are on time.',
         };
+    }
+
+    private function todayAttendanceFor(int $staffId, int $timetableId, string $date): ?StaffAttendance
+    {
+        return StaffAttendance::query()
+            ->where('staff_id', $staffId)
+            ->where('timetable_id', $timetableId)
+            ->whereDate('date', $date)
+            ->first();
     }
 
     private function getOwnedStaffTimetable(int $timetableId, int $staffId): ?TimeTable

@@ -4,6 +4,7 @@ import { buildFaceVerificationPayload } from '@/lib/teacher-api';
 import { apiJsonRequest, getApiErrorMessage } from '@/lib/http';
 import { type FaceCaptureResult } from '@/lib/face-recognition';
 import { formatOutOfRangeAttendanceMessage } from '@/lib/geo';
+import { ATTENDANCE_LOCK_MESSAGE } from '@/lib/attendance-lock';
 import { getBooleanSetting } from '@/lib/system-settings';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react';
@@ -68,9 +69,9 @@ interface StaffSchedule {
     attendance_taken: boolean;
     attendance_status?: {
         id: number;
-        check_in_time: string;
+        check_in_time: string | null;
         check_out_time: string | null;
-        status: 'checked_in' | 'completed';
+        status: 'checked_in' | 'completed' | 'absent';
         attendance_status: string;
         arrival_category?: string | null;
         minutes_early?: number | null;
@@ -79,6 +80,10 @@ interface StaffSchedule {
         exception_category?: string | null;
     } | null;
     is_completed: boolean;
+    is_missed?: boolean;
+    can_take_attendance?: boolean;
+    attendance_blocked_message?: string | null;
+    attendance_state?: string | null;
     needs_explanation?: boolean;
     timing?: ScheduleTiming;
 }
@@ -121,6 +126,15 @@ function formatTime(time: string) {
         minute: '2-digit',
         hour12: true,
     });
+}
+
+function isScheduleMissed(schedule: StaffSchedule | null): boolean {
+    return Boolean(
+        schedule?.is_missed ||
+            schedule?.attendance_state === 'missed' ||
+            schedule?.attendance_status?.status === 'absent' ||
+            schedule?.can_take_attendance === false,
+    );
 }
 
 export default function StaffAttendancePage({
@@ -199,6 +213,14 @@ export default function StaffAttendancePage({
     });
 
     const sessionStatus = useMemo(() => {
+        if (isScheduleMissed(selectedSchedule)) {
+            return {
+                label: 'Absent',
+                description: selectedSchedule?.attendance_blocked_message || ATTENDANCE_LOCK_MESSAGE,
+                tone: 'missed' as const,
+            };
+        }
+
         if (activeSchedule) {
             return {
                 label: 'You are checked in',
@@ -258,8 +280,20 @@ export default function StaffAttendancePage({
             const response = await requestJson<ApiResponse>('/teacher/staff-attendance/todays-schedules');
             const schedules = response.data || [];
             setTodaySchedulesState(schedules);
-            const checkedIn = schedules.find((schedule) => schedule.attendance_status?.status === 'checked_in');
-            setSelectedSchedule(checkedIn || schedules.find((schedule) => !schedule.is_completed) || schedules[0] || null);
+            setSelectedSchedule((current) => {
+                const stillSelected = current ? schedules.find((schedule) => schedule.id === current.id) : undefined;
+                if (stillSelected) {
+                    return stillSelected;
+                }
+
+                const checkedIn = schedules.find((schedule) => schedule.attendance_status?.status === 'checked_in');
+                return (
+                    checkedIn ||
+                    schedules.find((schedule) => !schedule.is_completed && !isScheduleMissed(schedule)) ||
+                    schedules[0] ||
+                    null
+                );
+            });
         } catch (error) {
             setMessage({
                 type: 'error',
@@ -307,7 +341,7 @@ export default function StaffAttendancePage({
     }, []);
 
     useEffect(() => {
-        const interval = window.setInterval(() => fetchTodaySchedules(false), 60000);
+        const interval = window.setInterval(() => fetchTodaySchedules(false), 30000);
         return () => window.clearInterval(interval);
     }, []);
 
@@ -403,6 +437,14 @@ export default function StaffAttendancePage({
             return;
         }
 
+        if (isScheduleMissed(selectedSchedule)) {
+            setMessage({
+                type: 'error',
+                text: selectedSchedule.attendance_blocked_message || ATTENDANCE_LOCK_MESSAGE,
+            });
+            return;
+        }
+
         setIsLoadingApi(true);
         setMessage(null);
 
@@ -428,6 +470,14 @@ export default function StaffAttendancePage({
     const handleCheckOut = async () => {
         if (!activeSchedule?.attendance_status?.id) {
             setMessage({ type: 'error', text: 'You are not checked in yet.' });
+            return;
+        }
+
+        if (isScheduleMissed(activeSchedule)) {
+            setMessage({
+                type: 'error',
+                text: activeSchedule.attendance_blocked_message || ATTENDANCE_LOCK_MESSAGE,
+            });
             return;
         }
 
@@ -517,9 +567,13 @@ export default function StaffAttendancePage({
     };
 
     const showCheckIn =
-        !activeSchedule && selectedSchedule && !selectedSchedule.is_completed && canCheckInNow;
-    const showCheckOut = !!activeSchedule && canCheckOutNow;
-    const showWaitingForCheckout = !!activeSchedule && !canCheckOutNow;
+        !activeSchedule &&
+        selectedSchedule &&
+        !selectedSchedule.is_completed &&
+        !isScheduleMissed(selectedSchedule) &&
+        canCheckInNow;
+    const showCheckOut = !!activeSchedule && !isScheduleMissed(activeSchedule) && canCheckOutNow;
+    const showWaitingForCheckout = !!activeSchedule && !isScheduleMissed(activeSchedule) && !canCheckOutNow;
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -556,6 +610,8 @@ export default function StaffAttendancePage({
                             ? 'border-blue-200 bg-blue-50 dark:border-blue-900/40 dark:bg-blue-950/20'
                             : sessionStatus.tone === 'done'
                               ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/40 dark:bg-emerald-950/20'
+                              : sessionStatus.tone === 'missed'
+                                ? 'border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-950/20'
                               : sessionStatus.tone === 'waiting'
                                 ? 'border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/20'
                                 : 'border-sidebar-border/70 bg-white dark:border-sidebar-border dark:bg-sidebar-accent'
@@ -565,6 +621,8 @@ export default function StaffAttendancePage({
                         <div className="rounded-xl bg-white/80 p-2.5 shadow-sm dark:bg-sidebar-accent">
                             {sessionStatus.tone === 'done' ? (
                                 <CheckCircle className="size-6 text-emerald-600" />
+                            ) : sessionStatus.tone === 'missed' ? (
+                                <AlertTriangle className="size-6 text-red-600" />
                             ) : sessionStatus.tone === 'active' ? (
                                 <LogIn className="size-6 text-blue-600" />
                             ) : (
@@ -761,6 +819,12 @@ export default function StaffAttendancePage({
                             Attendance for this shift is complete. Have a great day.
                         </div>
                     )}
+
+                    {isScheduleMissed(selectedSchedule) && !activeSchedule && (
+                        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-4 text-center text-sm font-medium text-red-800">
+                            {selectedSchedule?.attendance_blocked_message || ATTENDANCE_LOCK_MESSAGE}
+                        </div>
+                    )}
                 </section>
 
                 {selectedSchedule && apiKey && (
@@ -861,6 +925,8 @@ function ShiftCard({
                 </div>
                 {isCheckedIn ? (
                     <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">Checked in</span>
+                ) : isScheduleMissed(schedule) ? (
+                    <span className="rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-700">Absent</span>
                 ) : schedule.is_completed ? (
                     <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">Done</span>
                 ) : selected ? (

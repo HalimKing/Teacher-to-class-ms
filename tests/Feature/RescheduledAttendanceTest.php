@@ -10,6 +10,7 @@ use App\Models\RescheduledSession;
 use App\Models\SystemSetting;
 use App\Models\Teacher;
 use App\Models\TimeTable;
+use App\Support\AttendanceLock;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 
@@ -270,10 +271,7 @@ it('marks auto-absent sessions as missed and blocks attendance actions', functio
             'within_range' => true,
         ])
         ->assertStatus(422)
-        ->assertJson([
-            'success' => false,
-            'state' => 'missed',
-        ]);
+        ->assertJson(AttendanceLock::blockedPayload());
 });
 
 it('allows a lecturer to reschedule when assigned on the timetable even if course teacher differs', function () {
@@ -594,10 +592,7 @@ it('marks rescheduled sessions as missed when auto-absent was recorded without r
             'within_range' => true,
         ])
         ->assertStatus(422)
-        ->assertJson([
-            'success' => false,
-            'state' => 'missed',
-        ]);
+        ->assertJson(AttendanceLock::blockedPayload());
 
     Carbon::setTestNow();
 });
