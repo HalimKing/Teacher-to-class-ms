@@ -1,3 +1,4 @@
+import AttendanceRangeMap from '@/components/attendance/AttendanceRangeMap';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ensureFreshCsrfToken } from '@/lib/csrf';
@@ -21,11 +22,45 @@ import FaceVerificationStatus, { type FaceStatus } from './FaceVerificationStatu
 const AUTO_VERIFY_STABLE_TICKS = 3;
 
 export type FaceLocationGate = {
+    /** Decimal columns reach the frontend as strings, so both shapes are accepted. */
+    latitude: number | string | null;
+    longitude: number | string | null;
+    radiusMeters: number | string | null;
+    venueName?: string;
+};
+
+type VenueGate = {
     latitude: number;
     longitude: number;
     radiusMeters: number;
     venueName?: string;
 };
+
+function toFiniteNumber(value: unknown): number | null {
+    if (value === null || value === undefined || value === '') {
+        return null;
+    }
+
+    const parsed = Number(value);
+
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizeLocationGate(gate: FaceLocationGate | null | undefined): VenueGate | null {
+    if (!gate) {
+        return null;
+    }
+
+    const latitude = toFiniteNumber(gate.latitude);
+    const longitude = toFiniteNumber(gate.longitude);
+    const radiusMeters = toFiniteNumber(gate.radiusMeters);
+
+    if (latitude === null || longitude === null || radiusMeters === null || radiusMeters <= 0) {
+        return null;
+    }
+
+    return { latitude, longitude, radiusMeters, venueName: gate.venueName };
+}
 
 type LocationPhase = 'skipped' | 'checking' | 'allowed' | 'blocked';
 
@@ -73,7 +108,7 @@ export default function FaceCaptureModal({
     const keepFailureBannerRef = useRef(false);
     const goodFrameStreakRef = useRef(0);
     const handleCaptureRef = useRef<() => Promise<void>>(async () => undefined);
-    const locationGateRef = useRef<FaceLocationGate | null>(locationGate);
+    const locationGateRef = useRef<VenueGate | null>(null);
     const [status, setStatus] = useState<FaceStatus>('idle');
     const [statusTitle, setStatusTitle] = useState<string | undefined>();
     const [statusMessage, setStatusMessage] = useState<string | undefined>();
@@ -83,13 +118,14 @@ export default function FaceCaptureModal({
     const [processing, setProcessing] = useState(false);
     const [locationPhase, setLocationPhase] = useState<LocationPhase>(requireLocation ? 'checking' : 'skipped');
     const [locationBlock, setLocationBlock] = useState<LocationBlock | null>(null);
+    const [devicePosition, setDevicePosition] = useState<{ lat: number; lng: number } | null>(null);
+    const [deviceDistance, setDeviceDistance] = useState<number | null>(null);
 
-    locationGateRef.current = locationGate;
+    const venueGate = normalizeLocationGate(locationGate);
+    locationGateRef.current = venueGate;
 
     const locationEnabled = Boolean(requireLocation);
-    const gateKey = locationGate
-        ? `${locationGate.latitude},${locationGate.longitude},${locationGate.radiusMeters}`
-        : '';
+    const gateKey = venueGate ? `${venueGate.latitude},${venueGate.longitude},${venueGate.radiusMeters}` : '';
 
     useEffect(() => {
         if (!open) {
@@ -99,6 +135,8 @@ export default function FaceCaptureModal({
             resetStatus();
             setLocationPhase(locationEnabled ? 'checking' : 'skipped');
             setLocationBlock(null);
+            setDevicePosition(null);
+            setDeviceDistance(null);
             locationBlockedRef.current = false;
             successRef.current = false;
             return;
@@ -186,7 +224,10 @@ export default function FaceCaptureModal({
 
     const applyCoordinates = (lat: number, lng: number): boolean => {
         const gate = locationGateRef.current;
-        if (!gate || !Number.isFinite(gate.latitude) || !Number.isFinite(gate.longitude) || gate.radiusMeters <= 0) {
+        setDevicePosition({ lat, lng });
+
+        if (!gate) {
+            setDeviceDistance(null);
             blockLocation({
                 title: 'Location Not Configured',
                 message: 'This session does not have a valid attendance location configured. Contact an administrator if this continues.',
@@ -195,6 +236,8 @@ export default function FaceCaptureModal({
         }
 
         const distance = distanceInMeters(lat, lng, gate.latitude, gate.longitude);
+        setDeviceDistance(distance);
+
         if (distance > gate.radiusMeters) {
             blockLocation({
                 title: 'Outside Permitted Location',
@@ -223,7 +266,7 @@ export default function FaceCaptureModal({
         }
 
         const gate = locationGateRef.current;
-        if (!gate || !Number.isFinite(gate.latitude) || !Number.isFinite(gate.longitude) || gate.radiusMeters <= 0) {
+        if (!gate) {
             blockLocation({
                 title: 'Location Not Configured',
                 message: 'This session does not have a valid attendance location configured. Contact an administrator if this continues.',
@@ -616,6 +659,7 @@ export default function FaceCaptureModal({
               ? 'border-amber-300 bg-amber-500/95 text-white'
               : 'border-white/30 bg-black/55 text-white';
 
+    const showRangeMap = locationPhase === 'blocked' && venueGate !== null && devicePosition !== null;
     const showCamera = locationPhase === 'skipped' || locationPhase === 'allowed';
     const showLocationRetry = locationPhase === 'blocked' || locationPhase === 'checking';
     const showFaceRetry = showCamera && (status === 'failed' || status === 'mismatch' || status === 'no_face');
@@ -659,6 +703,17 @@ export default function FaceCaptureModal({
                                     ) : null}
                                 </div>
                             </div>
+
+                            {showRangeMap && venueGate && devicePosition ? (
+                                <AttendanceRangeMap
+                                    className="mt-3"
+                                    venue={{ lat: venueGate.latitude, lng: venueGate.longitude }}
+                                    venueName={venueGate.venueName}
+                                    radiusMeters={venueGate.radiusMeters}
+                                    device={devicePosition}
+                                    distanceMeters={deviceDistance}
+                                />
+                            ) : null}
                         </div>
                     ) : null}
 

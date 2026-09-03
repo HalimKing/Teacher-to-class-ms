@@ -18,6 +18,17 @@ class ClassRoom extends Model
         'is_active',
     ];
 
+    protected function casts(): array
+    {
+        return [
+            'capacity' => 'integer',
+            'latitude' => 'float',
+            'longitude' => 'float',
+            'radius_meters' => 'float',
+            'is_active' => 'boolean',
+        ];
+    }
+
      public function timeTables()
     {
         return $this->hasMany(TimeTable::class);
