@@ -14,7 +14,9 @@ use Illuminate\Support\Facades\Log;
 class RescheduledAttendanceService
 {
     public const STATE_NORMAL = 'normal';
+
     public const STATE_RESCHEDULED_AWAY = 'rescheduled_away';
+
     public const STATE_RESCHEDULED_ACTIVE = 'rescheduled_active';
 
     public function __construct(
@@ -54,7 +56,7 @@ class RescheduledAttendanceService
         return [
             'moved_away' => $sessions
                 ->filter(function (RescheduledSession $session) use ($dateString) {
-                    if (!$session->timetable) {
+                    if (! $session->timetable) {
                         return false;
                     }
 
@@ -72,7 +74,7 @@ class RescheduledAttendanceService
         $dateString = $date->toDateString();
         $timetable = TimeTable::with('classRoom')->find($timetableId);
 
-        if (!$timetable) {
+        if (! $timetable) {
             return null;
         }
 
@@ -93,7 +95,7 @@ class RescheduledAttendanceService
                 return true;
             }
 
-            if (!$session->timetable) {
+            if (! $session->timetable) {
                 $session->setRelation('timetable', $timetable);
             }
 
@@ -124,7 +126,7 @@ class RescheduledAttendanceService
 
         if ($reschedule && $this->matchesDate($reschedule->new_date, $dateString)) {
             $isCrossDay = $originalDateString !== $dateString;
-            $isSameDayActive = !$isCrossDay && $this->isRescheduledSessionVisible($reschedule, $date);
+            $isSameDayActive = ! $isCrossDay && $this->isRescheduledSessionVisible($reschedule, $date);
 
             if ($isCrossDay || $isSameDayActive) {
                 $context = [
@@ -197,7 +199,7 @@ class RescheduledAttendanceService
                     ->find($attendance->rescheduled_session_id))
             : null;
 
-        if ($attendance->check_in_time && !$this->isMissedAttendance($attendance) && $reschedule) {
+        if ($attendance->check_in_time && ! $this->isMissedAttendance($attendance) && $reschedule) {
             return [
                 'state' => self::STATE_RESCHEDULED_ACTIVE,
                 'can_take_attendance' => true,
@@ -222,7 +224,7 @@ class RescheduledAttendanceService
     {
         $context = $this->resolveAttendanceContext($timetable, $date);
 
-        if (!$context['can_take_attendance']) {
+        if (! $context['can_take_attendance']) {
             return [
                 'success' => false,
                 'message' => $context['attendance_blocked_message'],
@@ -237,7 +239,7 @@ class RescheduledAttendanceService
     {
         $context = $this->resolveAttendanceContext($timetable, $date);
 
-        if (!$context['can_take_attendance']) {
+        if (! $context['can_take_attendance']) {
             return [
                 'success' => false,
                 'message' => $context['attendance_blocked_message'],
@@ -266,7 +268,7 @@ class RescheduledAttendanceService
             AttendanceTimingService::ROLE_TEACHER
         );
 
-        if (!$attendance && ($timing['is_after_checkout_grace'] ?? false)) {
+        if (! $attendance && ($timing['is_after_checkout_grace'] ?? false)) {
             return [
                 'success' => false,
                 'message' => 'This session was marked as missed. Attendance is no longer available.',
@@ -315,7 +317,7 @@ class RescheduledAttendanceService
         $attendances = TeacherAttendance::query()
             ->where('teacher_id', $teacherId)
             ->whereDate('date', $attendanceDate)
-            ->when(!empty($timetableIds), fn ($query) => $query->whereIn('timetable_id', array_unique($timetableIds)))
+            ->when(! empty($timetableIds), fn ($query) => $query->whereIn('timetable_id', array_unique($timetableIds)))
             ->get();
 
         foreach ($todaysLectures as $lecture) {
@@ -330,7 +332,7 @@ class RescheduledAttendanceService
             }
 
             $lecture = $reschedule->timetable;
-            if (!$lecture || $lecture->teacher_id !== $teacherId) {
+            if (! $lecture || $lecture->teacher_id !== $teacherId) {
                 continue;
             }
 
@@ -402,9 +404,9 @@ class RescheduledAttendanceService
         );
 
         if (
-            !$attendance
-            && !$isMissed
-            && !$isRescheduledAway
+            ! $attendance
+            && ! $isMissed
+            && ! $isRescheduledAway
             && $attendanceContext['can_take_attendance']
             && ($timing['is_after_checkout_grace'] ?? false)
         ) {
@@ -607,14 +609,14 @@ class RescheduledAttendanceService
      */
     public function formatRecordReschedule(?TeacherAttendance $record): ?array
     {
-        if (!$record?->rescheduled_session_id) {
+        if (! $record?->rescheduled_session_id) {
             return null;
         }
 
         $record->loadMissing(['rescheduledSession.timetable.classRoom', 'rescheduledSession.classroom', 'timetable.classRoom']);
 
         $reschedule = $record->rescheduledSession;
-        if (!$reschedule || !$record->timetable) {
+        if (! $reschedule || ! $record->timetable) {
             return null;
         }
 
@@ -625,7 +627,7 @@ class RescheduledAttendanceService
     {
         $reschedule = $this->findApprovedReschedule((int) $schedule->id, $date);
 
-        if (!$reschedule) {
+        if (! $reschedule) {
             return false;
         }
 
@@ -739,7 +741,7 @@ class RescheduledAttendanceService
 
     private function formatTime(?string $time): string
     {
-        if (!$time) {
+        if (! $time) {
             return '--:--';
         }
 

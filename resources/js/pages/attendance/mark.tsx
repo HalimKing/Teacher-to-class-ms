@@ -1,12 +1,12 @@
-import FaceCaptureModal from '@/components/face/FaceCaptureModal';
 import { RescheduleSessionBanner, type RescheduleBannerInfo } from '@/components/attendance/RescheduleSessionBanner';
-import { buildFaceVerificationPayload } from '@/lib/teacher-api';
-import { apiJsonRequest, getApiErrorMessage } from '@/lib/http';
-import { type FaceCaptureResult } from '@/lib/face-recognition';
-import { ATTENDANCE_LOCK_MESSAGE } from '@/lib/attendance-lock';
-import { distanceInMeters, formatOutOfRangeAttendanceMessage } from '@/lib/geo';
-import { getBooleanSetting } from '@/lib/system-settings';
+import FaceCaptureModal from '@/components/face/FaceCaptureModal';
 import AttendancePortalLayout from '@/layouts/attendance-portal-layout';
+import { ATTENDANCE_LOCK_MESSAGE } from '@/lib/attendance-lock';
+import { type FaceCaptureResult } from '@/lib/face-recognition';
+import { distanceInMeters, formatOutOfRangeAttendanceMessage } from '@/lib/geo';
+import { apiJsonRequest, getApiErrorMessage } from '@/lib/http';
+import { getBooleanSetting } from '@/lib/system-settings';
+import { buildFaceVerificationPayload } from '@/lib/teacher-api';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { AlertTriangle, ArrowLeft, CalendarOff, CheckCircle2, Clock, Loader2, LogIn, LogOut, MapPin, ShieldAlert } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -153,11 +153,7 @@ export default function AttendancePortalMarkPage({
     );
 
     const isSessionMissed = (session: PortalSession | null) =>
-        Boolean(
-            session?.is_missed ||
-                session?.attendance_state === 'missed' ||
-                session?.attendance_status?.status === 'absent',
-        );
+        Boolean(session?.is_missed || session?.attendance_state === 'missed' || session?.attendance_status?.status === 'absent');
 
     const isBeforeSessionEnd = (session: PortalSession | null) => {
         if (!session) {
@@ -210,9 +206,7 @@ export default function AttendancePortalMarkPage({
                     return checkedIn;
                 }
 
-                const stillSelected = current
-                    ? normalized.find((session) => sessionKey(session) === sessionKey(current))
-                    : undefined;
+                const stillSelected = current ? normalized.find((session) => sessionKey(session) === sessionKey(current)) : undefined;
                 if (stillSelected) {
                     return stillSelected;
                 }
@@ -281,9 +275,7 @@ export default function AttendancePortalMarkPage({
 
         signOutTimerRef.current = window.setTimeout(() => {
             router.post(route('attendance.logout'), {
-                success:
-                    successMessage ||
-                    'Attendance recorded successfully. You have been checked in.',
+                success: successMessage || 'Attendance recorded successfully. You have been checked in.',
             });
         }, 1800);
     };
@@ -368,9 +360,7 @@ export default function AttendancePortalMarkPage({
                 type: 'error',
                 text:
                     selected.attendance_blocked_message ||
-                    (isSessionMissed(selected)
-                        ? ATTENDANCE_LOCK_MESSAGE
-                        : 'Attendance is not available for this session.'),
+                    (isSessionMissed(selected) ? ATTENDANCE_LOCK_MESSAGE : 'Attendance is not available for this session.'),
             });
             return;
         }
@@ -469,9 +459,7 @@ export default function AttendancePortalMarkPage({
         try {
             const verification = await requestJson<ApiResponse>(endpoints.verifyFace, {
                 method: 'POST',
-                body: JSON.stringify(
-                    buildFaceVerificationPayload(session.timetable_id, result.descriptor, result.quality),
-                ),
+                body: JSON.stringify(buildFaceVerificationPayload(session.timetable_id, result.descriptor, result.quality)),
             });
 
             if (!verification.success || !verification.verification_token) {
@@ -524,9 +512,7 @@ export default function AttendancePortalMarkPage({
 
     const verificationSession = pendingAction === 'check-out' && activeSession ? activeSession : selected;
     const faceLocationGate =
-        verificationSession?.coordinates?.lat != null &&
-        verificationSession?.coordinates?.lng != null &&
-        Number(verificationSession.radius) > 0
+        verificationSession?.coordinates?.lat != null && verificationSession?.coordinates?.lng != null && Number(verificationSession.radius) > 0
             ? {
                   latitude: Number(verificationSession.coordinates.lat),
                   longitude: Number(verificationSession.coordinates.lng),
@@ -634,12 +620,8 @@ export default function AttendancePortalMarkPage({
                         <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
                             <CheckCircle2 className="size-8" />
                         </div>
-                        <h2 className="text-xl font-semibold text-emerald-900 dark:text-emerald-100">
-                            Attendance recorded successfully.
-                        </h2>
-                        <p className="mt-2 text-sm text-emerald-800 dark:text-emerald-200">
-                            You have been checked in. Redirecting…
-                        </p>
+                        <h2 className="text-xl font-semibold text-emerald-900 dark:text-emerald-100">Attendance recorded successfully.</h2>
+                        <p className="mt-2 text-sm text-emerald-800 dark:text-emerald-200">You have been checked in. Redirecting…</p>
                         <div className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-300">
                             <Loader2 className="size-4 animate-spin" />
                             Signing out of the attendance portal
@@ -671,9 +653,7 @@ export default function AttendancePortalMarkPage({
                                     Loading...
                                 </div>
                             ) : sessions.length === 0 ? (
-                                <p className="py-8 text-center text-sm text-slate-500">
-                                    Nothing scheduled for you today.
-                                </p>
+                                <p className="py-8 text-center text-sm text-slate-500">Nothing scheduled for you today.</p>
                             ) : sessions.length === 1 ? (
                                 <SessionCard
                                     session={sessions[0]}
@@ -693,11 +673,7 @@ export default function AttendancePortalMarkPage({
                                             <SessionCard
                                                 session={session}
                                                 selected={selected ? sessionKey(selected) === sessionKey(session) : false}
-                                                active={
-                                                    activeSession
-                                                        ? sessionKey(activeSession) === sessionKey(session)
-                                                        : false
-                                                }
+                                                active={activeSession ? sessionKey(activeSession) === sessionKey(session) : false}
                                             />
                                         </button>
                                     ))}
@@ -717,9 +693,7 @@ export default function AttendancePortalMarkPage({
                             <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
                                 <div className="flex gap-2">
                                     <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-                                    <p>
-                                        {selected?.attendance_blocked_message || ATTENDANCE_LOCK_MESSAGE}
-                                    </p>
+                                    <p>{selected?.attendance_blocked_message || ATTENDANCE_LOCK_MESSAGE}</p>
                                 </div>
                             </div>
                         )}
@@ -739,16 +713,8 @@ export default function AttendancePortalMarkPage({
                         {selected && (
                             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                                 <div className="grid gap-3 sm:grid-cols-2">
-                                    <Info
-                                        label="Time"
-                                        value={`${formatTime(selected.start_time)} – ${formatTime(selected.end_time)}`}
-                                        icon={Clock}
-                                    />
-                                    <Info
-                                        label="Location"
-                                        value={selected.classroom || selected.building || 'Not set'}
-                                        icon={MapPin}
-                                    />
+                                    <Info label="Time" value={`${formatTime(selected.start_time)} – ${formatTime(selected.end_time)}`} icon={Clock} />
+                                    <Info label="Location" value={selected.classroom || selected.building || 'Not set'} icon={MapPin} />
                                 </div>
                             </section>
                         )}
@@ -823,15 +789,7 @@ export default function AttendancePortalMarkPage({
     );
 }
 
-function SessionCard({
-    session,
-    selected,
-    active,
-}: {
-    session: PortalSession;
-    selected?: boolean;
-    active?: boolean;
-}) {
+function SessionCard({ session, selected, active }: { session: PortalSession; selected?: boolean; active?: boolean }) {
     return (
         <div
             className={`rounded-xl border p-4 ${
@@ -842,9 +800,7 @@ function SessionCard({
         >
             <div className="flex items-start justify-between gap-3">
                 <div>
-                    <p className="font-semibold text-slate-900 dark:text-white">
-                        {session.name || session.classroom || 'Session'}
-                    </p>
+                    <p className="font-semibold text-slate-900 dark:text-white">{session.name || session.classroom || 'Session'}</p>
                     <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
                         {formatTime(session.start_time)} – {formatTime(session.end_time)}
                     </p>
@@ -863,20 +819,12 @@ function SessionCard({
     );
 }
 
-function Info({
-    label,
-    value,
-    icon: Icon,
-}: {
-    label: string;
-    value: string;
-    icon: typeof Clock;
-}) {
+function Info({ label, value, icon: Icon }: { label: string; value: string; icon: typeof Clock }) {
     return (
         <div className="flex items-start gap-3 rounded-xl bg-slate-50 p-4 dark:bg-slate-800/50">
             <Icon className="mt-0.5 size-4 text-slate-500" />
             <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
+                <p className="text-xs font-medium tracking-wide text-slate-500 uppercase">{label}</p>
                 <p className="mt-1 text-sm font-medium text-slate-900 dark:text-white">{value}</p>
             </div>
         </div>

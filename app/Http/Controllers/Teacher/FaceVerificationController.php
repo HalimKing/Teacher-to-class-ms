@@ -35,7 +35,7 @@ class FaceVerificationController extends Controller
             ->where('staff_type', Teacher::STAFF_TYPE_LECTURER)
             ->first();
 
-        if (!$timetable) {
+        if (! $timetable) {
             $facialRecognition->logAttempt($teacher, $timetableId, 'failed', null, 'invalid_timetable');
 
             return response()->json([
@@ -52,7 +52,7 @@ class FaceVerificationController extends Controller
             return response()->json($blocked, 422);
         }
 
-        if (!$facialRecognition->isEnabled()) {
+        if (! $facialRecognition->isEnabled()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Facial recognition is disabled.',
@@ -83,7 +83,7 @@ class FaceVerificationController extends Controller
             ->where('staff_type', Teacher::STAFF_TYPE_ADMINISTRATOR)
             ->first();
 
-        if (!$timetable) {
+        if (! $timetable) {
             $facialRecognition->logAttempt($teacher, $timetableId, 'failed', null, 'invalid_staff_timetable');
 
             return response()->json([
@@ -107,7 +107,7 @@ class FaceVerificationController extends Controller
             return response()->json(AttendanceLock::blockedPayload(), 422);
         }
 
-        if (!$facialRecognition->isEnabled()) {
+        if (! $facialRecognition->isEnabled()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Facial recognition is disabled.',
@@ -166,7 +166,7 @@ class FaceVerificationController extends Controller
             ], 422);
         }
 
-        if (!$match['matched']) {
+        if (! $match['matched']) {
             $facialRecognition->logAttempt($teacher, $timetableId, 'failed', $match['score'], 'face_not_recognized');
             $this->notifyFaceVerificationFailure(
                 $teacher,

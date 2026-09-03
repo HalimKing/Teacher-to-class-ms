@@ -52,11 +52,11 @@ beforeEach(function () {
     $this->lecturer = Teacher::create([
         'first_name' => 'Locked',
         'last_name' => 'Lecturer',
-        'email' => 'locked-lecturer-' . uniqid() . '@example.com',
+        'email' => 'locked-lecturer-'.uniqid().'@example.com',
         'phone' => '1111111111',
         'faculty_id' => $this->faculty->id,
         'department_id' => $this->department->id,
-        'employee_id' => 'LOCKLEC' . uniqid(),
+        'employee_id' => 'LOCKLEC'.uniqid(),
         'title' => 'Dr.',
         'staff_type' => Teacher::STAFF_TYPE_LECTURER,
     ]);
@@ -64,11 +64,11 @@ beforeEach(function () {
     $this->administrator = Teacher::create([
         'first_name' => 'Locked',
         'last_name' => 'Admin',
-        'email' => 'locked-admin-' . uniqid() . '@example.com',
+        'email' => 'locked-admin-'.uniqid().'@example.com',
         'phone' => '2222222222',
         'faculty_id' => $this->faculty->id,
         'department_id' => $this->department->id,
-        'employee_id' => 'LOCKADM' . uniqid(),
+        'employee_id' => 'LOCKADM'.uniqid(),
         'title' => 'Mr.',
         'staff_type' => Teacher::STAFF_TYPE_ADMINISTRATOR,
     ]);

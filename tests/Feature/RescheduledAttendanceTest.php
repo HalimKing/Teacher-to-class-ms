@@ -278,11 +278,11 @@ it('allows a lecturer to reschedule when assigned on the timetable even if cours
     $otherTeacher = Teacher::create([
         'first_name' => 'Other',
         'last_name' => 'Lecturer',
-        'email' => 'other-lecturer-' . uniqid() . '@example.com',
+        'email' => 'other-lecturer-'.uniqid().'@example.com',
         'phone' => '1234567891',
         'faculty_id' => $this->faculty->id,
         'department_id' => $this->department->id,
-        'employee_id' => 'EMPOTHER' . uniqid(),
+        'employee_id' => 'EMPOTHER'.uniqid(),
         'title' => 'Dr.',
         'staff_type' => Teacher::STAFF_TYPE_LECTURER,
     ]);

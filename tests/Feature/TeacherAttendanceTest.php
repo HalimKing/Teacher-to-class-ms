@@ -3,13 +3,13 @@
 use App\Models\AcademicYear;
 use App\Models\ClassRoom;
 use App\Models\Course;
-use App\Models\Program;
 use App\Models\Department;
 use App\Models\Faculty;
+use App\Models\Program;
 use App\Models\SystemSetting;
 use App\Models\Teacher;
-use App\Models\TimeTable;
 use App\Models\TeacherAttendance;
+use App\Models\TimeTable;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 
@@ -93,7 +93,7 @@ it('allows a teacher to check in successfully', function () {
         ->postJson('/teacher/attendance/check-in', $payload);
 
     if ($response->status() !== 200) {
-        fwrite(STDERR, "CHECK-IN RESPONSE:\n" . $response->getContent() . "\n");
+        fwrite(STDERR, "CHECK-IN RESPONSE:\n".$response->getContent()."\n");
     }
 
     $response->assertStatus(200)

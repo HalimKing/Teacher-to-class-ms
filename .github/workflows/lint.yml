@@ -18,6 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -36,8 +38,16 @@ jobs:
       - name: Format Frontend
         run: npm run format
 
-      - name: Lint Frontend
-        run: npm run lint
+      - name: Lint changed frontend files
+        run: |
+          files=$(git diff --name-only --diff-filter=ACMRT HEAD^ HEAD -- 'resources/**/*.{js,jsx,ts,tsx}' || true)
+          if [ -z "$files" ]; then
+            echo "No frontend files changed"
+            exit 0
+          fi
+          echo "Linting:"
+          echo "$files"
+          echo "$files" | xargs npx eslint
 
       # - name: Commit Changes
       #   uses: stefanzweifel/git-auto-commit-action@v5

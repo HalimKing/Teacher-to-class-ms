@@ -41,8 +41,8 @@ class AttendanceProcessorService
             'administrators' => $this->emptyStats(),
         ];
 
-        $teacherAttendances = new EloquentCollection();
-        $staffAttendances = new EloquentCollection();
+        $teacherAttendances = new EloquentCollection;
+        $staffAttendances = new EloquentCollection;
 
         TimeTable::query()
             ->with(['course', 'teacher'])
@@ -96,11 +96,13 @@ class AttendanceProcessorService
                             $stats['administrators'],
                             $staffAttendances,
                         );
+
                         continue;
                     }
 
                     if ($this->rescheduledAttendance->shouldSkipAutoAbsentForMovedSession($schedule, $now)) {
                         $stats['teachers']['skipped']++;
+
                         continue;
                     }
 
@@ -133,7 +135,7 @@ class AttendanceProcessorService
             ) {
                 $eligible = $sessions->filter(function (RescheduledSession $session) use ($dayOfWeek, $now) {
                     $schedule = $session->timetable;
-                    if (!$schedule || $schedule->day_of_week === $dayOfWeek) {
+                    if (! $schedule || $schedule->day_of_week === $dayOfWeek) {
                         return false;
                     }
 
@@ -172,7 +174,7 @@ class AttendanceProcessorService
 
                 foreach ($eligible as $session) {
                     $schedule = $session->timetable;
-                    if (!$schedule) {
+                    if (! $schedule) {
                         continue;
                     }
 
@@ -185,6 +187,7 @@ class AttendanceProcessorService
                             $staffAttendances,
                             $session,
                         );
+
                         continue;
                     }
 
@@ -209,7 +212,7 @@ class AttendanceProcessorService
         }
 
         $endTime = $this->rescheduledAttendance->resolveProcessorEndTime($schedule, $now);
-        if (!$endTime) {
+        if (! $endTime) {
             return false;
         }
 
@@ -220,7 +223,7 @@ class AttendanceProcessorService
 
     public function shouldProcessRescheduledSession(RescheduledSession $session, Carbon $now): bool
     {
-        if (!$session->new_end_time) {
+        if (! $session->new_end_time) {
             return false;
         }
 
@@ -240,6 +243,7 @@ class AttendanceProcessorService
         $teacher = $schedule->teacher;
         if ($teacher && $this->holidayBreaks->isAttendanceSuspended($teacher, $now)) {
             $stats['skipped']++;
+
             return;
         }
 
@@ -247,7 +251,7 @@ class AttendanceProcessorService
 
         $attendance = $this->findTeacherAttendance($teacherAttendances, $schedule, $rescheduledSession);
 
-        if (!$attendance) {
+        if (! $attendance) {
             if ($this->shouldAutoMarkAbsent()) {
                 $created = $this->createTeacherAbsentRecord($schedule, $today, $now, $rescheduledSession);
                 if ($created) {
@@ -265,12 +269,14 @@ class AttendanceProcessorService
 
         if ($this->isTeacherTerminal($attendance)) {
             $stats['skipped']++;
+
             return;
         }
 
-        if ($attendance->check_in_time && !$attendance->check_out_time) {
+        if ($attendance->check_in_time && ! $attendance->check_out_time) {
             $attendance->update(['status' => 'incomplete']);
             $stats['incomplete']++;
+
             return;
         }
 
@@ -291,6 +297,7 @@ class AttendanceProcessorService
         $staff = $schedule->teacher;
         if ($staff && $this->holidayBreaks->isAttendanceSuspended($staff, $now)) {
             $stats['skipped']++;
+
             return;
         }
 
@@ -298,7 +305,7 @@ class AttendanceProcessorService
 
         $attendance = $this->findStaffAttendance($staffAttendances, $schedule);
 
-        if (!$attendance) {
+        if (! $attendance) {
             if ($this->shouldAutoMarkAbsent()) {
                 $created = $this->createStaffAbsentRecord($schedule, $today, $now, $rescheduledSession);
                 if ($created) {
@@ -316,12 +323,14 @@ class AttendanceProcessorService
 
         if ($this->isStaffTerminal($attendance)) {
             $stats['skipped']++;
+
             return;
         }
 
-        if ($attendance->check_in_time && !$attendance->check_out_time) {
+        if ($attendance->check_in_time && ! $attendance->check_out_time) {
             $attendance->update(['attendance_status' => 'incomplete']);
             $stats['incomplete']++;
+
             return;
         }
 
@@ -442,7 +451,7 @@ class AttendanceProcessorService
         string $staffType,
     ): void {
         $person = $schedule->teacher;
-        $personName = trim(($person?->first_name ?? '') . ' ' . ($person?->last_name ?? '')) ?: 'Unknown staff member';
+        $personName = trim(($person?->first_name ?? '').' '.($person?->last_name ?? '')) ?: 'Unknown staff member';
         $roleLabel = $staffType === Teacher::STAFF_TYPE_ADMINISTRATOR ? 'administrator' : 'lecturer';
 
         $this->activityLog->logAttendance(
@@ -474,7 +483,7 @@ class AttendanceProcessorService
     private function notifyTeacherAutoAbsence(TimeTable $schedule, string $today): void
     {
         $teacher = $schedule->teacher;
-        if (!$teacher) {
+        if (! $teacher) {
             return;
         }
 
@@ -502,7 +511,7 @@ class AttendanceProcessorService
     private function notifyAdministratorAutoAbsence(TimeTable $schedule, string $today): void
     {
         $administrator = $schedule->teacher;
-        if (!$administrator) {
+        if (! $administrator) {
             return;
         }
 
@@ -611,7 +620,7 @@ class AttendanceProcessorService
             return true;
         }
 
-        if (!$attendance->check_out_time) {
+        if (! $attendance->check_out_time) {
             return false;
         }
 
@@ -624,7 +633,7 @@ class AttendanceProcessorService
             return true;
         }
 
-        if (!$attendance->check_out_time) {
+        if (! $attendance->check_out_time) {
             return false;
         }
 

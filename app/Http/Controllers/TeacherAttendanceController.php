@@ -82,8 +82,6 @@ class TeacherAttendanceController extends Controller
         ]);
     }
 
-
-
     public function getTodaysClasses(Request $request)
     {
         $teacher = auth('teacher')->user();
@@ -96,9 +94,6 @@ class TeacherAttendanceController extends Controller
             'holiday_context' => $this->holidayBreaks->portalContext($teacher, $today),
         ]);
     }
-
-
-
 
     public function checkIn(Request $request, FacialRecognitionService $facialRecognition)
     {
@@ -118,7 +113,7 @@ class TeacherAttendanceController extends Controller
 
         // Select from timetable where id = timetable_id
         $timetable = TimeTable::find($request->timetable_id);
-        if (!$timetable) {
+        if (! $timetable) {
             return response()->json(['success' => false, 'message' => 'Invalid timetable ID'], 400);
         }
 
@@ -168,13 +163,13 @@ class TeacherAttendanceController extends Controller
         if ($existingActiveAttendance) {
             return response()->json([
                 'success' => false,
-                'message' => 'You already have an active check-in. Please check out first.'
+                'message' => 'You already have an active check-in. Please check out first.',
             ], 400);
         }
 
         $scheduledStart = $this->timingService->parseScheduleTime((string) $attendanceContext['effective_start_time'], $now);
 
-        if (!$this->timingService->canCheckInNow($now, $scheduledStart, AttendanceTimingService::ROLE_TEACHER)) {
+        if (! $this->timingService->canCheckInNow($now, $scheduledStart, AttendanceTimingService::ROLE_TEACHER)) {
             $allowedCheckIn = $this->timingService->getAllowedCheckInTime($scheduledStart, AttendanceTimingService::ROLE_TEACHER);
             AttendanceActivityLog::logAttempt('attempt_failed', auth('teacher')->id(), (int) $request->timetable_id, [
                 'reason' => 'check_in_not_open',
@@ -185,7 +180,7 @@ class TeacherAttendanceController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Attendance is not open yet. You can check in from ' . $allowedCheckIn->format('h:i A') . '.',
+                'message' => 'Attendance is not open yet. You can check in from '.$allowedCheckIn->format('h:i A').'.',
                 'allowed_check_in_time' => $allowedCheckIn->format('H:i:s'),
             ], 400);
         }
@@ -193,7 +188,7 @@ class TeacherAttendanceController extends Controller
         $faceVerificationPayload = null;
         $faceMatchScore = null;
         if ($facialRecognition->isEnabled()) {
-            if (!$teacher->hasFaceEnrollment()) {
+            if (! $teacher->hasFaceEnrollment()) {
                 $facialRecognition->logAttempt($teacher, (int) $request->timetable_id, 'failed', null, 'not_enrolled');
                 $this->notifyAttendanceFailure(
                     'face_enrollment_required',
@@ -235,7 +230,7 @@ class TeacherAttendanceController extends Controller
 
         // System setting: enforce GPS after identity has been verified.
         $gpsEnforcement = SystemSetting::getValue('gps_enforcement_enabled', true);
-        if ($gpsEnforcement && !$request->within_range) {
+        if ($gpsEnforcement && ! $request->within_range) {
             AttendanceActivityLog::logAttempt('attempt_failed', auth('teacher')->id(), (int) $request->timetable_id, [
                 'reason' => 'out_of_range',
                 'coordinates' => $request->coordinates,
@@ -247,9 +242,10 @@ class TeacherAttendanceController extends Controller
                 'Geolocation Verification Failed',
                 'You are outside the allowed attendance location. Please move within range.',
             );
+
             return response()->json([
                 'success' => false,
-                'message' => 'You are outside the allowed attendance location. Please move within range.'
+                'message' => 'You are outside the allowed attendance location. Please move within range.',
             ], 400);
         }
 
@@ -258,7 +254,7 @@ class TeacherAttendanceController extends Controller
 
         try {
             $effectiveClassroom = $attendanceContext['effective_classroom'] ?? $timetable->classRoom;
-            $attendance = new TeacherAttendance();
+            $attendance = new TeacherAttendance;
             $attendance->classroom_id = $effectiveClassroom?->id ?? $timetable->class_room_id;
             $attendance->teacher_id = auth('teacher')->id();
             $attendance->course_id = $request->course_id;
@@ -307,23 +303,23 @@ class TeacherAttendanceController extends Controller
                         : LecturerNotificationPayload::PRIORITY_MEDIUM,
                     'Check-in Successful',
                     match ($checkInOutcome['arrival_category']) {
-                        'early' => 'You checked in early for ' . $request->course_name . '.',
-                        'late' => 'You checked in late for ' . $request->course_name . '.',
-                        default => 'Your attendance was recorded for ' . $request->course_name . '.',
+                        'early' => 'You checked in early for '.$request->course_name.'.',
+                        'late' => 'You checked in late for '.$request->course_name.'.',
+                        default => 'Your attendance was recorded for '.$request->course_name.'.',
                     },
                     '/teacher/attendance',
                     ['course_name' => $request->course_name, 'attendance_id' => $attendance->id],
                 ),
             );
         } catch (\Exception $e) {
-            return response()->json(['success' => false, 'message' => 'Error during check-in: ' . $e->getMessage()], 500);
+            return response()->json(['success' => false, 'message' => 'Error during check-in: '.$e->getMessage()], 500);
         }
 
         return response()->json([
             'success' => true,
             'message' => match ($checkInOutcome['arrival_category']) {
-                'early' => 'Check-in successful. You checked in ' . $checkInOutcome['minutes_early'] . ' minute(s) early.',
-                'late' => 'Check-in recorded as late (' . $checkInOutcome['minutes_late'] . ' minute(s) after scheduled start).',
+                'early' => 'Check-in successful. You checked in '.$checkInOutcome['minutes_early'].' minute(s) early.',
+                'late' => 'Check-in recorded as late ('.$checkInOutcome['minutes_late'].' minute(s) after scheduled start).',
                 default => 'Check-in successful. You are on time.',
             },
             'attendance_id' => $attendance->id,
@@ -358,7 +354,7 @@ class TeacherAttendanceController extends Controller
         if ($attendance->teacher_id !== auth('teacher')->id()) {
             return response()->json([
                 'success' => false,
-                'message' => 'You are not authorized to check out this attendance record'
+                'message' => 'You are not authorized to check out this attendance record',
             ], 403);
         }
 
@@ -366,7 +362,7 @@ class TeacherAttendanceController extends Controller
         if ($attendance->check_out_time !== null) {
             return response()->json([
                 'success' => false,
-                'message' => 'Already checked out'
+                'message' => 'Already checked out',
             ], 400);
         }
 
@@ -376,7 +372,7 @@ class TeacherAttendanceController extends Controller
         }
 
         $timetable = TimeTable::find($attendance->timetable_id);
-        if (!$timetable) {
+        if (! $timetable) {
             return response()->json(['success' => false, 'message' => 'Invalid timetable for this attendance record.'], 400);
         }
 
@@ -387,7 +383,7 @@ class TeacherAttendanceController extends Controller
             $now,
         );
 
-        if (!$attendanceContext['can_take_attendance']) {
+        if (! $attendanceContext['can_take_attendance']) {
             return response()->json([
                 'success' => false,
                 'message' => $attendanceContext['attendance_blocked_message']
@@ -399,7 +395,7 @@ class TeacherAttendanceController extends Controller
 
         $teacher = auth('teacher')->user();
         if ($facialRecognition->isEnabled()) {
-            if (!$teacher->hasFaceEnrollment()) {
+            if (! $teacher->hasFaceEnrollment()) {
                 $facialRecognition->logAttempt($teacher, (int) $attendance->timetable_id, 'failed', null, 'not_enrolled');
 
                 return response()->json([
@@ -427,7 +423,7 @@ class TeacherAttendanceController extends Controller
         }
 
         $gpsEnforcement = SystemSetting::getValue('gps_enforcement_enabled', true);
-        if ($gpsEnforcement && $request->has('within_range') && !$request->boolean('within_range')) {
+        if ($gpsEnforcement && $request->has('within_range') && ! $request->boolean('within_range')) {
             AttendanceActivityLog::logAttempt('attempt_failed', auth('teacher')->id(), (int) $attendance->timetable_id, [
                 'reason' => 'check_out_out_of_range',
                 'attendance_id' => $attendance->id,
@@ -435,9 +431,10 @@ class TeacherAttendanceController extends Controller
                 'distance' => $request->input('distance'),
                 'within_range' => false,
             ]);
+
             return response()->json([
                 'success' => false,
-                'message' => 'You are outside the allowed attendance location for check-out.'
+                'message' => 'You are outside the allowed attendance location for check-out.',
             ], 400);
         }
 
@@ -486,7 +483,7 @@ class TeacherAttendanceController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Error during check-out: ' . $e->getMessage()
+                'message' => 'Error during check-out: '.$e->getMessage(),
             ], 500);
         }
 
@@ -494,7 +491,7 @@ class TeacherAttendanceController extends Controller
             'success' => true,
             'message' => match ($checkOutOutcome['departure_category']) {
                 'early_leave' => 'Check-out recorded as early leave.',
-                'overtime' => 'Check-out recorded as overtime (' . $checkOutOutcome['minutes_overtime'] . ' minute(s) after grace period).',
+                'overtime' => 'Check-out recorded as overtime ('.$checkOutOutcome['minutes_overtime'].' minute(s) after grace period).',
                 default => 'Check-out successful.',
             },
             'attendance' => $attendance,
@@ -538,8 +535,8 @@ class TeacherAttendanceController extends Controller
                 'status' => $today->status ?? 'present',
                 'location_match' => $today->check_in_within_range,
                 'coordinates' => $today->check_in_latitude && $today->check_in_longitude
-                    ? ['lat' => (float)$today->check_in_latitude, 'lng' => (float)$today->check_in_longitude]
-                    : null
+                    ? ['lat' => (float) $today->check_in_latitude, 'lng' => (float) $today->check_in_longitude]
+                    : null,
             ];
         }
 
@@ -555,7 +552,7 @@ class TeacherAttendanceController extends Controller
             ->with(['course', 'classroom'])
             ->first();
 
-        if (!$attendance) {
+        if (! $attendance) {
             return response()->json(['success' => false, 'message' => 'No attendance record found'], 404);
         }
 
@@ -572,7 +569,7 @@ class TeacherAttendanceController extends Controller
                 'check_out_time' => $attendance->check_out_time,
                 'status' => $attendance->status ?? 'present',
                 'location_match' => $attendance->check_in_within_range,
-            ]
+            ],
         ]);
     }
 
@@ -611,10 +608,10 @@ class TeacherAttendanceController extends Controller
 
             if ($dateRange !== 'custom') {
                 $query->where('date', '>=', $startDate->toDateString());
-            } else if ($request->has('startDate') && $request->has('endDate')) {
+            } elseif ($request->has('startDate') && $request->has('endDate')) {
                 $query->whereBetween('date', [
                     Carbon::parse($request->get('startDate'))->toDateString(),
-                    Carbon::parse($request->get('endDate'))->toDateString()
+                    Carbon::parse($request->get('endDate'))->toDateString(),
                 ]);
             }
 
@@ -639,8 +636,7 @@ class TeacherAttendanceController extends Controller
                 $search = $request->get('search');
                 $query->whereHas(
                     'course',
-                    fn($q) =>
-                    $q->where('name', 'like', "%{$search}%")
+                    fn ($q) => $q->where('name', 'like', "%{$search}%")
                         ->orWhere('course_code', 'like', "%{$search}%")
                 );
             }
@@ -653,7 +649,7 @@ class TeacherAttendanceController extends Controller
                 $course = $record->course;
 
                 // Fallback to timetable course if direct course is not available
-                if (!$course && $record->timetable) {
+                if (! $course && $record->timetable) {
                     $course = $record->timetable->course;
                 }
 
@@ -661,11 +657,11 @@ class TeacherAttendanceController extends Controller
                 $time = 'N/A';
                 $reschedule = $this->rescheduledAttendance->formatRecordReschedule($record);
                 if ($reschedule) {
-                    $time = $reschedule['new_start_time_display'] . ' - ' . $reschedule['new_end_time_display'];
+                    $time = $reschedule['new_start_time_display'].' - '.$reschedule['new_end_time_display'];
                 } elseif ($record->timetable) {
                     $startTime = Carbon::parse($record->timetable->start_time);
                     $endTime = Carbon::parse($record->timetable->end_time);
-                    $time = $startTime->format('g:i A') . ' - ' . $endTime->format('g:i A');
+                    $time = $startTime->format('g:i A').' - '.$endTime->format('g:i A');
                 }
 
                 $record->date_formatted = Carbon::parse($record->date)->format('M d, Y');
@@ -681,7 +677,7 @@ class TeacherAttendanceController extends Controller
                 $record->absent_count = 0;
                 $record->late_count = 0;
                 $record->attendance_rate = 100;
-                $record->taken_by = auth()->user()->first_name . ' ' . auth()->user()->last_name;
+                $record->taken_by = auth()->user()->first_name.' '.auth()->user()->last_name;
 
                 return $record;
             });
@@ -710,15 +706,15 @@ class TeacherAttendanceController extends Controller
                 'courses' => $this->getTeacherCourses(),
             ]);
         } catch (\Exception $e) {
-            \Log::error('Error fetching attendance records: ' . $e->getMessage(), [
+            \Log::error('Error fetching attendance records: '.$e->getMessage(), [
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
             ]);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Error fetching attendance records: ' . $e->getMessage(),
+                'message' => 'Error fetching attendance records: '.$e->getMessage(),
                 'data' => [],
                 'pagination' => [
                     'total' => 0,
@@ -745,6 +741,7 @@ class TeacherAttendanceController extends Controller
     private function getTotalStudents()
     {
         $courses = Course::where('teacher_id', auth()->id())->get();
+
         return $courses->sum('student_size') ?? 0;
     }
 
@@ -756,7 +753,7 @@ class TeacherAttendanceController extends Controller
         return Course::where('teacher_id', auth()->id())
             ->select('id', 'name', 'course_code')
             ->get()
-            ->map(fn($course) => [
+            ->map(fn ($course) => [
                 'id' => $course->id,
                 'name' => $course->name,
                 'code' => $course->course_code,
@@ -769,7 +766,7 @@ class TeacherAttendanceController extends Controller
      */
     private function notifyAttendanceEvent($teacher, array $payload): void
     {
-        if (!$teacher) {
+        if (! $teacher) {
             return;
         }
 
@@ -779,7 +776,7 @@ class TeacherAttendanceController extends Controller
     private function notifyAttendanceFailure(string $type, string $title, string $message): void
     {
         $teacher = auth('teacher')->user();
-        if (!$teacher) {
+        if (! $teacher) {
             return;
         }
 

@@ -9,6 +9,7 @@ class TeacherAttendance extends Model
 {
     //
     protected $table = 'teacher_attendances';
+
     protected $fillable = [
         'teacher_id',
         'course_id',
@@ -86,6 +87,7 @@ class TeacherAttendance extends Model
     {
         return $this->belongsTo(RescheduledSession::class, 'rescheduled_session_id');
     }
+
     public function academicYear()
     {
         return $this->belongsTo(AcademicYear::class);

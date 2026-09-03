@@ -1,15 +1,15 @@
-import AppLayout from '@/layouts/app-layout';
 import { RescheduleSessionBanner } from '@/components/attendance/RescheduleSessionBanner';
 import FaceCaptureModal from '@/components/face/FaceCaptureModal';
+import AppLayout from '@/layouts/app-layout';
+import { ATTENDANCE_LOCK_MESSAGE } from '@/lib/attendance-lock';
 import { type FaceCaptureResult } from '@/lib/face-recognition';
 import { formatOutOfRangeAttendanceMessage } from '@/lib/geo';
-import { ATTENDANCE_LOCK_MESSAGE } from '@/lib/attendance-lock';
-import { buildFaceVerificationPayload, getApiErrorMessage, teacherJsonRequest } from '@/lib/teacher-api';
 import { getBooleanSetting } from '@/lib/system-settings';
+import { buildFaceVerificationPayload, getApiErrorMessage, teacherJsonRequest } from '@/lib/teacher-api';
 import { BreadcrumbItem } from '@/types';
 import { usePage } from '@inertiajs/react';
 import { Circle, GoogleMap, LoadScript, Marker } from '@react-google-maps/api';
-import { CheckCircle, Clock, Loader2, Map as MapIcon, MapPin, RefreshCw, XCircle, AlertTriangle, CalendarClock } from 'lucide-react';
+import { AlertTriangle, CalendarClock, CheckCircle, Clock, Loader2, Map as MapIcon, MapPin, RefreshCw, XCircle } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 // Types (keep as before)
@@ -95,10 +95,22 @@ interface AttendanceRecord {
     is_completed?: boolean;
 }
 
+interface HistoryRecord {
+    id: number;
+    timetable_id: number;
+    course_id: number;
+    date: string;
+    check_in_time?: string | null;
+    check_out_time?: string | null;
+    status?: AttendanceRecord['status'];
+    location_match?: boolean;
+    is_completed?: boolean;
+}
+
 interface ApiResponse {
     success: boolean;
     message: string;
-    data?: any;
+    data?: ClassLocation[] | HistoryRecord[];
     attendance_id?: number;
     verification_token?: string | null;
 }
@@ -141,16 +153,11 @@ const isBeforeAllowedCheckIn = (classStartTime: string, earlyCheckInMinutes: num
     return currentTime < getMinutesFromTime(classStartTime) - earlyCheckInMinutes;
 };
 
-const isBeforeClassStart = (classStartTime: string): boolean => {
-    const currentTime = new Date().getHours() * 60 + new Date().getMinutes();
-    return currentTime < getMinutesFromTime(classStartTime);
-};
-
 const isClassEnded = (classEndTime: string): boolean => {
     const now = new Date();
     const currentTime = now.getHours() * 60 + now.getMinutes();
 
-    const [hours, minutes, seconds = '00'] = classEndTime.split(':').map(Number);
+    const [hours, minutes] = classEndTime.split(':').map(Number);
     const classEndTimeInMinutes = hours * 60 + minutes;
 
     return currentTime > classEndTimeInMinutes;
@@ -187,7 +194,9 @@ const isClassActive = (classStartTime: string, classEndTime: string): boolean =>
 };
 
 function to12Hour(time24: string) {
-    let [hours, minutes] = time24.split(':').map(Number);
+    const parts = time24.split(':').map(Number);
+    let hours = parts[0];
+    const minutes = parts[1];
     const ampm = hours >= 12 ? 'PM' : 'AM';
     hours = hours % 12 || 12;
     return `${hours}:${minutes.toString().padStart(2, '0')} ${ampm}`;
@@ -197,7 +206,7 @@ const getTimeUntilClassStart = (classStartTime: string): string => {
     const now = new Date();
     const currentTime = now.getHours() * 60 + now.getMinutes();
 
-    const [hours, minutes, seconds = '00'] = classStartTime.split(':').map(Number);
+    const [hours, minutes] = classStartTime.split(':').map(Number);
     const classStartTimeInMinutes = hours * 60 + minutes;
 
     const diffMins = classStartTimeInMinutes - currentTime;
@@ -236,8 +245,14 @@ export default function AttendancePage() {
     const [isWithinRange, setIsWithinRange] = useState(false);
     const [isLoadingLocation, setIsLoadingLocation] = useState(false);
     const [locationError, setLocationError] = useState<string | null>(null);
-    const { system_settings: systemSettings, facialRecognitionEnabled: facialRecognitionEnabledProp } = usePage().props as any;
-    const [lateCheckInTime, setLateCheckInTime] = useState(systemSettings.attendance.late_check_in_minutes.value as any);
+    const { system_settings: systemSettings, facialRecognitionEnabled: facialRecognitionEnabledProp } = usePage().props as {
+        system_settings?: {
+            attendance?: Record<string, { value?: string | number | boolean }>;
+            map?: Record<string, { value?: string | number | boolean }>;
+        };
+        facialRecognitionEnabled?: boolean;
+    };
+    const [lateCheckInTime] = useState(Number(systemSettings?.attendance?.late_check_in_minutes?.value ?? 15));
     const teacherEarlyCheckInMinutes = Number(systemSettings?.attendance?.teacher_early_checkin_minutes?.value ?? 30);
     const checkoutGracePeriodMinutes = Number(systemSettings?.attendance?.checkout_grace_period_minutes?.value ?? 30);
 
@@ -245,7 +260,6 @@ export default function AttendancePage() {
     const defaultLng = Number(systemSettings?.map?.default_campus_lng?.value ?? import.meta.env.VITE_DEFAULT_CAMPUS_LNG ?? -74.006);
 
     const [mapCenter, setMapCenter] = useState({ lat: defaultLat, lng: defaultLng });
-    const [isMapLoaded, setIsMapLoaded] = useState(false);
     const [isLoadingApi, setIsLoadingApi] = useState(false);
     const [isLoadingClasses, setIsLoadingClasses] = useState(true);
     const [apiError, setApiError] = useState<string | null>(null);
@@ -324,9 +338,7 @@ export default function AttendancePage() {
                         }
 
                         return (
-                            classesData.find(
-                                (cls: ClassLocation) => !cls.is_completed && !cls.is_missed && cls.can_take_attendance !== false,
-                            ) ||
+                            classesData.find((cls: ClassLocation) => !cls.is_completed && !cls.is_missed && cls.can_take_attendance !== false) ||
                             classesData[0] ||
                             null
                         );
@@ -335,7 +347,7 @@ export default function AttendancePage() {
             } else if (!options.silent) {
                 setApiError(response.message || "Failed to fetch today's classes");
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error("Error fetching today's classes:", error);
             if (!options.silent) {
                 setApiError("Unable to load today's classes. Please try again.");
@@ -347,48 +359,53 @@ export default function AttendancePage() {
         }
     };
 
-    const updateTimeValidation = useCallback((classData: ClassLocation | null) => {
-        if (!classData) {
+    const updateTimeValidation = useCallback(
+        (classData: ClassLocation | null) => {
+            if (!classData) {
+                setTimeValidation({
+                    isBeforeStart: false,
+                    isAfterEnd: false,
+                    isActive: false,
+                    isCheckoutAllowed: false,
+                    isAfterCheckoutDeadline: false,
+                    isCheckoutOpen: false,
+                    canCheckInNow: false,
+                    timeUntilStart: '',
+                    timeUntilCheckoutDeadline: '',
+                });
+                return;
+            }
+
+            const timing = classData.timing;
+            const isBeforeStart =
+                timing?.can_check_in_now === false
+                    ? !timing.can_check_in_now
+                    : isBeforeAllowedCheckIn(classData.start_time, teacherEarlyCheckInMinutes);
+            const isAfterEnd = isClassEnded(classData.end_time);
+            const isActive = isClassActive(classData.start_time, classData.end_time);
+            const isCheckoutAllowedNow = timing?.is_within_checkout_grace ?? isCheckoutAllowed(classData.end_time, checkoutGracePeriodMinutes);
+            const isAfterCheckoutDeadlineNow =
+                timing?.is_after_checkout_grace ?? isAfterCheckoutDeadline(classData.end_time, checkoutGracePeriodMinutes);
+            const isCheckoutOpenNow = timing?.can_check_out_now ?? isCheckoutOpen(classData.end_time);
+            const canCheckInNow = timing?.can_check_in_now ?? !isBeforeAllowedCheckIn(classData.start_time, teacherEarlyCheckInMinutes);
+            const timeUntilStart = isBeforeStart ? getTimeUntilClassStart(classData.start_time) : '';
+            const timeUntilCheckoutDeadline =
+                isAfterEnd && !isAfterCheckoutDeadlineNow ? getTimeUntilCheckoutDeadline(classData.end_time, checkoutGracePeriodMinutes) : '';
+
             setTimeValidation({
-                isBeforeStart: false,
-                isAfterEnd: false,
-                isActive: false,
-                isCheckoutAllowed: false,
-                isAfterCheckoutDeadline: false,
-                isCheckoutOpen: false,
-                canCheckInNow: false,
-                timeUntilStart: '',
-                timeUntilCheckoutDeadline: '',
+                isBeforeStart,
+                isAfterEnd,
+                isActive,
+                isCheckoutAllowed: isCheckoutAllowedNow,
+                isAfterCheckoutDeadline: isAfterCheckoutDeadlineNow,
+                isCheckoutOpen: isCheckoutOpenNow,
+                canCheckInNow,
+                timeUntilStart,
+                timeUntilCheckoutDeadline,
             });
-            return;
-        }
-
-        const timing = classData.timing;
-        const isBeforeStart = timing?.can_check_in_now === false
-            ? !timing.can_check_in_now
-            : isBeforeAllowedCheckIn(classData.start_time, teacherEarlyCheckInMinutes);
-        const isAfterEnd = isClassEnded(classData.end_time);
-        const isActive = isClassActive(classData.start_time, classData.end_time);
-        const isCheckoutAllowedNow = timing?.is_within_checkout_grace ?? isCheckoutAllowed(classData.end_time, checkoutGracePeriodMinutes);
-        const isAfterCheckoutDeadlineNow = timing?.is_after_checkout_grace ?? isAfterCheckoutDeadline(classData.end_time, checkoutGracePeriodMinutes);
-        const isCheckoutOpenNow = timing?.can_check_out_now ?? isCheckoutOpen(classData.end_time);
-        const canCheckInNow = timing?.can_check_in_now ?? !isBeforeAllowedCheckIn(classData.start_time, teacherEarlyCheckInMinutes);
-        const timeUntilStart = isBeforeStart ? getTimeUntilClassStart(classData.start_time) : '';
-        const timeUntilCheckoutDeadline =
-            isAfterEnd && !isAfterCheckoutDeadlineNow ? getTimeUntilCheckoutDeadline(classData.end_time, checkoutGracePeriodMinutes) : '';
-
-        setTimeValidation({
-            isBeforeStart,
-            isAfterEnd,
-            isActive,
-            isCheckoutAllowed: isCheckoutAllowedNow,
-            isAfterCheckoutDeadline: isAfterCheckoutDeadlineNow,
-            isCheckoutOpen: isCheckoutOpenNow,
-            canCheckInNow,
-            timeUntilStart,
-            timeUntilCheckoutDeadline,
-        });
-    }, [teacherEarlyCheckInMinutes, checkoutGracePeriodMinutes]);
+        },
+        [teacherEarlyCheckInMinutes, checkoutGracePeriodMinutes],
+    );
 
     const validatePresence = useCallback((userLoc: { lat: number; lng: number }, targetClass: ClassLocation) => {
         const d = calculateDistance(userLoc.lat, userLoc.lng, targetClass.coordinates.lat, targetClass.coordinates.lng);
@@ -499,9 +516,7 @@ export default function AttendancePage() {
                 setSelectedClass(cls);
                 setApiError(
                     cls.attendance_blocked_message ||
-                        (cls.is_missed
-                            ? ATTENDANCE_LOCK_MESSAGE
-                            : 'Attendance is unavailable because this session has been rescheduled.'),
+                        (cls.is_missed ? ATTENDANCE_LOCK_MESSAGE : 'Attendance is unavailable because this session has been rescheduled.'),
                 );
                 return;
             }
@@ -521,7 +536,7 @@ export default function AttendancePage() {
         }
     };
 
-    const submitCheckIn = async (checkInData: Record<string, any>) => {
+    const submitCheckIn = async (checkInData: Record<string, unknown>) => {
         const response = await teacherJsonRequest<ApiResponse>('/teacher/attendance/check-in', {
             method: 'POST',
             body: JSON.stringify(checkInData),
@@ -597,9 +612,7 @@ export default function AttendancePage() {
         if (selectedClass.is_missed || selectedClass.can_take_attendance === false) {
             setApiError(
                 selectedClass.attendance_blocked_message ||
-                    (selectedClass.is_missed
-                        ? ATTENDANCE_LOCK_MESSAGE
-                        : 'Attendance is unavailable because this session has been rescheduled.'),
+                    (selectedClass.is_missed ? ATTENDANCE_LOCK_MESSAGE : 'Attendance is unavailable because this session has been rescheduled.'),
             );
             return;
         }
@@ -635,7 +648,7 @@ export default function AttendancePage() {
                 };
                 await submitCheckIn(checkInData);
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Check-in error:', error);
             setApiError(getApiErrorMessage(error, 'Network error: Unable to check in. Please try again.'));
         } finally {
@@ -643,7 +656,7 @@ export default function AttendancePage() {
         }
     };
 
-    const submitCheckOut = async (checkOutData: Record<string, any>) => {
+    const submitCheckOut = async (checkOutData: Record<string, unknown>) => {
         const response = await teacherJsonRequest<ApiResponse>('/teacher/attendance/check-out', {
             method: 'POST',
             body: JSON.stringify(checkOutData),
@@ -721,9 +734,7 @@ export default function AttendancePage() {
         try {
             const verification = await teacherJsonRequest<ApiResponse>('/teacher/attendance/verify-face', {
                 method: 'POST',
-                body: JSON.stringify(
-                    buildFaceVerificationPayload(selectedClass.timetable_id, result.descriptor, result.quality),
-                ),
+                body: JSON.stringify(buildFaceVerificationPayload(selectedClass.timetable_id, result.descriptor, result.quality)),
             });
 
             if (!verification.success || !verification.verification_token) {
@@ -765,7 +776,7 @@ export default function AttendancePage() {
 
             setPendingAttendanceAction(null);
             setFaceModalOpen(false);
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Face verification error:', error);
             const message = getApiErrorMessage(error, 'Face verification failed. Please try again.');
             setApiError(message);
@@ -811,7 +822,7 @@ export default function AttendancePage() {
                     status: 'present',
                 });
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Check-out error:', error);
             setApiError(getApiErrorMessage(error, 'Network error: Unable to check out. Please try again.'));
         } finally {
@@ -825,7 +836,7 @@ export default function AttendancePage() {
             const response = await teacherJsonRequest<ApiResponse>(`/teacher/attendance/history?date=${today}`);
 
             if (response.success && response.data) {
-                const records = response.data.map((record: any) => ({
+                const records = (response.data as HistoryRecord[]).map((record) => ({
                     id: record.id,
                     timetable_id: record.timetable_id,
                     course_id: record.course_id,
@@ -877,10 +888,6 @@ export default function AttendancePage() {
         },
     ];
 
-    const handleMapLoad = () => {
-        setIsMapLoaded(true);
-    };
-
     useEffect(() => {
         if (apiSuccess || apiError) {
             const timer = setTimeout(() => {
@@ -930,10 +937,7 @@ export default function AttendancePage() {
     const getCheckInButtonText = () => {
         if (isLoadingApi && currentStatus === 'not_checked_in') return 'Processing...';
         if (selectedClass?.is_missed || selectedClass?.attendance_status?.status === 'absent') return 'Missed';
-        if (
-            !selectedClass?.attendance_status &&
-            (selectedClass?.timing?.is_after_checkout_grace || timeValidation.isAfterCheckoutDeadline)
-        ) {
+        if (!selectedClass?.attendance_status && (selectedClass?.timing?.is_after_checkout_grace || timeValidation.isAfterCheckoutDeadline)) {
             return 'Missed';
         }
         if (selectedClass?.can_take_attendance === false) return 'Rescheduled';
@@ -1021,9 +1025,7 @@ export default function AttendancePage() {
                                         <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-700" />
                                         <div>
                                             <p className="font-semibold">Session Missed</p>
-                                            <p className="mt-1">
-                                                {selectedClass.attendance_blocked_message || ATTENDANCE_LOCK_MESSAGE}
-                                            </p>
+                                            <p className="mt-1">{selectedClass.attendance_blocked_message || ATTENDANCE_LOCK_MESSAGE}</p>
                                         </div>
                                     </div>
                                 </div>
@@ -1042,7 +1044,7 @@ export default function AttendancePage() {
                             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                                 {apiKey ? (
                                     <LoadScript googleMapsApiKey={apiKey}>
-                                        <GoogleMap mapContainerStyle={containerStyle} center={mapCenter} zoom={17} onLoad={handleMapLoad}>
+                                        <GoogleMap mapContainerStyle={containerStyle} center={mapCenter} zoom={17}>
                                             {userLocation && <Marker position={userLocation} title="Your Location" icon={createUserLocationIcon()} />}
 
                                             {selectedClass && !selectedClass.is_completed && (
@@ -1125,7 +1127,9 @@ export default function AttendancePage() {
                                                 const isMissed = c.is_missed || c.attendance_status?.status === 'absent';
                                                 const hasAttendance = c.attendance_taken;
                                                 const isOtherCheckedIn =
-                                                    checkedInClass && checkedInClass.timetable_id !== c.timetable_id && currentStatus === 'checked_in';
+                                                    checkedInClass &&
+                                                    checkedInClass.timetable_id !== c.timetable_id &&
+                                                    currentStatus === 'checked_in';
                                                 const isClassBeforeStart = isBeforeAllowedCheckIn(c.start_time, teacherEarlyCheckInMinutes);
                                                 const classHasEnded = isClassEnded(c.end_time);
                                                 const isClassActiveNow = isClassActive(c.start_time, c.end_time);
@@ -1276,7 +1280,9 @@ export default function AttendancePage() {
                                                                     !isClassBeforeStart &&
                                                                     !isRescheduledAway &&
                                                                     !isMissed &&
-                                                                    c.can_take_attendance !== false && <CheckCircle size={14} className="text-green-600" />}
+                                                                    c.can_take_attendance !== false && (
+                                                                        <CheckCircle size={14} className="text-green-600" />
+                                                                    )}
                                                             </div>
                                                         </div>
 
@@ -1401,7 +1407,10 @@ export default function AttendancePage() {
                                                                     `Attendance opens at ${selectedClass.timing?.allowed_check_in_time_display || to12Hour(selectedClass.start_time)}`}
                                                             </p>
                                                             <p className="text-xs text-blue-600">
-                                                                Class starts at {selectedClass.timing?.scheduled_start_time_display || to12Hour(selectedClass.start_time)} • Early window: {teacherEarlyCheckInMinutes} minutes
+                                                                Class starts at{' '}
+                                                                {selectedClass.timing?.scheduled_start_time_display ||
+                                                                    to12Hour(selectedClass.start_time)}{' '}
+                                                                • Early window: {teacherEarlyCheckInMinutes} minutes
                                                             </p>
                                                         </div>
                                                     </div>
@@ -1429,7 +1438,9 @@ export default function AttendancePage() {
                                                         <div>
                                                             <p className="text-sm font-medium text-sky-700">You can check out anytime</p>
                                                             <p className="text-xs text-sky-600">
-                                                                Class ends at {selectedClass.timing?.scheduled_end_time_display || to12Hour(selectedClass.end_time)}. Early departure will be recorded as early leave.
+                                                                Class ends at{' '}
+                                                                {selectedClass.timing?.scheduled_end_time_display || to12Hour(selectedClass.end_time)}
+                                                                . Early departure will be recorded as early leave.
                                                             </p>
                                                         </div>
                                                     </div>
@@ -1445,7 +1456,9 @@ export default function AttendancePage() {
                                                                 Check-out available for {timeValidation.timeUntilCheckoutDeadline}
                                                             </p>
                                                             <p className="text-xs text-amber-600">
-                                                                Class ended at {selectedClass.timing?.scheduled_end_time_display || to12Hour(selectedClass.end_time)} • Grace period: {checkoutGracePeriodMinutes} minutes
+                                                                Class ended at{' '}
+                                                                {selectedClass.timing?.scheduled_end_time_display || to12Hour(selectedClass.end_time)}{' '}
+                                                                • Grace period: {checkoutGracePeriodMinutes} minutes
                                                             </p>
                                                         </div>
                                                     </div>
@@ -1457,9 +1470,12 @@ export default function AttendancePage() {
                                                     <div className="flex items-center gap-2">
                                                         <Clock size={16} className="text-orange-600" />
                                                         <div>
-                                                            <p className="text-sm font-medium text-orange-700">Check-out will be recorded as overtime</p>
+                                                            <p className="text-sm font-medium text-orange-700">
+                                                                Check-out will be recorded as overtime
+                                                            </p>
                                                             <p className="text-xs text-orange-600">
-                                                                Grace period ended at {selectedClass.timing?.checkout_grace_deadline_display || 'the configured deadline'}
+                                                                Grace period ended at{' '}
+                                                                {selectedClass.timing?.checkout_grace_deadline_display || 'the configured deadline'}
                                                             </p>
                                                         </div>
                                                     </div>
@@ -1470,11 +1486,7 @@ export default function AttendancePage() {
 
                                     <button
                                         onClick={getCurrentLocation}
-                                        disabled={
-                                            isLoadingLocation ||
-                                            facialRecognitionEnabled ||
-                                            selectedClass?.can_take_attendance === false
-                                        }
+                                        disabled={isLoadingLocation || facialRecognitionEnabled || selectedClass?.can_take_attendance === false}
                                         className="flex w-full items-center justify-center gap-2 rounded-lg bg-slate-100 px-4 py-2.5 font-medium text-slate-700 transition-colors hover:bg-slate-200 disabled:opacity-50"
                                     >
                                         {isLoadingLocation ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
@@ -1489,23 +1501,23 @@ export default function AttendancePage() {
                                         selectedClass &&
                                         !selectedClass.is_completed &&
                                         selectedClass.can_take_attendance !== false && (
-                                        <div
-                                            className={`rounded-xl border p-4 ${isWithinRange ? 'border-green-100 bg-green-50' : 'border-amber-100 bg-amber-50'}`}
-                                        >
-                                            <div className="mb-1 flex items-center justify-between">
-                                                <span className="text-sm font-medium text-slate-600">Distance to {selectedClass.room}</span>
-                                                <span className={`text-sm font-bold ${isWithinRange ? 'text-green-600' : 'text-amber-600'}`}>
-                                                    {distance.toFixed(1)}m
-                                                </span>
+                                            <div
+                                                className={`rounded-xl border p-4 ${isWithinRange ? 'border-green-100 bg-green-50' : 'border-amber-100 bg-amber-50'}`}
+                                            >
+                                                <div className="mb-1 flex items-center justify-between">
+                                                    <span className="text-sm font-medium text-slate-600">Distance to {selectedClass.room}</span>
+                                                    <span className={`text-sm font-bold ${isWithinRange ? 'text-green-600' : 'text-amber-600'}`}>
+                                                        {distance.toFixed(1)}m
+                                                    </span>
+                                                </div>
+                                                <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+                                                    <div
+                                                        className={`h-full transition-all duration-500 ${isWithinRange ? 'bg-green-500' : 'bg-amber-500'}`}
+                                                        style={{ width: `${Math.min(100, (distance / selectedClass.radius) * 100)}%` }}
+                                                    ></div>
+                                                </div>
                                             </div>
-                                            <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
-                                                <div
-                                                    className={`h-full transition-all duration-500 ${isWithinRange ? 'bg-green-500' : 'bg-amber-500'}`}
-                                                    style={{ width: `${Math.min(100, (distance / selectedClass.radius) * 100)}%` }}
-                                                ></div>
-                                            </div>
-                                        </div>
-                                    )}
+                                        )}
 
                                     {selectedClass?.is_completed && (
                                         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">

@@ -1,25 +1,15 @@
-import AppLayout from '@/layouts/app-layout';
 import FaceCaptureModal from '@/components/face/FaceCaptureModal';
-import { buildFaceVerificationPayload } from '@/lib/teacher-api';
-import { apiJsonRequest, getApiErrorMessage } from '@/lib/http';
+import AppLayout from '@/layouts/app-layout';
+import { ATTENDANCE_LOCK_MESSAGE } from '@/lib/attendance-lock';
 import { type FaceCaptureResult } from '@/lib/face-recognition';
 import { formatOutOfRangeAttendanceMessage } from '@/lib/geo';
-import { ATTENDANCE_LOCK_MESSAGE } from '@/lib/attendance-lock';
+import { apiJsonRequest, getApiErrorMessage } from '@/lib/http';
 import { getBooleanSetting } from '@/lib/system-settings';
+import { buildFaceVerificationPayload } from '@/lib/teacher-api';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react';
 import { Circle, GoogleMap, LoadScript, Marker } from '@react-google-maps/api';
-import {
-    AlertTriangle,
-    CalendarCheck,
-    CheckCircle,
-    Clock,
-    Loader2,
-    LogIn,
-    LogOut,
-    MapPin,
-    ShieldCheck,
-} from 'lucide-react';
+import { AlertTriangle, CalendarCheck, CheckCircle, Clock, Loader2, LogIn, LogOut, MapPin, ShieldCheck } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -171,11 +161,7 @@ export default function StaffAttendancePage({
     const [pendingAttendanceAction, setPendingAttendanceAction] = useState<'check-in' | 'check-out' | null>(null);
 
     const gpsEnforcementEnabled = getBooleanSetting(systemSettings?.attendance, 'gps_enforcement_enabled', true);
-    const venueChangeRequestsEnabled = getBooleanSetting(
-        systemSettings?.attendance,
-        'administrator_venue_change_requests_enabled',
-        true,
-    );
+    const venueChangeRequestsEnabled = getBooleanSetting(systemSettings?.attendance, 'administrator_venue_change_requests_enabled', true);
     const facialRecognitionEnabled =
         typeof facialRecognitionEnabledProp === 'boolean'
             ? facialRecognitionEnabledProp
@@ -189,12 +175,9 @@ export default function StaffAttendancePage({
         [todaySchedulesState],
     );
 
-    const verificationSchedule =
-        pendingAttendanceAction === 'check-out' && activeSchedule ? activeSchedule : selectedSchedule;
+    const verificationSchedule = pendingAttendanceAction === 'check-out' && activeSchedule ? activeSchedule : selectedSchedule;
     const faceLocationGate =
-        verificationSchedule?.coordinates?.lat != null &&
-        verificationSchedule?.coordinates?.lng != null &&
-        Number(verificationSchedule.radius) > 0
+        verificationSchedule?.coordinates?.lat != null && verificationSchedule?.coordinates?.lng != null && Number(verificationSchedule.radius) > 0
             ? {
                   latitude: Number(verificationSchedule.coordinates.lat),
                   longitude: Number(verificationSchedule.coordinates.lng),
@@ -255,9 +238,7 @@ export default function StaffAttendancePage({
     }, [activeSchedule, selectedSchedule, canCheckInNow, selectedTiming]);
 
     const canVerifyLocation =
-        selectedSchedule?.coordinates?.lat != null &&
-        selectedSchedule?.coordinates?.lng != null &&
-        Number(selectedSchedule.radius) > 0;
+        selectedSchedule?.coordinates?.lat != null && selectedSchedule?.coordinates?.lng != null && Number(selectedSchedule.radius) > 0;
 
     const selectedScheduleLocation = canVerifyLocation
         ? {
@@ -287,12 +268,7 @@ export default function StaffAttendancePage({
                 }
 
                 const checkedIn = schedules.find((schedule) => schedule.attendance_status?.status === 'checked_in');
-                return (
-                    checkedIn ||
-                    schedules.find((schedule) => !schedule.is_completed && !isScheduleMissed(schedule)) ||
-                    schedules[0] ||
-                    null
-                );
+                return checkedIn || schedules.find((schedule) => !schedule.is_completed && !isScheduleMissed(schedule)) || schedules[0] || null;
             });
         } catch (error) {
             setMessage({
@@ -364,10 +340,7 @@ export default function StaffAttendancePage({
 
     const getVerifiedLocationPayload = async (schedule: StaffSchedule) => {
         const location = await requestCurrentLocation();
-        const scheduleCanVerifyLocation =
-            schedule.coordinates?.lat != null &&
-            schedule.coordinates?.lng != null &&
-            Number(schedule.radius) > 0;
+        const scheduleCanVerifyLocation = schedule.coordinates?.lat != null && schedule.coordinates?.lng != null && Number(schedule.radius) > 0;
 
         if (!scheduleCanVerifyLocation) {
             if (gpsEnforcementEnabled) {
@@ -385,12 +358,7 @@ export default function StaffAttendancePage({
             };
         }
 
-        const nextDistance = calculateDistance(
-            location.lat,
-            location.lng,
-            Number(schedule.coordinates.lat),
-            Number(schedule.coordinates.lng),
-        );
+        const nextDistance = calculateDistance(location.lat, location.lng, Number(schedule.coordinates.lat), Number(schedule.coordinates.lng));
         const nextWithinRange = nextDistance <= Number(schedule.radius);
 
         setDistance(nextDistance);
@@ -519,9 +487,7 @@ export default function StaffAttendancePage({
         try {
             const verification = await requestJson<ApiResponse>('/teacher/staff-attendance/verify-face', {
                 method: 'POST',
-                body: JSON.stringify(
-                    buildFaceVerificationPayload(selectedSchedule.id, result.descriptor, result.quality),
-                ),
+                body: JSON.stringify(buildFaceVerificationPayload(selectedSchedule.id, result.descriptor, result.quality)),
             });
 
             if (!verification.success || !verification.verification_token) {
@@ -566,12 +532,7 @@ export default function StaffAttendancePage({
         }
     };
 
-    const showCheckIn =
-        !activeSchedule &&
-        selectedSchedule &&
-        !selectedSchedule.is_completed &&
-        !isScheduleMissed(selectedSchedule) &&
-        canCheckInNow;
+    const showCheckIn = !activeSchedule && selectedSchedule && !selectedSchedule.is_completed && !isScheduleMissed(selectedSchedule) && canCheckInNow;
     const showCheckOut = !!activeSchedule && !isScheduleMissed(activeSchedule) && canCheckOutNow;
     const showWaitingForCheckout = !!activeSchedule && !isScheduleMissed(activeSchedule) && !canCheckOutNow;
 
@@ -585,9 +546,7 @@ export default function StaffAttendancePage({
                         <ShieldCheck className="size-4" />
                         Staff Attendance
                     </div>
-                    <h1 className="text-2xl font-bold tracking-tight text-sidebar-foreground md:text-3xl">
-                        Mark your attendance
-                    </h1>
+                    <h1 className="text-2xl font-bold tracking-tight text-sidebar-foreground md:text-3xl">Mark your attendance</h1>
                     <p className="text-sm text-sidebar-foreground/70">{todayLabel}</p>
                 </header>
 
@@ -595,9 +554,7 @@ export default function StaffAttendancePage({
                     <div
                         role="alert"
                         className={`rounded-xl border px-4 py-3 text-sm ${
-                            message.type === 'success'
-                                ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                                : 'border-red-200 bg-red-50 text-red-800'
+                            message.type === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-800'
                         }`}
                     >
                         {message.text}
@@ -612,9 +569,9 @@ export default function StaffAttendancePage({
                               ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/40 dark:bg-emerald-950/20'
                               : sessionStatus.tone === 'missed'
                                 ? 'border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-950/20'
-                              : sessionStatus.tone === 'waiting'
-                                ? 'border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/20'
-                                : 'border-sidebar-border/70 bg-white dark:border-sidebar-border dark:bg-sidebar-accent'
+                                : sessionStatus.tone === 'waiting'
+                                  ? 'border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/20'
+                                  : 'border-sidebar-border/70 bg-white dark:border-sidebar-border dark:bg-sidebar-accent'
                     }`}
                 >
                     <div className="flex items-start gap-3">
@@ -686,18 +643,14 @@ export default function StaffAttendancePage({
                                     <span className="font-medium">
                                         {selectedSchedule.venue_authorization.authorized_venue || selectedSchedule.classroom}
                                     </span>
-                                    {selectedSchedule.original_classroom
-                                        ? ` instead of ${selectedSchedule.original_classroom}`
-                                        : ''}
+                                    {selectedSchedule.original_classroom ? ` instead of ${selectedSchedule.original_classroom}` : ''}
                                     {selectedSchedule.venue_authorization.period_label
                                         ? ` from ${selectedSchedule.venue_authorization.period_label}`
                                         : ''}
                                     .
                                 </p>
                                 {selectedSchedule.venue_authorization.reason && (
-                                    <p className="mt-1 text-sky-800/80 dark:text-sky-200/80">
-                                        Reason: {selectedSchedule.venue_authorization.reason}
-                                    </p>
+                                    <p className="mt-1 text-sky-800/80 dark:text-sky-200/80">Reason: {selectedSchedule.venue_authorization.reason}</p>
                                 )}
                             </div>
                         </div>
@@ -712,8 +665,7 @@ export default function StaffAttendancePage({
                                 <div>
                                     <p className="font-semibold">Explanation required</p>
                                     <p className="mt-1">
-                                        This shift was marked absent or as an early departure. Submit a reason before the
-                                        attendance period closes.
+                                        This shift was marked absent or as an early departure. Submit a reason before the attendance period closes.
                                     </p>
                                 </div>
                             </div>
@@ -752,17 +704,9 @@ export default function StaffAttendancePage({
                                 label="Work hours"
                                 value={`${formatTime(selectedSchedule.start_time)} – ${formatTime(selectedSchedule.end_time)}`}
                             />
-                            <DetailItem
-                                icon={MapPin}
-                                label="Work location"
-                                value={selectedSchedule.classroom || 'Not assigned'}
-                            />
+                            <DetailItem icon={MapPin} label="Work location" value={selectedSchedule.classroom || 'Not assigned'} />
                             {selectedSchedule.venue_authorization && selectedSchedule.original_classroom && (
-                                <DetailItem
-                                    icon={MapPin}
-                                    label="Originally assigned"
-                                    value={selectedSchedule.original_classroom}
-                                />
+                                <DetailItem icon={MapPin} label="Originally assigned" value={selectedSchedule.original_classroom} />
                             )}
                             {gpsEnforcementEnabled && canVerifyLocation && (
                                 <DetailItem
@@ -893,15 +837,7 @@ export default function StaffAttendancePage({
     );
 }
 
-function ShiftCard({
-    schedule,
-    selected,
-    isCheckedIn,
-}: {
-    schedule: StaffSchedule;
-    selected?: boolean;
-    isCheckedIn?: boolean;
-}) {
+function ShiftCard({ schedule, selected, isCheckedIn }: { schedule: StaffSchedule; selected?: boolean; isCheckedIn?: boolean }) {
     return (
         <div
             className={`rounded-xl border p-4 transition-colors ${
@@ -916,12 +852,8 @@ function ShiftCard({
                     <p className="mt-1 text-sm text-sidebar-foreground/70">
                         {formatTime(schedule.start_time)} – {formatTime(schedule.end_time)}
                     </p>
-                    {schedule.venue_authorization && (
-                        <p className="mt-1 text-xs font-medium text-sky-700">Authorized venue change</p>
-                    )}
-                    {schedule.needs_explanation && (
-                        <p className="mt-1 text-xs font-medium text-amber-700">Explanation needed</p>
-                    )}
+                    {schedule.venue_authorization && <p className="mt-1 text-xs font-medium text-sky-700">Authorized venue change</p>}
+                    {schedule.needs_explanation && <p className="mt-1 text-xs font-medium text-amber-700">Explanation needed</p>}
                 </div>
                 {isCheckedIn ? (
                     <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">Checked in</span>
@@ -937,23 +869,15 @@ function ShiftCard({
     );
 }
 
-function DetailItem({
-    icon: Icon,
-    label,
-    value,
-    highlight,
-}: {
-    icon: typeof Clock;
-    label: string;
-    value: string;
-    highlight?: boolean;
-}) {
+function DetailItem({ icon: Icon, label, value, highlight }: { icon: typeof Clock; label: string; value: string; highlight?: boolean }) {
     return (
         <div className="rounded-xl border border-sidebar-border/50 bg-slate-50 p-4 dark:border-sidebar-border dark:bg-sidebar-accent/40">
             <div className="flex items-start gap-3">
-                <Icon className={`mt-0.5 size-4 shrink-0 ${highlight === true ? 'text-emerald-600' : highlight === false ? 'text-red-600' : 'text-sidebar-foreground/50'}`} />
+                <Icon
+                    className={`mt-0.5 size-4 shrink-0 ${highlight === true ? 'text-emerald-600' : highlight === false ? 'text-red-600' : 'text-sidebar-foreground/50'}`}
+                />
                 <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-sidebar-foreground/50">{label}</p>
+                    <p className="text-xs font-medium tracking-wide text-sidebar-foreground/50 uppercase">{label}</p>
                     <p
                         className={`mt-1 text-sm font-medium ${
                             highlight === true ? 'text-emerald-700' : highlight === false ? 'text-red-700' : 'text-sidebar-foreground'

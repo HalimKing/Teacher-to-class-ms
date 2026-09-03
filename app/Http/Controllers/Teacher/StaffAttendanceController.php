@@ -7,9 +7,9 @@ use App\Models\StaffAttendance;
 use App\Models\SystemSetting;
 use App\Models\Teacher;
 use App\Models\TimeTable;
-use App\Services\FacialRecognitionService;
-use App\Services\AttendanceTimingService;
 use App\Services\ActivityLogService;
+use App\Services\AttendanceTimingService;
+use App\Services\FacialRecognitionService;
 use App\Services\HolidayBreakService;
 use App\Services\VenueChangeAuthorizationService;
 use App\Support\AttendanceExceptionCategory;
@@ -107,7 +107,7 @@ class StaffAttendanceController extends Controller
         $staff = auth('teacher')->user();
         $timetable = $this->getOwnedStaffTimetable((int) $validated['timetable_id'], $staff->id);
 
-        if (!$timetable) {
+        if (! $timetable) {
             return response()->json([
                 'success' => false,
                 'message' => 'Invalid staff schedule.',
@@ -135,12 +135,12 @@ class StaffAttendanceController extends Controller
 
         $scheduledStart = $this->timingService->parseScheduleTime((string) $timetable->start_time, $now);
 
-        if (!$this->timingService->canCheckInNow($now, $scheduledStart, AttendanceTimingService::ROLE_ADMINISTRATOR)) {
+        if (! $this->timingService->canCheckInNow($now, $scheduledStart, AttendanceTimingService::ROLE_ADMINISTRATOR)) {
             $allowedCheckIn = $this->timingService->getAllowedCheckInTime($scheduledStart);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Attendance is not open yet. You can check in from ' . $allowedCheckIn->format('h:i A') . '.',
+                'message' => 'Attendance is not open yet. You can check in from '.$allowedCheckIn->format('h:i A').'.',
                 'allowed_check_in_time' => $allowedCheckIn->format('H:i:s'),
             ], 400);
         }
@@ -192,7 +192,7 @@ class StaffAttendanceController extends Controller
         }
 
         if ($facialRecognition->isEnabled()) {
-            if (!$staff->hasFaceEnrollment()) {
+            if (! $staff->hasFaceEnrollment()) {
                 $facialRecognition->logAttempt($staff, (int) $validated['timetable_id'], 'failed', null, 'not_enrolled');
 
                 return response()->json([
@@ -230,7 +230,7 @@ class StaffAttendanceController extends Controller
             'check_in',
         );
 
-        if ($gpsEnforcement && !$request->boolean('within_range')) {
+        if ($gpsEnforcement && ! $request->boolean('within_range')) {
             return response()->json([
                 'success' => false,
                 'message' => 'You are outside the allowed attendance location. Please move within range.',
@@ -309,7 +309,7 @@ class StaffAttendanceController extends Controller
             ->where('staff_id', $staff->id)
             ->find((int) $validated['attendance_id']);
 
-        if (!$attendance) {
+        if (! $attendance) {
             return response()->json([
                 'success' => false,
                 'message' => 'Attendance record not found.',
@@ -328,7 +328,7 @@ class StaffAttendanceController extends Controller
             return response()->json(AttendanceLock::blockedPayload(), 422);
         }
 
-        if (!$attendance->check_in_time) {
+        if (! $attendance->check_in_time) {
             return response()->json([
                 'success' => false,
                 'message' => 'You have not checked in for this session yet.',
@@ -336,7 +336,7 @@ class StaffAttendanceController extends Controller
         }
 
         if ($facialRecognition->isEnabled()) {
-            if (!$staff->hasFaceEnrollment()) {
+            if (! $staff->hasFaceEnrollment()) {
                 $facialRecognition->logAttempt($staff, (int) $attendance->timetable_id, 'failed', null, 'not_enrolled');
 
                 return response()->json([
@@ -374,7 +374,7 @@ class StaffAttendanceController extends Controller
             )
             : ['classroom' => null, 'authorization' => null, 'authorized_venue_used' => false];
 
-        if ($gpsEnforcement && !$request->boolean('within_range')) {
+        if ($gpsEnforcement && ! $request->boolean('within_range')) {
             return response()->json([
                 'success' => false,
                 'message' => 'You are outside the allowed attendance location for check-out.',
@@ -486,7 +486,7 @@ class StaffAttendanceController extends Controller
                 $schedule,
                 (int) $schedule->teacher_id,
                 now(),
-                $attendance && !$attendance->check_out_time ? 'check_out' : 'check_in',
+                $attendance && ! $attendance->check_out_time ? 'check_out' : 'check_in',
             )
             : ['classroom' => $schedule->classRoom, 'authorization' => null, 'authorized_venue_used' => false];
 
@@ -496,7 +496,7 @@ class StaffAttendanceController extends Controller
         $afterCheckoutGrace = (bool) ($timing['is_after_checkout_grace'] ?? false);
 
         if (
-            !$isMissed
+            ! $isMissed
             && $attendance === null
             && $isToday
             && $afterCheckoutGrace
@@ -504,7 +504,7 @@ class StaffAttendanceController extends Controller
             $isMissed = true;
         }
 
-        $canTakeAttendance = !$isMissed;
+        $canTakeAttendance = ! $isMissed;
         $attendanceBlockedMessage = $isMissed ? AttendanceLock::MESSAGE : null;
 
         return [
@@ -550,8 +550,8 @@ class StaffAttendanceController extends Controller
             'attendance_blocked_message' => $attendanceBlockedMessage,
             'attendance_state' => $isMissed ? 'missed' : null,
             'needs_explanation' => $attendance
-                && !in_array($attendance->attendance_status, ['excused_absence'], true)
-                && !in_array($attendance->exception_category, [
+                && ! in_array($attendance->attendance_status, ['excused_absence'], true)
+                && ! in_array($attendance->exception_category, [
                     AttendanceExceptionCategory::EXCUSED_ABSENCE,
                     AttendanceExceptionCategory::AUTHORIZED_EARLY_DEPARTURE,
                 ], true)
@@ -560,7 +560,7 @@ class StaffAttendanceController extends Controller
                     || $attendance->departure_category === 'early_leave'
                     || $attendance->attendance_status === 'early_leave'
                 )
-                && !\App\Models\AttendanceExplanation::query()
+                && ! \App\Models\AttendanceExplanation::query()
                     ->where('attendance_type', 'staff')
                     ->where('attendance_id', $attendance->id)
                     ->whereIn('status', ['pending', 'approved'])
@@ -573,7 +573,7 @@ class StaffAttendanceController extends Controller
     {
         return match ($checkOutOutcome['departure_category']) {
             'early_leave' => 'Staff check-out recorded as early leave.',
-            'overtime' => 'Staff check-out recorded as overtime (' . $checkOutOutcome['minutes_overtime'] . ' minute(s) after grace period).',
+            'overtime' => 'Staff check-out recorded as overtime ('.$checkOutOutcome['minutes_overtime'].' minute(s) after grace period).',
             default => 'Staff check-out successful.',
         };
     }
@@ -581,8 +581,8 @@ class StaffAttendanceController extends Controller
     private function buildCheckInSuccessMessage(array $checkInOutcome): string
     {
         return match ($checkInOutcome['arrival_category']) {
-            'early' => 'Staff check-in successful. You checked in ' . $checkInOutcome['minutes_early'] . ' minute(s) early.',
-            'late' => 'Staff check-in recorded as late (' . $checkInOutcome['minutes_late'] . ' minute(s) after scheduled start).',
+            'early' => 'Staff check-in successful. You checked in '.$checkInOutcome['minutes_early'].' minute(s) early.',
+            'late' => 'Staff check-in recorded as late ('.$checkInOutcome['minutes_late'].' minute(s) after scheduled start).',
             default => 'Staff check-in successful. You are on time.',
         };
     }
