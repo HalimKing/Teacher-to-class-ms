@@ -17,7 +17,7 @@ test('password can be updated', function () {
 
     $response
         ->assertSessionHasNoErrors()
-        ->assertRedirect('/settings/password');
+        ->assertRedirect(route('admin.dashboard', absolute: false));
 
     expect(Hash::check('new-password', $user->refresh()->password))->toBeTrue();
 });
