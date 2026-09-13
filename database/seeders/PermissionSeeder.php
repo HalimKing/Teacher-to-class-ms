@@ -91,6 +91,18 @@ class PermissionSeeder extends Seeder
             'admin.holidays-breaks.delete',
             'admin.help-desk.view',
             'admin.help-desk.manage',
+            'admin.communication.view',
+            'admin.communication.compose',
+            'admin.communication.send',
+            'admin.communication.send-selected-faculties',
+            'admin.communication.send-all-faculties',
+            'admin.communication.send-selected-departments',
+            'admin.communication.send-all-departments',
+            'admin.communication.send-selected-staff',
+            'admin.communication.send-all-staff',
+            'admin.communication.view-sent',
+            'admin.communication.view-details',
+            'admin.communication.manage-drafts',
         ];
         foreach ($permissions as $permission) {
             Permission::firstOrCreate([

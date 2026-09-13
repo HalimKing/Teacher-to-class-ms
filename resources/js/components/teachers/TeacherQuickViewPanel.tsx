@@ -53,6 +53,7 @@ export default function TeacherQuickViewPanel({ open, loading, teacher, data, on
                                     <div><dt className="text-sidebar-foreground/50">Employment Status</dt><dd className="font-medium">{data.profile.employment_status_label || '—'}</dd></div>
                                     <div><dt className="text-sidebar-foreground/50">Department</dt><dd className="font-medium">{data.profile.department || '—'}</dd></div>
                                     <div><dt className="text-sidebar-foreground/50">Faculty</dt><dd className="font-medium">{data.profile.faculty || '—'}</dd></div>
+                                    <div><dt className="text-sidebar-foreground/50">Leadership</dt><dd className="font-medium">{data.profile.leadership_role_label ? `${data.profile.leadership_role_label}${data.profile.leadership_unit ? ` · ${data.profile.leadership_unit}` : ''}` : 'None'}</dd></div>
                                     <div><dt className="text-sidebar-foreground/50">Created</dt><dd className="font-medium">{data.profile.created_at || '—'}</dd></div>
                                 </dl>
                             </section>

@@ -316,7 +316,7 @@ class DashboardController extends Controller
      */
     private function getTeacherProfileData()
     {
-        $teacher = auth()->user()->load('faculty', 'department', 'courses');
+        $teacher = auth('teacher')->user()->load('faculty', 'department', 'leadershipFaculty', 'leadershipDepartment', 'courses');
 
         // Calculate total students
         $totalStudents = 0;
@@ -355,6 +355,10 @@ class DashboardController extends Controller
             'subject' => $primarySubject,
             'faculty' => $teacher->faculty->name ?? 'Not assigned',
             'department' => $teacher->department->name ?? 'Not assigned',
+            'leadership_role_label' => $teacher->leadershipRoleLabel(),
+            'leadership_unit' => $teacher->isHeadOfDepartment()
+                ? $teacher->leadershipDepartment?->name
+                : $teacher->leadershipFaculty?->name,
             'office' => 'Not specified',
             'experience' => 'Not specified',
             'rating' => 4.5,

@@ -1,6 +1,5 @@
 <?php
 
-use App\Http\Controllers\GlobalSearchController;
 use App\Http\Controllers\Admin\SchoolManagement\AcademicPeriodController;
 use App\Http\Controllers\Admin\SchoolManagement\AcademicYearController;
 use App\Http\Controllers\Admin\SchoolManagement\ClassRoomController;
@@ -9,39 +8,39 @@ use App\Http\Controllers\Admin\SchoolManagement\DepartmentController;
 use App\Http\Controllers\Admin\SchoolManagement\FacultyController;
 use App\Http\Controllers\Admin\SchoolManagement\ProgramController;
 use App\Http\Controllers\Admin\SchoolManagement\TimeTableController;
-use App\Http\Controllers\Admin\TeacherFaceEnrollmentController;
-use App\Http\Controllers\Admin\TeacherController;
+use App\Http\Controllers\Admin\StaffAttendanceReportController;
 use App\Http\Controllers\Admin\SystemLogController;
 use App\Http\Controllers\Admin\SystemSettingsController;
-use App\Http\Controllers\Admin\TeacherAttendanceReportController;
-use App\Http\Controllers\TeacherAttendanceReportController as LecturerAttendanceReportController;
-use App\Http\Controllers\Admin\StaffAttendanceReportController;
 use App\Http\Controllers\Admin\TeacherAttendanceAnalysisController;
-use App\Http\Controllers\AttendanceRecordController;
-use App\Http\Controllers\RoleController;
-use App\Http\Controllers\Teacher\DashboardController;
-use App\Http\Controllers\TeacherAttendanceController;
-use App\Http\Controllers\TeacherCoursesController;
-use App\Http\Controllers\UserController;
-
-use App\Http\Controllers\Teacher\TimeTableController as TeacherTimeTableController;
-use App\Http\Controllers\Teacher\FaceVerificationController;
-use App\Http\Controllers\Teacher\SessionReminderController;
-use App\Http\Controllers\Teacher\NotificationController;
-use App\Http\Controllers\Teacher\StaffAttendanceController;
-use App\Http\Controllers\Teacher\StaffAttendanceReportController as TeacherStaffAttendanceReportController;
-
-use App\Http\Controllers\AdminAttendanceController;
+use App\Http\Controllers\Admin\TeacherAttendanceReportController;
+use App\Http\Controllers\Admin\TeacherController;
+use App\Http\Controllers\Admin\TeacherFaceEnrollmentController;
 use App\Http\Controllers\AttendancePortalController;
+use App\Http\Controllers\AttendanceRecordController;
+use App\Http\Controllers\Auth\UnifiedLoginController;
 use App\Http\Controllers\CsrfTokenController;
 use App\Http\Controllers\DeployCheckController;
-use App\Models\AcademicPeriod;
+use App\Http\Controllers\GlobalSearchController;
+use App\Http\Controllers\RoleController;
+use App\Http\Controllers\Teacher\DashboardController;
+use App\Http\Controllers\Teacher\FaceVerificationController;
+use App\Http\Controllers\Teacher\NotificationController;
+use App\Http\Controllers\Teacher\SessionReminderController;
+use App\Http\Controllers\Teacher\StaffAttendanceController;
+use App\Http\Controllers\Teacher\StaffAttendanceReportController as TeacherStaffAttendanceReportController;
+use App\Http\Controllers\Teacher\TimeTableController as TeacherTimeTableController;
+use App\Http\Controllers\Teacher\CommunicationController as TeacherCommunicationController;
+use App\Http\Controllers\Teacher\UnitAttendanceController;
+use App\Http\Controllers\Teacher\UnitStaffController;
+use App\Http\Controllers\TeacherAttendanceController;
+use App\Http\Controllers\TeacherAttendanceReportController as LecturerAttendanceReportController;
+use App\Http\Controllers\TeacherCoursesController;
+use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
-use Inertia\Inertia;
 
-Route::get('/', function () {
-    return Inertia::render('auth/login');
-})->name('home');
+Route::get('/', [UnifiedLoginController::class, 'show'])
+    ->middleware('guest:web,teacher')
+    ->name('home');
 
 Route::get('/deploy-check', DeployCheckController::class)->name('deploy-check');
 Route::get('/csrf-token', CsrfTokenController::class)->name('csrf-token');
@@ -68,25 +67,23 @@ Route::middleware(['auth:teacher', 'attendance.portal'])->prefix('attendance')->
 // teachers middleware group
 Route::middleware(['auth:teacher', 'attendance.portal.restrict'])->group(function () {
 
-
-
     Route::get('/api/teacher/attendance-data', [DashboardController::class, 'getAttendanceData'])
         ->middleware('teacher.staff_type:lecturer');
 
     Route::prefix('teacher/attendance')
         ->middleware('teacher.staff_type:lecturer')
         ->group(
-        function () {
-            Route::get('/todays-classes', [TeacherAttendanceController::class, 'getTodaysClasses']);
-            Route::post('/verify-face', [FaceVerificationController::class, 'verify']);
-            Route::post('/check-in', [TeacherAttendanceController::class, 'checkIn']);
-            Route::post('/check-out', [TeacherAttendanceController::class, 'checkOut']);
-            Route::get('/history', [TeacherAttendanceController::class, 'getAttendanceHistory']);
-            Route::get('/records', [TeacherAttendanceController::class, 'getAttendanceRecords']);
-            Route::get('/by-timetable/{timetableId}', [TeacherAttendanceController::class, 'getAttendanceByTimetable']);
-            Route::get('/', [TeacherAttendanceController::class, 'index'])->name('teacher.attendance');
-        }
-    );
+            function () {
+                Route::get('/todays-classes', [TeacherAttendanceController::class, 'getTodaysClasses']);
+                Route::post('/verify-face', [FaceVerificationController::class, 'verify']);
+                Route::post('/check-in', [TeacherAttendanceController::class, 'checkIn']);
+                Route::post('/check-out', [TeacherAttendanceController::class, 'checkOut']);
+                Route::get('/history', [TeacherAttendanceController::class, 'getAttendanceHistory']);
+                Route::get('/records', [TeacherAttendanceController::class, 'getAttendanceRecords']);
+                Route::get('/by-timetable/{timetableId}', [TeacherAttendanceController::class, 'getAttendanceByTimetable']);
+                Route::get('/', [TeacherAttendanceController::class, 'index'])->name('teacher.attendance');
+            }
+        );
 
     // Teacher timetable
     Route::middleware('teacher.staff_type:lecturer')->group(function () {
@@ -100,6 +97,30 @@ Route::middleware(['auth:teacher', 'attendance.portal.restrict'])->group(functio
     // Route::get('/teacher/attendance/history', [TeacherAttendanceController::class, 'getAttendanceHistory'])->name('teacher.attendance.history');
 
     Route::get('/teacher/dashboard', [DashboardController::class, 'index'])->name('teacher.dashboard');
+
+    Route::middleware('leadership')->prefix('teacher/unit')->name('teacher.unit.')->group(function () {
+        Route::get('/staff', [UnitStaffController::class, 'index'])->name('staff.index');
+        Route::get('/staff/{teacher}/quick-view', [UnitStaffController::class, 'quickView'])->name('staff.quick-view');
+        Route::get('/staff/{teacher}/edit', [UnitStaffController::class, 'edit'])->name('staff.edit');
+        Route::put('/staff/{teacher}', [UnitStaffController::class, 'update'])->name('staff.update');
+        Route::get('/attendance', [UnitAttendanceController::class, 'index'])->name('attendance.index');
+    });
+
+    Route::get('/teacher/communication/inbox', [TeacherCommunicationController::class, 'inbox'])
+        ->name('teacher.communication.inbox');
+
+    Route::middleware('leadership')->prefix('teacher/communication')->name('teacher.communication.')->group(function () {
+        Route::get('/', [TeacherCommunicationController::class, 'index'])->name('index');
+        Route::get('/compose', [TeacherCommunicationController::class, 'compose'])->name('compose');
+        Route::post('/', [TeacherCommunicationController::class, 'store'])->name('store');
+        Route::post('/preview', [TeacherCommunicationController::class, 'preview'])->name('preview');
+        Route::get('/sent', [TeacherCommunicationController::class, 'sent'])->name('sent');
+        Route::get('/staff', [TeacherCommunicationController::class, 'staff'])->name('staff');
+    });
+
+    Route::get('/teacher/communication/{communication}', [TeacherCommunicationController::class, 'show'])
+        ->whereNumber('communication')
+        ->name('teacher.communication.show');
 
     Route::get('/teacher/attendance', [TeacherAttendanceController::class, 'index'])
         ->middleware('teacher.staff_type:lecturer')
@@ -203,8 +224,6 @@ Route::middleware(['auth:teacher', 'attendance.portal.restrict'])->group(functio
 });
 
 Route::middleware(['auth:web', 'verified', 'password.changed'])->group(function () {
-
-
 
     Route::prefix('admin')->name('admin.')->group(
         function () {
@@ -339,6 +358,37 @@ Route::middleware(['auth:web', 'verified', 'password.changed'])->group(function 
                 ->name('help-desk.comment-attachment')
                 ->middleware('permission:admin.help-desk.view');
 
+            Route::prefix('communication')->name('communication.')->group(function () {
+                Route::get('/', [\App\Http\Controllers\Admin\CommunicationController::class, 'index'])
+                    ->name('index')
+                    ->middleware('permission:admin.communication.view');
+                Route::get('/compose', [\App\Http\Controllers\Admin\CommunicationController::class, 'compose'])
+                    ->name('compose')
+                    ->middleware('permission:admin.communication.compose');
+                Route::post('/', [\App\Http\Controllers\Admin\CommunicationController::class, 'store'])
+                    ->name('store')
+                    ->middleware('permission:admin.communication.compose');
+                Route::post('/preview', [\App\Http\Controllers\Admin\CommunicationController::class, 'preview'])
+                    ->name('preview')
+                    ->middleware('permission:admin.communication.compose');
+                Route::get('/sent', [\App\Http\Controllers\Admin\CommunicationController::class, 'sent'])
+                    ->name('sent')
+                    ->middleware('permission:admin.communication.view-sent|admin.communication.view');
+                Route::get('/faculties', [\App\Http\Controllers\Admin\CommunicationController::class, 'faculties'])
+                    ->name('faculties')
+                    ->middleware('permission:admin.communication.compose');
+                Route::get('/departments', [\App\Http\Controllers\Admin\CommunicationController::class, 'departments'])
+                    ->name('departments')
+                    ->middleware('permission:admin.communication.compose');
+                Route::get('/staff', [\App\Http\Controllers\Admin\CommunicationController::class, 'staff'])
+                    ->name('staff')
+                    ->middleware('permission:admin.communication.compose');
+                Route::get('/{communication}', [\App\Http\Controllers\Admin\CommunicationController::class, 'show'])
+                    ->whereNumber('communication')
+                    ->name('show')
+                    ->middleware('permission:admin.communication.view-details|admin.communication.view');
+            });
+
             Route::prefix('system-logs')->name('system-logs.')->group(function () {
                 Route::get('/', [SystemLogController::class, 'index'])
                     ->name('index')
@@ -356,7 +406,6 @@ Route::middleware(['auth:web', 'verified', 'password.changed'])->group(function 
                     ->name('show')
                     ->middleware('permission:admin.system-logs.view');
             });
-
 
             // System Settings (admin only)
             Route::prefix('settings-reports')->name('settings-reports.')->group(
@@ -393,7 +442,6 @@ Route::middleware(['auth:web', 'verified', 'password.changed'])->group(function 
                         ->middleware('permission:admin.staff-attendance.view');
                 }
             );
-
 
             Route::get('teachers/password-management', [TeacherController::class, 'passwordManagement'])
                 ->name('teachers.password-management')
@@ -444,18 +492,16 @@ Route::middleware(['auth:web', 'verified', 'password.changed'])->group(function 
                 ->only(['destroy'])
                 ->middleware('permission:admin.teachers.delete');
 
-
-
             Route::prefix('school-management')->name('school-management.')->group(
                 function () {
 
                     Route::get('faculties/template', [FacultyController::class, 'template'])
-                            ->name('faculties.template');
+                        ->name('faculties.template');
                     Route::resource('faculties', FacultyController::class);
                     Route::get('faculties/export/{format}', [FacultyController::class, 'export'])
                         ->name('faculties.export')
                         ->where('format', 'excel|csv');
-                    
+
                     Route::post('faculties/preview', [FacultyController::class, 'preview'])
                         ->name('faculties.preview');
                     Route::post('faculties/confirm-import', [FacultyController::class, 'confirmImport'])
@@ -516,7 +562,6 @@ Route::middleware(['auth:web', 'verified', 'password.changed'])->group(function 
                         ->name('schedules.reject')
                         ->middleware('permission:admin.schedules.manage');
 
-
                     // Class Rooms routes
                     Route::get('class-rooms/template', [ClassRoomController::class, 'template'])
                         ->name('class-rooms.template');
@@ -540,7 +585,6 @@ Route::middleware(['auth:web', 'verified', 'password.changed'])->group(function 
                         ->only(['destroy'])
                         ->middleware('permission:admin.school-management.class-rooms.delete');
 
-
                     // Academic Years routes
                     Route::resource('academic-years', AcademicYearController::class)
                         ->only(['create', 'store'])
@@ -558,7 +602,6 @@ Route::middleware(['auth:web', 'verified', 'password.changed'])->group(function 
                         ->name('academic-years.toggle-status')
                         ->middleware('permission:admin.school-management.academic-years.edit');
 
-
                     // Academic Periods routes
                     Route::resource('academic-periods', AcademicPeriodController::class)
                         ->only(['create', 'store'])
@@ -572,7 +615,6 @@ Route::middleware(['auth:web', 'verified', 'password.changed'])->group(function 
                     Route::resource('academic-periods', AcademicPeriodController::class)
                         ->only(['destroy'])
                         ->middleware('permission:admin.school-management.academic-periods.delete');
-
 
                     // Programs routes
                     Route::get('programs/template', [ProgramController::class, 'template'])
@@ -599,8 +641,6 @@ Route::middleware(['auth:web', 'verified', 'password.changed'])->group(function 
                     Route::get('/programs/{faculty}/departments', [ProgramController::class, 'getDepartmentsByFaculty'])
                         ->name('programs.get-departments')
                         ->middleware('permission:admin.school-management.programs.view');
-
-
 
                     // Courses routes
                     Route::get('courses/template', [CourseController::class, 'template'])
@@ -748,5 +788,5 @@ Route::middleware(['auth:web', 'verified', 'password.changed'])->group(function 
     );
 });
 
-require __DIR__ . '/settings.php';
-require __DIR__ . '/auth.php';
+require __DIR__.'/settings.php';
+require __DIR__.'/auth.php';

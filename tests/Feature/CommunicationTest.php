@@ -1,0 +1,405 @@
+<?php
+
+use App\Models\Communication;
+use App\Models\CommunicationRecipient;
+use App\Models\Department;
+use App\Models\Faculty;
+use App\Models\Teacher;
+use App\Models\User;
+use App\Support\CommunicationPermissions;
+use App\Support\LeadershipAssignment;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionRegistrar;
+
+function makeCommunicationTeacher(Faculty $faculty, Department $department, array $overrides = []): Teacher
+{
+    return Teacher::create(array_merge([
+        'first_name' => 'Comm',
+        'last_name' => 'Staff',
+        'email' => 'comm-staff-'.uniqid().'@example.com',
+        'phone' => '0244000099',
+        'faculty_id' => $faculty->id,
+        'department_id' => $department->id,
+        'employee_id' => 'COM'.uniqid(),
+        'title' => 'Mr.',
+        'staff_type' => Teacher::STAFF_TYPE_LECTURER,
+        'password' => 'password',
+    ], $overrides));
+}
+
+function makeCommunicationAdmin(array $permissions = []): User
+{
+    $permissions = $permissions === [] ? CommunicationPermissions::all() : $permissions;
+
+    foreach ($permissions as $permission) {
+        Permission::firstOrCreate(['name' => $permission, 'guard_name' => 'web']);
+    }
+
+    app()[PermissionRegistrar::class]->forgetCachedPermissions();
+
+    $role = Role::create(['name' => 'Comm Role '.uniqid(), 'guard_name' => 'web']);
+    $role->givePermissionTo($permissions);
+
+    $admin = User::factory()->create([
+        'must_change_password' => false,
+        'password_changed_at' => now(),
+        'email_verified_at' => now(),
+        'status' => User::STATUS_ACTIVE,
+    ]);
+    $admin->assignRole($role);
+
+    return $admin;
+}
+
+beforeEach(function () {
+    foreach (CommunicationPermissions::all() as $permission) {
+        Permission::firstOrCreate(['name' => $permission, 'guard_name' => 'web']);
+    }
+    Permission::firstOrCreate(['name' => 'admin.dashboard.view', 'guard_name' => 'web']);
+    app()[PermissionRegistrar::class]->forgetCachedPermissions();
+
+    $this->facultyA = Faculty::create(['name' => 'Comm Faculty A '.uniqid()]);
+    $this->facultyB = Faculty::create(['name' => 'Comm Faculty B '.uniqid()]);
+    $this->departmentA1 = Department::create([
+        'name' => 'Comm Dept A1 '.uniqid(),
+        'faculty_id' => $this->facultyA->id,
+    ]);
+    $this->departmentA2 = Department::create([
+        'name' => 'Comm Dept A2 '.uniqid(),
+        'faculty_id' => $this->facultyA->id,
+    ]);
+    $this->departmentB1 = Department::create([
+        'name' => 'Comm Dept B1 '.uniqid(),
+        'faculty_id' => $this->facultyB->id,
+    ]);
+
+    $this->lecturerA1 = makeCommunicationTeacher($this->facultyA, $this->departmentA1, [
+        'first_name' => 'Lecturer',
+        'last_name' => 'A1',
+    ]);
+    $this->lecturerA2 = makeCommunicationTeacher($this->facultyA, $this->departmentA2, [
+        'first_name' => 'Lecturer',
+        'last_name' => 'A2',
+    ]);
+    $this->lecturerB1 = makeCommunicationTeacher($this->facultyB, $this->departmentB1, [
+        'first_name' => 'Lecturer',
+        'last_name' => 'B1',
+    ]);
+
+    $this->dean = makeCommunicationTeacher($this->facultyA, $this->departmentA1, [
+        'first_name' => 'Dean',
+        'last_name' => 'Alpha',
+        'leadership_role' => LeadershipAssignment::DIRECTOR_DEAN,
+        'leadership_faculty_id' => $this->facultyA->id,
+    ]);
+
+    $this->hod = makeCommunicationTeacher($this->facultyA, $this->departmentA1, [
+        'first_name' => 'Head',
+        'last_name' => 'A1',
+        'leadership_role' => LeadershipAssignment::HEAD_OF_DEPARTMENT,
+        'leadership_faculty_id' => $this->facultyA->id,
+        'leadership_department_id' => $this->departmentA1->id,
+    ]);
+
+    $this->adminStaffDean = makeCommunicationTeacher($this->facultyA, $this->departmentA1, [
+        'first_name' => 'Admin',
+        'last_name' => 'Dean',
+        'staff_type' => Teacher::STAFF_TYPE_ADMINISTRATOR,
+        'leadership_role' => LeadershipAssignment::DIRECTOR_DEAN,
+        'leadership_faculty_id' => $this->facultyA->id,
+    ]);
+
+    $this->adminStaffHod = makeCommunicationTeacher($this->facultyA, $this->departmentA1, [
+        'first_name' => 'Admin',
+        'last_name' => 'Hod',
+        'staff_type' => Teacher::STAFF_TYPE_ADMINISTRATOR,
+        'leadership_role' => LeadershipAssignment::HEAD_OF_DEPARTMENT,
+        'leadership_faculty_id' => $this->facultyA->id,
+        'leadership_department_id' => $this->departmentA1->id,
+    ]);
+});
+
+it('blocks ordinary lecturers from composing while still allowing their inbox', function () {
+    $this->actingAs($this->lecturerA1, 'teacher')
+        ->get(route('teacher.communication.inbox'))
+        ->assertOk();
+
+    $this->actingAs($this->lecturerA1, 'teacher')
+        ->get(route('teacher.communication.compose'))
+        ->assertForbidden();
+
+    $this->actingAs($this->lecturerA1, 'teacher')
+        ->post(route('teacher.communication.store'), [
+            'subject' => 'Unauthorized',
+            'body' => 'Should not send',
+            'all_staff' => true,
+        ])
+        ->assertForbidden();
+
+    $this->actingAs($this->lecturerA1, 'teacher')
+        ->get(route('teacher.attendance'))
+        ->assertOk();
+});
+
+it('lets a lecturer who is director or dean message only staff in their faculty', function () {
+    $this->actingAs($this->dean, 'teacher')
+        ->get(route('teacher.communication.compose'))
+        ->assertOk();
+
+    $this->actingAs($this->dean, 'teacher')
+        ->post(route('teacher.communication.store'), [
+            'subject' => 'Faculty notice',
+            'body' => 'Please submit attendance explanations this week.',
+            'all_staff' => true,
+        ])
+        ->assertRedirect();
+
+    $message = Communication::query()->latest('id')->first();
+    expect($message)->not->toBeNull()
+        ->and($message->status)->toBe(Communication::STATUS_SENT)
+        ->and($message->recipient_count)->toBe(5);
+
+    $recipientIds = $message->recipients()->pluck('teacher_id')->all();
+    expect($recipientIds)->toContain($this->lecturerA1->id, $this->lecturerA2->id, $this->hod->id, $this->adminStaffDean->id, $this->adminStaffHod->id)
+        ->and($recipientIds)->not->toContain($this->dean->id, $this->lecturerB1->id);
+
+    $this->actingAs($this->dean, 'teacher')
+        ->post(route('teacher.communication.store'), [
+            'subject' => 'Outside faculty',
+            'body' => 'Should fail',
+            'staff_ids' => [$this->lecturerB1->id],
+        ])
+        ->assertForbidden();
+
+    $this->actingAs($this->dean, 'teacher')
+        ->get(route('teacher.attendance'))
+        ->assertOk();
+});
+
+it('lets a lecturer who is head of department message only staff in their department', function () {
+    $this->actingAs($this->hod, 'teacher')
+        ->post(route('teacher.communication.store'), [
+            'subject' => 'Department briefing',
+            'body' => 'Department meeting on Monday.',
+            'all_staff' => true,
+        ])
+        ->assertRedirect();
+
+    $message = Communication::query()->latest('id')->first();
+    $recipientIds = $message->recipients()->pluck('teacher_id')->all();
+
+    expect($recipientIds)->toContain($this->lecturerA1->id, $this->dean->id, $this->adminStaffDean->id, $this->adminStaffHod->id)
+        ->and($recipientIds)->not->toContain($this->hod->id, $this->lecturerA2->id, $this->lecturerB1->id);
+
+    $this->actingAs($this->hod, 'teacher')
+        ->post(route('teacher.communication.store'), [
+            'subject' => 'Wrong department',
+            'body' => 'Should fail',
+            'staff_ids' => [$this->lecturerA2->id],
+        ])
+        ->assertForbidden();
+});
+
+it('lets an administrator staff member who is also a dean keep staff attendance and send faculty messages', function () {
+    $this->actingAs($this->adminStaffDean, 'teacher')
+        ->get(route('teacher.staff-attendance'))
+        ->assertOk();
+
+    $this->actingAs($this->adminStaffDean, 'teacher')
+        ->post(route('teacher.communication.store'), [
+            'subject' => 'Admin dean notice',
+            'body' => 'Please update your face enrollment.',
+            'staff_ids' => [$this->lecturerA1->id, $this->lecturerA2->id],
+        ])
+        ->assertRedirect();
+
+    $message = Communication::query()->latest('id')->first();
+    expect($message->recipients()->pluck('teacher_id')->all())->toEqualCanonicalizing([
+        $this->lecturerA1->id,
+        $this->lecturerA2->id,
+    ]);
+});
+
+it('lets an administrator staff member who is also a head of department keep staff attendance and stay in department scope', function () {
+    $this->actingAs($this->adminStaffHod, 'teacher')
+        ->get(route('teacher.staff-attendance'))
+        ->assertOk();
+
+    $this->actingAs($this->adminStaffHod, 'teacher')
+        ->postJson(route('teacher.communication.preview'), [
+            'subject' => 'Preview',
+            'body' => 'Preview',
+            'all_staff' => true,
+        ])
+        ->assertOk()
+        ->assertJsonPath('count', 4);
+
+    $this->actingAs($this->adminStaffHod, 'teacher')
+        ->post(route('teacher.communication.store'), [
+            'subject' => 'Outside department',
+            'body' => 'Should fail',
+            'staff_ids' => [$this->lecturerB1->id],
+        ])
+        ->assertForbidden();
+});
+
+it('lets a higher-level administrator send combined faculty, department, and staff audiences without duplicates', function () {
+    $admin = makeCommunicationAdmin();
+
+    $this->actingAs($admin, 'web')
+        ->get(route('admin.communication.index'))
+        ->assertOk();
+
+    $this->actingAs($admin, 'web')
+        ->post(route('admin.communication.store'), [
+            'subject' => 'Institution notice',
+            'body' => 'Campus will close early on Friday.',
+            'faculty_ids' => [$this->facultyA->id],
+            'department_ids' => [$this->departmentA1->id],
+            'staff_ids' => [$this->lecturerA1->id, $this->lecturerB1->id],
+        ])
+        ->assertRedirect();
+
+    $message = Communication::query()->latest('id')->first();
+    $recipientIds = $message->recipients()->pluck('teacher_id')->all();
+
+    expect($message->status)->toBe(Communication::STATUS_SENT)
+        ->and($recipientIds)->toContain(
+            $this->lecturerA1->id,
+            $this->lecturerA2->id,
+            $this->dean->id,
+            $this->hod->id,
+            $this->adminStaffDean->id,
+            $this->adminStaffHod->id,
+            $this->lecturerB1->id,
+        )
+        ->and(count($recipientIds))->toBe(count(array_unique($recipientIds)))
+        ->and($message->recipient_count)->toBe(count($recipientIds));
+
+    $this->actingAs($this->lecturerA1, 'teacher')
+        ->get(route('teacher.communication.show', $message))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('message.subject', 'Institution notice')
+            ->where('message.recipients', [])
+        );
+
+    expect(
+        CommunicationRecipient::query()
+            ->where('communication_id', $message->id)
+            ->where('teacher_id', $this->lecturerA1->id)
+            ->value('status')
+    )->toBe(CommunicationRecipient::STATUS_READ);
+});
+
+it('lets a higher-level administrator send to all staff', function () {
+    $admin = makeCommunicationAdmin();
+
+    $this->actingAs($admin, 'web')
+        ->postJson(route('admin.communication.preview'), [
+            'subject' => 'All staff',
+            'body' => 'Preview',
+            'all_staff' => true,
+        ])
+        ->assertOk()
+        ->assertJsonPath('count', 7);
+
+    $this->actingAs($admin, 'web')
+        ->post(route('admin.communication.store'), [
+            'subject' => 'All staff memo',
+            'body' => 'Please read the updated attendance policy.',
+            'all_staff' => true,
+        ])
+        ->assertRedirect();
+
+    $message = Communication::query()->latest('id')->first();
+    expect($message->recipient_count)->toBe(7)
+        ->and($message->status)->toBe(Communication::STATUS_SENT);
+});
+
+it('prevents administrators from using recipient groups they are not authorized for', function () {
+    $limited = makeCommunicationAdmin([
+        CommunicationPermissions::VIEW,
+        CommunicationPermissions::COMPOSE,
+        CommunicationPermissions::SEND,
+        CommunicationPermissions::SEND_SELECTED_STAFF,
+    ]);
+
+    $this->actingAs($limited, 'web')
+        ->post(route('admin.communication.store'), [
+            'subject' => 'Unauthorized broadcast',
+            'body' => 'Should fail',
+            'all_staff' => true,
+        ])
+        ->assertForbidden();
+
+    $this->actingAs($limited, 'web')
+        ->post(route('admin.communication.store'), [
+            'subject' => 'Selected staff only',
+            'body' => 'Allowed',
+            'staff_ids' => [$this->lecturerA1->id],
+        ])
+        ->assertRedirect();
+});
+
+it('blocks unauthorized admins from the communication module', function () {
+    $outsider = User::factory()->create([
+        'must_change_password' => false,
+        'password_changed_at' => now(),
+        'email_verified_at' => now(),
+        'status' => User::STATUS_ACTIVE,
+    ]);
+
+    $this->actingAs($outsider, 'web')
+        ->get(route('admin.communication.index'))
+        ->assertForbidden();
+
+    $this->actingAs($outsider, 'web')
+        ->post(route('admin.communication.store'), [
+            'subject' => 'No access',
+            'body' => 'Should fail',
+            'all_staff' => true,
+        ])
+        ->assertForbidden();
+});
+
+it('prevents teachers from viewing messages they did not send or receive', function () {
+    $admin = makeCommunicationAdmin();
+
+    $this->actingAs($admin, 'web')
+        ->post(route('admin.communication.store'), [
+            'subject' => 'Private to A1',
+            'body' => 'Only for lecturer A1',
+            'staff_ids' => [$this->lecturerA1->id],
+        ])
+        ->assertRedirect();
+
+    $message = Communication::query()->latest('id')->first();
+
+    $this->actingAs($this->lecturerB1, 'teacher')
+        ->get(route('teacher.communication.show', $message))
+        ->assertForbidden();
+
+    $this->actingAs($this->dean, 'teacher')
+        ->get(route('teacher.communication.show', $message))
+        ->assertForbidden();
+});
+
+it('saves drafts without delivering notifications', function () {
+    $admin = makeCommunicationAdmin();
+
+    $this->actingAs($admin, 'web')
+        ->post(route('admin.communication.store'), [
+            'subject' => 'Draft memo',
+            'body' => 'Not ready yet',
+            'save_as_draft' => true,
+            'all_staff' => true,
+        ])
+        ->assertRedirect(route('admin.communication.sent'));
+
+    $message = Communication::query()->latest('id')->first();
+    expect($message->status)->toBe(Communication::STATUS_DRAFT)
+        ->and($message->recipients()->count())->toBe(0)
+        ->and($this->lecturerA1->notifications()->count())->toBe(0);
+});

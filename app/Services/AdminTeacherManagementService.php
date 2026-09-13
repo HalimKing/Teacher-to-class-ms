@@ -14,23 +14,28 @@ use Illuminate\Http\Request;
 
 class AdminTeacherManagementService
 {
-    public function getIndexPayload(Request $request): array
+    public function getIndexPayload(Request $request, ?Teacher $leader = null): array
     {
+        if ($leader) {
+            app(LeadershipScope::class)->applyRequestScope($request, $leader);
+        }
+
         $today = Carbon::today()->toDateString();
         $context = $this->attendanceContext($today);
 
         return [
-            'summaryCards' => $this->getSummaryCards($today, $context),
-            'teachers' => $this->paginateTeachers($request, $context),
+            'summaryCards' => $this->getSummaryCards($today, $context, $leader),
+            'teachers' => $this->paginateTeachers($request, $context, $leader),
             'faculties' => Faculty::select('id', 'name')->orderBy('name')->get(),
             'departments' => Department::select('id', 'name', 'faculty_id')->orderBy('name')->get(),
             'filters' => $this->currentFilters($request),
+            'leadershipScope' => $leader ? app(LeadershipScope::class)->summary($leader) : null,
         ];
     }
 
     public function getQuickView(Teacher $teacher): array
     {
-        $teacher->load(['faculty', 'department', 'courses', 'timeTables.classroom', 'timeTables.course']);
+        $teacher->load(['faculty', 'department', 'leadershipFaculty', 'leadershipDepartment', 'courses', 'timeTables.classroom', 'timeTables.course']);
 
         $today = Carbon::today()->toDateString();
         $monthStart = Carbon::now()->startOfMonth()->toDateString();
@@ -82,6 +87,11 @@ class AdminTeacherManagementService
                 'staff_type' => $teacher->staff_type,
                 'employment_status' => $teacher->employment_status ?? Teacher::EMPLOYMENT_STATUS_PERMANENT,
                 'employment_status_label' => $teacher->employmentStatusLabel(),
+                'leadership_role' => $teacher->leadership_role,
+                'leadership_role_label' => $teacher->leadershipRoleLabel(),
+                'leadership_unit' => $teacher->isHeadOfDepartment()
+                    ? $teacher->leadershipDepartment?->name
+                    : $teacher->leadershipFaculty?->name,
                 'created_at' => $teacher->created_at?->format('M d, Y'),
             ],
             'attendance' => [
@@ -109,7 +119,7 @@ class AdminTeacherManagementService
         ];
     }
 
-    public function filteredQuery(Request $request): Builder
+    public function filteredQuery(Request $request, ?Teacher $leader = null): Builder
     {
         $query = Teacher::query()
             ->select([
@@ -124,11 +134,18 @@ class AdminTeacherManagementService
                 'title',
                 'staff_type',
                 'employment_status',
+                'leadership_role',
+                'leadership_faculty_id',
+                'leadership_department_id',
                 'face_registered_at',
                 'created_at',
             ])
-            ->with(['faculty:id,name', 'department:id,name'])
+            ->with(['faculty:id,name', 'department:id,name', 'leadershipFaculty:id,name', 'leadershipDepartment:id,name'])
             ->withCount(['timeTables', 'courses']);
+
+        if ($leader) {
+            app(LeadershipScope::class)->applyToTeachers($query, $leader);
+        }
 
         $this->applyFilters($query, $request);
         $this->applySorting($query, $request);
@@ -159,10 +176,10 @@ class AdminTeacherManagementService
         ]);
     }
 
-    private function paginateTeachers(Request $request, array $context)
+    private function paginateTeachers(Request $request, array $context, ?Teacher $leader = null)
     {
         $perPage = min(max((int) $request->get('per_page', 15), 5), 100);
-        $paginator = $this->filteredQuery($request)->paginate($perPage)->withQueryString();
+        $paginator = $this->filteredQuery($request, $leader)->paginate($perPage)->withQueryString();
 
         return $paginator->through(fn (Teacher $teacher) => $this->transformTeacher($teacher, $context));
     }
@@ -263,7 +280,7 @@ class AdminTeacherManagementService
             $today = Carbon::today()->toDateString();
             if ($request->attendanceToday === 'present') {
                 $query->where(function (Builder $attendanceQuery) use ($today) {
-                    $attendanceQuery->whereHas('timeTables', function (Builder $timetableQuery) use ($today) {
+                    $attendanceQuery->whereHas('timeTables', function (Builder $timetableQuery) {
                         $timetableQuery->where('staff_type', Teacher::STAFF_TYPE_LECTURER);
                     })->whereIn('id', function ($sub) use ($today) {
                         $sub->select('teacher_id')
@@ -325,7 +342,7 @@ class AdminTeacherManagementService
                 ->map(fn ($id) => (int) $id)
                 ->all();
 
-            if (!empty($ids)) {
+            if (! empty($ids)) {
                 $query->whereIn('id', $ids);
             }
         }
@@ -347,15 +364,20 @@ class AdminTeacherManagementService
         $query->orderBy($column, $sortDir)->orderBy('last_name', $sortDir);
     }
 
-    private function getSummaryCards(string $today, array $context): array
+    private function getSummaryCards(string $today, array $context, ?Teacher $leader = null): array
     {
-        $totalTeachers = Teacher::count();
-        $newThisMonth = Teacher::whereMonth('created_at', now()->month)
+        $scoped = fn () => $leader
+            ? app(LeadershipScope::class)->applyToTeachers(Teacher::query(), $leader)
+            : Teacher::query();
+
+        $totalTeachers = $scoped()->count();
+        $newThisMonth = $scoped()
+            ->whereMonth('created_at', now()->month)
             ->whereYear('created_at', now()->year)
             ->count();
-        $withTimetables = Teacher::whereHas('timeTables')->count();
+        $withTimetables = $scoped()->whereHas('timeTables')->count();
         $withoutTimetables = max($totalTeachers - $withTimetables, 0);
-        $faceEnrolled = Teacher::whereNotNull('face_registered_at')->whereNotNull('face_descriptor')->count();
+        $faceEnrolled = $scoped()->whereNotNull('face_registered_at')->whereNotNull('face_descriptor')->count();
         $pendingFace = max($totalTeachers - $faceEnrolled, 0);
 
         $presentToday = $context['present_teacher_ids']->count() + $context['present_staff_ids']->count();
@@ -372,8 +394,8 @@ class AdminTeacherManagementService
             + StaffAttendance::whereDate('date', $today)->count();
         $faceSuccessRate = $totalTodayRecords > 0 ? round(($verifiedToday / $totalTodayRecords) * 100, 1) : 0;
 
-        $lecturerCount = Teacher::where('staff_type', Teacher::STAFF_TYPE_LECTURER)->count();
-        $administratorCount = Teacher::where('staff_type', Teacher::STAFF_TYPE_ADMINISTRATOR)->count();
+        $lecturerCount = $scoped()->where('staff_type', Teacher::STAFF_TYPE_LECTURER)->count();
+        $administratorCount = $scoped()->where('staff_type', Teacher::STAFF_TYPE_ADMINISTRATOR)->count();
         $lecturersPresentToday = $context['present_teacher_ids']->count();
         $administratorsPresentToday = $context['present_staff_ids']->count();
 
@@ -385,7 +407,7 @@ class AdminTeacherManagementService
             ['title' => 'Present Today', 'value' => (string) $presentToday, 'change' => "{$lecturersPresentToday} lecturers · {$administratorsPresentToday} administrators", 'changeType' => 'positive', 'icon' => 'LogIn', 'group' => 'attendance'],
             ['title' => 'Absent Today', 'value' => (string) $absentToday, 'change' => "{$scheduledToday} scheduled today", 'changeType' => $absentToday > 0 ? 'negative' : 'neutral', 'icon' => 'LogOut', 'group' => 'attendance'],
             ['title' => 'Attendance Rate', 'value' => "{$attendanceRate}%", 'change' => 'Today scheduled staff', 'changeType' => $attendanceRate >= 80 ? 'positive' : 'neutral', 'icon' => 'Activity', 'group' => 'attendance'],
-            ['title' => 'Face Enrolled', 'value' => (string) $faceEnrolled, 'change' => $totalTeachers > 0 ? round(($faceEnrolled / $totalTeachers) * 100, 1) . '% enrolled' : '0% enrolled', 'changeType' => 'positive', 'icon' => 'ShieldCheck', 'group' => 'verification'],
+            ['title' => 'Face Enrolled', 'value' => (string) $faceEnrolled, 'change' => $totalTeachers > 0 ? round(($faceEnrolled / $totalTeachers) * 100, 1).'% enrolled' : '0% enrolled', 'changeType' => 'positive', 'icon' => 'ShieldCheck', 'group' => 'verification'],
             ['title' => 'Pending Enrollment', 'value' => (string) $pendingFace, 'change' => 'Awaiting face capture', 'changeType' => $pendingFace > 0 ? 'negative' : 'neutral', 'icon' => 'ShieldX', 'group' => 'verification'],
             ['title' => 'Face Success Rate', 'value' => "{$faceSuccessRate}%", 'change' => "Today's verified check-ins", 'changeType' => 'positive', 'icon' => 'ShieldCheck', 'group' => 'verification'],
             ['title' => 'With Timetables', 'value' => (string) $withTimetables, 'change' => 'Assigned schedules', 'changeType' => 'positive', 'icon' => 'Calendar', 'group' => 'timetable'],
@@ -411,6 +433,11 @@ class AdminTeacherManagementService
             'staff_type' => $teacher->staff_type,
             'employment_status' => $teacher->employment_status ?? Teacher::EMPLOYMENT_STATUS_PERMANENT,
             'employment_status_label' => $teacher->employmentStatusLabel(),
+            'leadership_role' => $teacher->leadership_role,
+            'leadership_role_label' => $teacher->leadershipRoleLabel(),
+            'leadership_unit' => $teacher->isHeadOfDepartment()
+                ? $teacher->leadershipDepartment?->name
+                : $teacher->leadershipFaculty?->name,
             'faculty' => $teacher->faculty?->name ?? 'N/A',
             'department' => $teacher->department?->name ?? 'N/A',
             'assigned_classes_count' => $teacher->courses_count ?? 0,
@@ -422,7 +449,7 @@ class AdminTeacherManagementService
             'attendance_badge' => $this->resolveTodayAttendanceBadge($teacher, $todayRecord),
             'account_status' => ($teacher->time_tables_count ?? 0) > 0 ? 'active' : 'inactive',
             'created_at' => $teacher->created_at?->format('M d, Y'),
-            'initials' => strtoupper(substr((string) $teacher->first_name, 0, 1) . substr((string) $teacher->last_name, 0, 1)),
+            'initials' => strtoupper(substr((string) $teacher->first_name, 0, 1).substr((string) $teacher->last_name, 0, 1)),
         ];
     }
 
@@ -456,7 +483,7 @@ class AdminTeacherManagementService
 
     private function resolveTodayAttendanceLabel(Teacher $teacher, TeacherAttendance|StaffAttendance|null $record): string
     {
-        if (!$record) {
+        if (! $record) {
             return 'Not checked in';
         }
 
@@ -491,7 +518,7 @@ class AdminTeacherManagementService
 
     private function resolveTodayAttendanceBadge(Teacher $teacher, TeacherAttendance|StaffAttendance|null $record): string
     {
-        if (!$record) {
+        if (! $record) {
             return 'absent';
         }
 
@@ -500,7 +527,7 @@ class AdminTeacherManagementService
             if ($record->attendance_status === 'late') {
                 return 'late';
             }
-            if (!$record->face_verified && $record->check_in_time) {
+            if (! $record->face_verified && $record->check_in_time) {
                 return 'unverified';
             }
             if ($record->check_out_time) {
@@ -514,7 +541,7 @@ class AdminTeacherManagementService
         if ($record->status === 'late') {
             return 'late';
         }
-        if (!$record->face_verified && $record->check_in_time) {
+        if (! $record->face_verified && $record->check_in_time) {
             return 'unverified';
         }
         if ($record->check_out_time) {

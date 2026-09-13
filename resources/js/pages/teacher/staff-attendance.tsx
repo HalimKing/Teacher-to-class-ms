@@ -14,7 +14,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Dashboard', href: '/teacher/dashboard' },
-    { title: 'Staff Attendance', href: '/teacher/staff-attendance' },
+    { title: 'Take Attendance', href: '/teacher/staff-attendance' },
 ];
 
 const mapContainerStyle = {
@@ -538,13 +538,13 @@ export default function StaffAttendancePage({
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="Staff Attendance" />
+            <Head title="Take Attendance" />
 
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 p-4 md:p-6">
                 <header className="space-y-2">
                     <div className="inline-flex items-center gap-2 rounded-full bg-violet-100 px-3 py-1 text-sm font-medium text-violet-800 dark:bg-violet-900/30 dark:text-violet-200">
                         <ShieldCheck className="size-4" />
-                        Staff Attendance
+                        Take Attendance
                     </div>
                     <h1 className="text-2xl font-bold tracking-tight text-sidebar-foreground md:text-3xl">Mark your attendance</h1>
                     <p className="text-sm text-sidebar-foreground/70">{todayLabel}</p>

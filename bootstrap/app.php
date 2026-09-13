@@ -2,12 +2,14 @@
 
 use App\Http\Middleware\AuthenticateAny;
 use App\Http\Middleware\EnsureAttendancePortalSession;
+use App\Http\Middleware\EnsureLeadershipAssignment;
 use App\Http\Middleware\EnsureTeacherStaffType;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\PreventHttpCaching;
 use App\Http\Middleware\RestrictAttendancePortalAccess;
 use App\Services\ActivityLogService;
+use App\Support\AuthenticatedHome;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -31,7 +33,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'sidebar_state',
         ]);
 
-         $middleware->alias([
+        $middleware->alias([
             'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
             'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
             'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
@@ -40,7 +42,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'attendance.portal' => EnsureAttendancePortalSession::class,
             'attendance.portal.restrict' => RestrictAttendancePortalAccess::class,
             'password.changed' => \App\Http\Middleware\EnsurePasswordIsChanged::class,
+            'leadership' => EnsureLeadershipAssignment::class,
         ]);
+
+        $middleware->redirectUsersTo(fn (Request $request) => AuthenticatedHome::path($request));
 
         $middleware->web(append: [
             HandleAppearance::class,
@@ -64,7 +69,7 @@ return Application::configure(basePath: dirname(__DIR__))
             if ($request->user()) {
                 app(ActivityLogService::class)->logSecurityEvent(
                     eventType: 'permission_denied',
-                    description: 'Permission denied while accessing ' . $request->path(),
+                    description: 'Permission denied while accessing '.$request->path(),
                     metadata: [
                         'message' => $exception->getMessage(),
                     ],

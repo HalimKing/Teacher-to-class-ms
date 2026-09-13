@@ -23,6 +23,9 @@ export interface TeacherListItem {
     staff_type: string;
     employment_status: string;
     employment_status_label: string;
+    leadership_role?: string | null;
+    leadership_role_label?: string | null;
+    leadership_unit?: string | null;
     faculty: string;
     department: string;
     assigned_classes_count: number;
@@ -79,6 +82,9 @@ export interface TeacherQuickViewData {
         staff_type: string;
         employment_status?: string;
         employment_status_label?: string;
+        leadership_role?: string | null;
+        leadership_role_label?: string | null;
+        leadership_unit?: string | null;
         created_at?: string;
     };
     attendance: {

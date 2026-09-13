@@ -2,13 +2,17 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\SystemSetting;
+use App\Models\Teacher;
+use App\Models\User;
+use App\Services\AttendancePortalService;
+use App\Services\LeadershipScope;
+use App\Support\AuthenticatedHome;
+use App\Support\LecturerNotificationPayload;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 use Tighten\Ziggy\Ziggy;
-use App\Models\SystemSetting;
-use App\Services\AttendancePortalService;
-use App\Support\LecturerNotificationPayload;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -65,31 +69,36 @@ class HandleInertiaRequests extends Middleware
             ],
 
             'flash' => [
-                'success' => fn() => $request->session()->get('success'),
-                'error' => fn() => $request->session()->get('error'),
-                'generatedPassword' => fn() => $request->session()->get('generatedPassword'),
+                'success' => fn () => $request->session()->get('success'),
+                'error' => fn () => $request->session()->get('error'),
+                'generatedPassword' => fn () => $request->session()->get('generatedPassword'),
             ],
 
             'auth' => [
                 'user' => $user,
 
-                // Only admins (web guard) have Spatie permissions
-                'permissions' => auth()->guard('web')->check()
+                // Only admin users have Spatie permissions. Do not call this on Teacher.
+                'permissions' => $user instanceof User
                     ? $user->getAllPermissions()->pluck('name')
                     : [],
 
-                // Optional: expose which guard is logged in
-                'guard' => auth()->guard('web')->check()
-                    ? 'admin'
-                    : (auth()->guard('teacher')->check() ? 'teacher' : null),
+                'guard' => $user instanceof Teacher
+                    ? 'teacher'
+                    : ($user instanceof User ? 'admin' : null),
 
-                'mustChangePassword' => auth()->guard('web')->check() && $user instanceof \App\Models\User
+                'home' => AuthenticatedHome::path($request),
+
+                'mustChangePassword' => $user instanceof User
                     ? (bool) $user->must_change_password
                     : false,
+
+                'leadership' => $user instanceof Teacher
+                    ? app(LeadershipScope::class)->summary($user)
+                    : null,
             ],
 
             // For teachers: recent unread notifications (e.g. session reminders)
-            'unreadNotifications' => fn() => auth()->guard('teacher')->check() && $user
+            'unreadNotifications' => fn () => auth()->guard('teacher')->check() && $user
                 ? $user->unreadNotifications()->latest()->take(10)->get()->map(fn ($n) => [
                     'id' => $n->id,
                     'type' => $n->type,
@@ -98,7 +107,7 @@ class HandleInertiaRequests extends Middleware
                     'created_at' => $n->created_at->toIso8601String(),
                 ])->toArray()
                 : [],
-            'unreadNotificationsCount' => fn() => auth()->guard('teacher')->check() && $user
+            'unreadNotificationsCount' => fn () => auth()->guard('teacher')->check() && $user
                 ? $user->unreadNotifications()->count()
                 : 0,
 

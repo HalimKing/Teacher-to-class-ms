@@ -6,6 +6,7 @@ import {
   User,
 } from 'lucide-react';
 import FaceEnrollmentSection from '@/components/face/FaceEnrollmentSection';
+import LeadershipAssignmentFields from '@/components/teachers/LeadershipAssignmentFields';
 import AppLayout from '@/layouts/app-layout';
 import TextField from '@mui/material/TextField';
 import ComboBox from '@/components/combobox';
@@ -26,6 +27,9 @@ interface FormData {
   employeeId: string;
   staffType: string;
   employmentStatus: string;
+  leadershipRole: string;
+  leadershipFaculty: number | null;
+  leadershipDepartment: number | null;
 }
 
 interface PageProps {
@@ -56,6 +60,9 @@ interface Teacher {
   title: string;
   staff_type: string;
   employment_status?: string;
+  leadership_role?: string | null;
+  leadership_faculty_id?: number | null;
+  leadership_department_id?: number | null;
   face_enrollment_status?: string;
   face_registered_at?: string | null;
 }
@@ -63,6 +70,9 @@ interface Teacher {
 interface EditTeacherPageProps {
   teacher: Teacher;
   facultyOptions: FacultyOption[];
+  assignLeadership?: boolean;
+  lockOrganization?: boolean;
+  submitRoute?: string;
 }
 
 const titleData = [
@@ -86,14 +96,14 @@ const employmentStatusData = [
   { label: 'Other', value: 'other' },
 ];
 
-const EditTeacherPage = ({ facultyOptions, teacher }: EditTeacherPageProps) => {
+const EditTeacherPage = ({ facultyOptions, teacher, assignLeadership = true, lockOrganization = false, submitRoute }: EditTeacherPageProps) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   
   const { departments, faculties, system_settings } = usePage<PageProps>().props;
   const [departmentsOptions, setDepartmentsOptions] = useState<DepartmentOption[]>([]);
   const [initialDepartment, setInitialDepartment] = useState<DepartmentOption | null>(null);
 
-  const { data, setData, put, processing, errors, reset } = useForm<FormData>({
+  const { data, setData, put, processing, errors, reset, transform } = useForm<FormData>({
     firstName: teacher.first_name || '',
     lastName: teacher.last_name || '',
     email: teacher.email || '',
@@ -104,7 +114,15 @@ const EditTeacherPage = ({ facultyOptions, teacher }: EditTeacherPageProps) => {
     faculty: teacher.faculty_id || 0,
     staffType: teacher.staff_type || 'lecturer',
     employmentStatus: teacher.employment_status || 'permanent',
+    leadershipRole: teacher.leadership_role || '',
+    leadershipFaculty: teacher.leadership_role ? teacher.faculty_id || teacher.leadership_faculty_id || null : null,
+    leadershipDepartment: teacher.leadership_department_id || null,
   });
+
+  transform((form) => ({
+    ...form,
+    leadershipFaculty: form.leadershipRole ? form.faculty || null : null,
+  }));
 
   const initialFacultyOption = facultyOptions.find(option => option.value === teacher.faculty_id) || null;
 
@@ -117,7 +135,7 @@ const EditTeacherPage = ({ facultyOptions, teacher }: EditTeacherPageProps) => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    put(route('admin.teachers.update', teacher.id), {
+    put(submitRoute || route('admin.teachers.update', teacher.id), {
       onSuccess: () => {
         // Inertia will handle the redirect or success message
       },
@@ -146,9 +164,14 @@ const EditTeacherPage = ({ facultyOptions, teacher }: EditTeacherPageProps) => {
 
   const handleValueChangeFaculty = (value: string | number | undefined) => {
     const facultyId = value as number;
-    setData('faculty', facultyId);
-    setData('department', null); // Reset department when faculty changes
-    setInitialDepartment(null); // Reset initial department
+    setData((current) => ({
+      ...current,
+      faculty: facultyId,
+      department: null,
+      leadershipFaculty: current.leadershipRole ? facultyId : null,
+      leadershipDepartment: current.leadershipRole === 'head_of_department' ? null : current.leadershipDepartment,
+    }));
+    setInitialDepartment(null);
     fetchDepartments(facultyId);
   };
 
@@ -368,6 +391,34 @@ const EditTeacherPage = ({ facultyOptions, teacher }: EditTeacherPageProps) => {
                       </div>
                     </div>
                   </div>
+
+                  {assignLeadership && (
+                    <LeadershipAssignmentFields
+                      role={data.leadershipRole}
+                      facultyId={data.faculty || null}
+                      departmentId={data.leadershipDepartment}
+                      errors={{
+                        leadershipRole: errors.leadershipRole,
+                        leadershipFaculty: errors.leadershipFaculty,
+                        leadershipDepartment: errors.leadershipDepartment,
+                      }}
+                      onRoleChange={(value) => {
+                        setData((current) => ({
+                          ...current,
+                          leadershipRole: value,
+                          leadershipFaculty: value ? current.faculty || null : null,
+                          leadershipDepartment: value === 'head_of_department' ? current.leadershipDepartment : null,
+                        }));
+                      }}
+                      onDepartmentChange={(value) => setData('leadershipDepartment', value)}
+                    />
+                  )}
+
+                  {lockOrganization && (
+                    <p className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-200">
+                      Organization is limited to your assigned department.
+                    </p>
+                  )}
 
                   <div className="mb-6">
                     <FaceEnrollmentSection

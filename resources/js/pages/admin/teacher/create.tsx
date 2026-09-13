@@ -6,6 +6,7 @@ import {
   User,
 } from 'lucide-react';
 import FaceEnrollmentSection from '@/components/face/FaceEnrollmentSection';
+import LeadershipAssignmentFields from '@/components/teachers/LeadershipAssignmentFields';
 import AppLayout from '@/layouts/app-layout';
 import TextField from '@mui/material/TextField';
 import ComboBox from '@/components/combobox';
@@ -25,6 +26,9 @@ interface FormData {
   employeeId: string;
   staffType: string;
   employmentStatus: string;
+  leadershipRole: string;
+  leadershipFaculty: number | null;
+  leadershipDepartment: number | null;
 }
 
 interface PageProps {
@@ -68,7 +72,7 @@ const CreateTeacherPage = ({facultyOptions}: {facultyOptions: FacultyOption[]}) 
   const { flash, system_settings } = usePage<PageProps>().props;
   const [departmentsOptions, setDepartments] = useState<{label: string; value: string}[]>([]);
 
-  const { data, setData, post, processing, errors, reset } = useForm<FormData>({
+  const { data, setData, post, processing, errors, reset, transform } = useForm<FormData>({
     firstName: '',
     lastName: '',
     email: '',
@@ -79,7 +83,15 @@ const CreateTeacherPage = ({facultyOptions}: {facultyOptions: FacultyOption[]}) 
     staffType: 'lecturer',
     employmentStatus: 'permanent',
     faculty: 0,
+    leadershipRole: '',
+    leadershipFaculty: null,
+    leadershipDepartment: null,
   });
+
+  transform((form) => ({
+    ...form,
+    leadershipFaculty: form.leadershipRole ? form.faculty || null : null,
+  }));
 
   useEffect(() => {
     if (flash?.success) {
@@ -137,8 +149,14 @@ const CreateTeacherPage = ({facultyOptions}: {facultyOptions: FacultyOption[]}) 
     };
 
     const handleValueChangeFaculty = (value: string | number | undefined) => {
-        setData('faculty', value as number);
-        fetchDepartments(value as number);
+        const facultyId = value as number;
+        setData((current) => ({
+            ...current,
+            faculty: facultyId,
+            leadershipFaculty: current.leadershipRole ? facultyId : null,
+            leadershipDepartment: current.leadershipRole === 'head_of_department' ? null : current.leadershipDepartment,
+        }));
+        fetchDepartments(facultyId);
     }
 
 
@@ -340,6 +358,26 @@ const CreateTeacherPage = ({facultyOptions}: {facultyOptions: FacultyOption[]}) 
                     </div>
                   </div>
                 </div>
+
+                <LeadershipAssignmentFields
+                  role={data.leadershipRole}
+                  facultyId={data.faculty || null}
+                  departmentId={data.leadershipDepartment}
+                  errors={{
+                    leadershipRole: errors.leadershipRole,
+                    leadershipFaculty: errors.leadershipFaculty,
+                    leadershipDepartment: errors.leadershipDepartment,
+                  }}
+                  onRoleChange={(value) => {
+                    setData((current) => ({
+                      ...current,
+                      leadershipRole: value,
+                      leadershipFaculty: value ? current.faculty || null : null,
+                      leadershipDepartment: value === 'head_of_department' ? current.leadershipDepartment : null,
+                    }));
+                  }}
+                  onDepartmentChange={(value) => setData('leadershipDepartment', value)}
+                />
 
                 <div className="mb-6">
                   <FaceEnrollmentSection enrollmentRequired={Boolean(system_settings?.attendance?.face_enrollment_required?.value)} />

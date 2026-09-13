@@ -4,11 +4,13 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Services\AuthSecuritySettingsService;
+use App\Support\AuthenticatedHome;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
+use Inertia\Response;
 
 class UnifiedLoginController extends Controller
 {
@@ -16,8 +18,12 @@ class UnifiedLoginController extends Controller
         private AuthSecuritySettingsService $authSecuritySettings,
     ) {}
 
-    public function show(Request $request)
+    public function show(Request $request): Response|RedirectResponse
     {
+        if (Auth::guard('web')->check() || Auth::guard('teacher')->check()) {
+            return redirect()->to(AuthenticatedHome::path($request));
+        }
+
         return Inertia::render('auth/login', [
             'canResetPassword' => Route::has('password.request') && $this->authSecuritySettings->isForgotPasswordEnabled(),
             'status' => $request->session()->get('status'),
@@ -43,13 +49,15 @@ class UnifiedLoginController extends Controller
         // 1️⃣ Try admin login
         if (Auth::guard('web')->attempt($credentials, $remember)) {
             $request->session()->regenerate();
-            return redirect()->route('admin.dashboard');
+
+            return redirect()->to(AuthenticatedHome::path($request));
         }
 
         // 2️⃣ Try teacher login
         if (Auth::guard('teacher')->attempt($credentials, $remember)) {
             $request->session()->regenerate();
-            return redirect()->route('teacher.dashboard');
+
+            return redirect()->to(AuthenticatedHome::path($request));
         }
 
         return back()->withErrors([

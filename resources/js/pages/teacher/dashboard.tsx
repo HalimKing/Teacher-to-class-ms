@@ -103,6 +103,8 @@ interface TeacherProfile {
     status: string;
     nextClass: string;
     upcomingOfficeHours: string;
+    leadership_role_label?: string | null;
+    leadership_unit?: string | null;
 }
 
 interface UpcomingReminder {
@@ -266,6 +268,9 @@ export default function TeacherDashboard({
                                 </h1>
                                 <p className="mt-1 text-purple-100">
                                     {profileData.subject} • {profileData.department}
+                                    {profileData.leadership_role_label
+                                        ? ` • ${profileData.leadership_role_label}${profileData.leadership_unit ? ` (${profileData.leadership_unit})` : ''}`
+                                        : ''}
                                 </p>
                                 {isLecturer ? (
                                     <div className="mt-3 flex flex-wrap items-center gap-3 lg:gap-4">
@@ -301,7 +306,7 @@ export default function TeacherDashboard({
 
                 {!isLecturer ? (
                     <div className="rounded-xl border border-sidebar-border/70 bg-white p-6 shadow-sm dark:border-sidebar-border dark:bg-sidebar-accent">
-                        <h2 className="text-xl font-semibold text-sidebar-foreground dark:text-sidebar-foreground">Staff Attendance</h2>
+                        <h2 className="text-xl font-semibold text-sidebar-foreground dark:text-sidebar-foreground">Take Attendance</h2>
                         <p className="mt-2 max-w-2xl text-sm text-sidebar-foreground/70 dark:text-sidebar-foreground/70">
                             Your account is configured as administrative staff. Lecturer class/course attendance tools are hidden for this staff type.
                         </p>
@@ -310,7 +315,7 @@ export default function TeacherDashboard({
                                 href="/teacher/staff-attendance"
                                 className="inline-flex rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-700"
                             >
-                                Open Staff Attendance
+                                Open Take Attendance
                             </Link>
                             <Link
                                 href="/teacher/staff-reports"

@@ -4,7 +4,7 @@ namespace App\Providers;
 
 use App\Listeners\LogAuthenticationEvents;
 use App\Models\Teacher;
-use App\Services\ActivityLogService;
+use App\Services\UnifiedPasswordResetService;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
@@ -13,8 +13,6 @@ use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
-use App\Services\UnifiedPasswordResetService;
-use Spatie\Permission\Exceptions\UnauthorizedException;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -43,6 +41,10 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('view-lecturer-attendance', fn ($user): bool => $user instanceof Teacher && $user->isLecturer());
         Gate::define('view-class-attendance', fn ($user): bool => $user instanceof Teacher && $user->isLecturer());
         Gate::define('view-staff-attendance', fn ($user): bool => $user instanceof Teacher && $user->isAdministrator());
+        Gate::define('manage-unit-staff', fn ($user): bool => $user instanceof Teacher && $user->hasLeadershipAssignment());
+        Gate::define('view-unit-attendance', fn ($user): bool => $user instanceof Teacher && $user->hasLeadershipAssignment());
+        Gate::define('send-unit-messages', fn ($user): bool => $user instanceof Teacher && $user->hasLeadershipAssignment());
+        Gate::define('view-unit-messages', fn ($user): bool => $user instanceof Teacher && $user->hasLeadershipAssignment());
 
         Event::listen(Login::class, [LogAuthenticationEvents::class, 'handleLogin']);
         Event::listen(Logout::class, [LogAuthenticationEvents::class, 'handleLogout']);
@@ -76,8 +78,8 @@ class AppServiceProvider extends ServiceProvider
             $expireMinutes = config('auth.passwords.users.expire', 60);
 
             return (new MailMessage)
-                ->subject('Reset your ' . config('app.name') . ' password')
-                ->greeting('Hello ' . ($notifiable->name ?? $notifiable->first_name ?? 'there') . ',')
+                ->subject('Reset your '.config('app.name').' password')
+                ->greeting('Hello '.($notifiable->name ?? $notifiable->first_name ?? 'there').',')
                 ->line("We received a password reset request for your {$accountLabel} account.")
                 ->action('Reset password', $url)
                 ->line("This link expires in {$expireMinutes} minutes.")

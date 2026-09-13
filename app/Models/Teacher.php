@@ -4,12 +4,11 @@ namespace App\Models;
 
 use App\Casts\NullableEncryptedArray;
 use App\Services\FacialRecognitionService;
-use Illuminate\Database\Eloquent\Model;
+use App\Support\LeadershipAssignment;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
 class Teacher extends Authenticatable
-
 {
     //
     /**     * The attributes that are mass assignable.
@@ -18,6 +17,7 @@ class Teacher extends Authenticatable
     use Notifiable;
 
     public const STAFF_TYPE_LECTURER = 'lecturer';
+
     public const STAFF_TYPE_ADMINISTRATOR = 'administrator';
 
     public const STAFF_TYPES = [
@@ -26,10 +26,15 @@ class Teacher extends Authenticatable
     ];
 
     public const EMPLOYMENT_STATUS_PERMANENT = 'permanent';
+
     public const EMPLOYMENT_STATUS_NSS = 'nss';
+
     public const EMPLOYMENT_STATUS_INTERN = 'intern';
+
     public const EMPLOYMENT_STATUS_VOLUNTEER = 'volunteer';
+
     public const EMPLOYMENT_STATUS_CASUAL = 'casual';
+
     public const EMPLOYMENT_STATUS_OTHER = 'other';
 
     public const EMPLOYMENT_STATUSES = [
@@ -69,6 +74,9 @@ class Teacher extends Authenticatable
         'title',
         'staff_type',
         'employment_status',
+        'leadership_role',
+        'leadership_faculty_id',
+        'leadership_department_id',
         'face_descriptor',
         'face_registered_at',
         'password_changed_at',
@@ -101,6 +109,16 @@ class Teacher extends Authenticatable
     public function department()
     {
         return $this->belongsTo(Department::class);
+    }
+
+    public function leadershipFaculty()
+    {
+        return $this->belongsTo(Faculty::class, 'leadership_faculty_id');
+    }
+
+    public function leadershipDepartment()
+    {
+        return $this->belongsTo(Department::class, 'leadership_department_id');
     }
 
     public function timeTables()
@@ -143,6 +161,28 @@ class Teacher extends Authenticatable
     public function isAdministrator(): bool
     {
         return $this->staff_type === self::STAFF_TYPE_ADMINISTRATOR;
+    }
+
+    public function hasLeadershipAssignment(): bool
+    {
+        return in_array($this->leadership_role, LeadershipAssignment::ROLES, true);
+    }
+
+    public function isDirectorDean(): bool
+    {
+        return $this->leadership_role === LeadershipAssignment::DIRECTOR_DEAN
+            && $this->leadership_faculty_id !== null;
+    }
+
+    public function isHeadOfDepartment(): bool
+    {
+        return $this->leadership_role === LeadershipAssignment::HEAD_OF_DEPARTMENT
+            && $this->leadership_department_id !== null;
+    }
+
+    public function leadershipRoleLabel(): ?string
+    {
+        return LeadershipAssignment::label($this->leadership_role);
     }
 
     public function employmentStatusLabel(): string

@@ -43,7 +43,7 @@ export default function TeacherNotificationPreferencesPage({ preferences }: Pref
         {
             key: 'administrative_enabled' as const,
             title: 'Administrative Notifications',
-            description: 'Announcements, policy updates, and important notices.',
+            description: 'Announcements, policy updates, unit messages, and important notices.',
         },
         {
             key: 'system_enabled' as const,

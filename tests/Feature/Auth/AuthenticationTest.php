@@ -4,6 +4,7 @@ use App\Models\Department;
 use App\Models\Faculty;
 use App\Models\Teacher;
 use App\Models\User;
+use App\Services\AttendancePortalService;
 use Illuminate\Support\Facades\Auth;
 
 test('login screen can be rendered', function () {
@@ -109,4 +110,140 @@ test('teachers can authenticate with remember me', function () {
 
     $teacher->refresh();
     expect($teacher->remember_token)->not->toBeEmpty();
+});
+
+test('authenticated admins are sent from the home and login pages to the admin dashboard', function () {
+    $user = User::factory()->create();
+
+    $this->actingAs($user, 'web')
+        ->get('/')
+        ->assertRedirect(route('admin.dashboard', absolute: false));
+
+    $this->actingAs($user, 'web')
+        ->get('/login')
+        ->assertRedirect(route('admin.dashboard', absolute: false));
+});
+
+test('authenticated teachers are sent from the home and login pages to the teacher dashboard', function () {
+    $faculty = Faculty::create(['name' => 'Home Faculty '.uniqid()]);
+    $department = Department::create([
+        'name' => 'Home Department '.uniqid(),
+        'faculty_id' => $faculty->id,
+    ]);
+
+    $teacher = Teacher::create([
+        'first_name' => 'Home',
+        'last_name' => 'Teacher',
+        'email' => 'home-teacher-'.uniqid().'@example.com',
+        'phone' => '1234567890',
+        'faculty_id' => $faculty->id,
+        'department_id' => $department->id,
+        'employee_id' => 'HOM'.uniqid(),
+        'title' => 'Mr.',
+        'password' => 'password',
+    ]);
+
+    $this->actingAs($teacher, 'teacher')
+        ->get('/')
+        ->assertRedirect(route('teacher.dashboard', absolute: false));
+
+    $this->actingAs($teacher, 'teacher')
+        ->get('/login')
+        ->assertRedirect(route('teacher.dashboard', absolute: false));
+});
+
+test('a login session is still recognized when the user later visits the home url', function () {
+    $user = User::factory()->create();
+
+    $this->post('/login', [
+        'email' => $user->email,
+        'password' => 'password',
+    ])->assertRedirect(route('admin.dashboard', absolute: false));
+
+    $this->assertAuthenticated('web');
+
+    $this->get('/')
+        ->assertRedirect(route('admin.dashboard', absolute: false));
+
+    $this->get(route('admin.dashboard', absolute: false))
+        ->assertOk();
+});
+
+test('admins who must change their password are sent to the password form', function () {
+    $user = User::factory()->create([
+        'must_change_password' => true,
+    ]);
+
+    $this->actingAs($user, 'web')
+        ->get('/')
+        ->assertRedirect(route('password.edit', absolute: false));
+});
+
+test('header home path is the admin dashboard for authenticated admins', function () {
+    $user = User::factory()->create();
+
+    $this->actingAs($user, 'web')
+        ->get(route('admin.dashboard', absolute: false))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('auth.home', route('admin.dashboard', absolute: false)));
+});
+
+test('header home path is the teacher dashboard for authenticated teachers', function () {
+    $faculty = Faculty::create(['name' => 'Logo Faculty '.uniqid()]);
+    $department = Department::create([
+        'name' => 'Logo Department '.uniqid(),
+        'faculty_id' => $faculty->id,
+    ]);
+
+    $teacher = Teacher::create([
+        'first_name' => 'Logo',
+        'last_name' => 'Teacher',
+        'email' => 'logo-teacher-'.uniqid().'@example.com',
+        'phone' => '1234567890',
+        'faculty_id' => $faculty->id,
+        'department_id' => $department->id,
+        'employee_id' => 'LGO'.uniqid(),
+        'title' => 'Mr.',
+        'password' => 'password',
+    ]);
+
+    $this->actingAs($teacher, 'teacher')
+        ->get(route('teacher.help-desk.index', absolute: false))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('auth.home', route('teacher.dashboard', absolute: false)));
+});
+
+test('attendance portal sessions are sent from home to the portal', function () {
+    $faculty = Faculty::create(['name' => 'Portal Home Faculty '.uniqid()]);
+    $department = Department::create([
+        'name' => 'Portal Home Department '.uniqid(),
+        'faculty_id' => $faculty->id,
+    ]);
+
+    $teacher = Teacher::create([
+        'first_name' => 'Portal',
+        'last_name' => 'Home',
+        'email' => 'portal-home-'.uniqid().'@example.com',
+        'phone' => '1234567890',
+        'faculty_id' => $faculty->id,
+        'department_id' => $department->id,
+        'employee_id' => 'PHM'.uniqid(),
+        'title' => 'Mr.',
+        'password' => 'password',
+    ]);
+
+    $this->actingAs($teacher, 'teacher')
+        ->withSession([
+            AttendancePortalService::SESSION_KEY => [
+                'teacher_id' => $teacher->id,
+                'employee_id' => $teacher->employee_id,
+                'staff_type' => $teacher->staff_type,
+                'started_at' => now()->timestamp,
+                'last_activity_at' => now()->timestamp,
+            ],
+        ])
+        ->get('/')
+        ->assertRedirect(route('attendance.portal', absolute: false));
 });

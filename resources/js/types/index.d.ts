@@ -4,7 +4,16 @@ import type { Config } from 'ziggy-js';
 export interface Auth {
     user: User;
     guard: string;
+    home: string;
     permissions?: string[];
+    leadership?: {
+        role?: string | null;
+        role_label?: string | null;
+        faculty_id?: number | null;
+        faculty_name?: string | null;
+        department_id?: number | null;
+        department_name?: string | null;
+    } | null;
 }
 
 export interface BreadcrumbItem {
@@ -25,6 +34,7 @@ export interface NavItem {
     subItems?: NavItem[];
     permission?: string;
     staffTypes?: string[];
+    requiresLeadership?: boolean;
 }
 
 export interface SharedData {

@@ -211,6 +211,9 @@ export default function TeacherDataTable({
                                         label={teacher.employment_status_label || teacher.employment_status}
                                         tone={teacher.employment_status || 'permanent'}
                                     />
+                                    {teacher.leadership_role_label && (
+                                        <StatusBadge label={teacher.leadership_role_label} tone="assigned" />
+                                    )}
                                 </div>
                             </div>
                         </div>

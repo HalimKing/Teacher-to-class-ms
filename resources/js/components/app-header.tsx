@@ -16,7 +16,7 @@ import { useInitials } from '@/hooks/use-initials';
 import { cn } from '@/lib/utils';
 import { type BreadcrumbItem, type NavItem, type SharedData } from '@/types';
 import { Link, router, usePage } from '@inertiajs/react';
-import { LayoutGrid, Menu, ChevronDown, ChevronRight, Users, Book, Settings, LogOut, BookOpen, UserCheck, ClipboardList, BarChart, Folder, Bell, ScrollText, MapPin, LifeBuoy, GraduationCap, CalendarDays } from 'lucide-react';
+import { LayoutGrid, Menu, ChevronDown, ChevronRight, Users, Book, Settings, LogOut, BookOpen, UserCheck, ClipboardList, BarChart, Folder, Bell, ScrollText, MapPin, LifeBuoy, GraduationCap, CalendarDays, Mail } from 'lucide-react';
 import { useState, useMemo, useEffect } from 'react';
 import AppLogo from './app-logo';
 import AppLogoIcon from './app-logo-icon';
@@ -40,37 +40,71 @@ const teacherNavItems: NavItem[] = [
         staffTypes: ['lecturer'],
     },
     {
-        title: 'Staff Attendance',
+        title: 'Take Attendance',
         href: '/teacher/staff-attendance',
         icon: UserCheck,
         permission: 'teacher.staff-attendance.view',
         staffTypes: ['administrator'],
     },
     {
-        title: 'Explanations',
+        title: 'Attendance Management',
         href: '/teacher/attendance-explanations',
-        icon: ClipboardList,
-        permission: 'admin.teachers.view',
+        icon: ScrollText,
+        subItems: [
+            {
+                title: 'Explanations',
+                href: '/teacher/attendance-explanations',
+                icon: ClipboardList,
+            },
+            {
+                title: 'Venue Change Requests',
+                href: '/teacher/venue-change-requests',
+                icon: MapPin,
+                staffTypes: ['administrator'],
+            },
+            {
+                title: 'Attendance Report',
+                href: '/teacher/staff-reports',
+                icon: BarChart,
+                staffTypes: ['administrator'],
+            },
+        ],
+    },
+    {
+        title: 'Communication',
+        href: '/teacher/communication/inbox',
+        icon: Mail,
+        subItems: [
+            {
+                title: 'Inbox',
+                href: '/teacher/communication/inbox',
+                icon: Mail,
+            },
+            {
+                title: 'Dashboard',
+                href: '/teacher/communication',
+                icon: LayoutGrid,
+                requiresLeadership: true,
+            },
+            {
+                title: 'Compose',
+                href: '/teacher/communication/compose',
+                icon: ScrollText,
+                requiresLeadership: true,
+            },
+            {
+                title: 'Sent Messages',
+                href: '/teacher/communication/sent',
+                icon: ClipboardList,
+                requiresLeadership: true,
+            },
+        ],
     },
     {
         title: 'Help Desk',
         href: '/teacher/help-desk',
         icon: LifeBuoy,
         permission: 'admin.teachers.view',
-    },
-    {
-        title: 'Venue Change Requests',
-        href: '/teacher/venue-change-requests',
-        icon: MapPin,
-        permission: 'teacher.staff-attendance.view',
-        staffTypes: ['administrator'],
-    },
-    {
-        title: 'Attendance Report',
-        href: '/teacher/staff-reports',
-        icon: BarChart,
-        permission: 'teacher.staff-attendance.view',
-        staffTypes: ['administrator'],
     },
     {
         title: 'Academic',
@@ -115,6 +149,26 @@ const teacherNavItems: NavItem[] = [
         icon: BarChart,
         permission: 'teacher.reports.view',
         staffTypes: ['lecturer'],
+    },
+    {
+        title: 'My Unit',
+        href: '/teacher/unit/staff',
+        icon: Users,
+        requiresLeadership: true,
+        subItems: [
+            {
+                title: 'Unit Staff',
+                href: '/teacher/unit/staff',
+                icon: Users,
+                requiresLeadership: true,
+            },
+            {
+                title: 'Unit Attendance',
+                href: '/teacher/unit/attendance',
+                icon: ClipboardList,
+                requiresLeadership: true,
+            },
+        ],
     },
 
 ];
@@ -247,6 +301,29 @@ const mainNavItems: NavItem[] = [
         ],
     },
     {
+        title: 'Communication',
+        href: '/admin/communication',
+        icon: Mail,
+        permission: 'admin.communication.view',
+        subItems: [
+            {
+                title: 'Dashboard',
+                href: '/admin/communication',
+                permission: 'admin.communication.view',
+            },
+            {
+                title: 'Compose',
+                href: '/admin/communication/compose',
+                permission: 'admin.communication.compose',
+            },
+            {
+                title: 'Sent Messages',
+                href: '/admin/communication/sent',
+                permission: 'admin.communication.view-sent',
+            },
+        ],
+    },
+    {
         title: 'Help Desk',
         href: '/admin/help-desk',
         icon: LifeBuoy,
@@ -370,6 +447,9 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
     const [navItems, setNavItems] = useState<NavItem[]>(auth.user && auth.guard === 'teacher' ? teacherNavItems : mainNavItems);
 
     const isTeacher = auth.user && auth.guard === 'teacher';
+    const homeHref =
+        auth.home ||
+        (isTeacher ? route('teacher.dashboard') : route('admin.dashboard'));
     const teacherStaffType = isTeacher ? String(auth.user.staff_type || 'lecturer') : null;
     const isLecturer = teacherStaffType === 'lecturer';
     const venueChangeRequestsEnabled =
@@ -391,6 +471,10 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
         if (isTeacher) {
             return teacherNavItems
                 .filter((item) => {
+                    if (item.requiresLeadership && !auth.leadership?.role) {
+                        return false;
+                    }
+
                     if (item.staffTypes && !item.staffTypes.includes(teacherStaffType || 'lecturer')) {
                         return false;
                     }
@@ -409,7 +493,15 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                     return {
                         ...item,
                         subItems: item.subItems.filter((subItem) => {
+                            if (subItem.requiresLeadership && !auth.leadership?.role) {
+                                return false;
+                            }
+
                             if (subItem.staffTypes && !subItem.staffTypes.includes(teacherStaffType || 'lecturer')) {
+                                return false;
+                            }
+
+                            if (subItem.href === '/teacher/venue-change-requests' && !venueChangeRequestsEnabled) {
                                 return false;
                             }
 
@@ -450,7 +542,7 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
             }
             return true;
         });
-    }, [auth.user, can, teacherStaffType, venueChangeRequestsEnabled]);
+    }, [auth.user, auth.leadership?.role, can, teacherStaffType, venueChangeRequestsEnabled]);
 
     const isNavItemActive = (item: NavItem) => {
         const current = page.url.split('?')[0];
@@ -514,7 +606,9 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                             <SheetContent side="left" className="flex h-full w-[min(18rem,85vw)] flex-col items-stretch justify-between overflow-y-auto bg-sidebar">
                                 <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
                                 <SheetHeader className="flex justify-start text-left">
-                                    <AppLogoIcon className="h-10 w-10" />
+                                    <Link href={homeHref} prefetch className="inline-flex items-center">
+                                        <AppLogoIcon className="h-10 w-10" />
+                                    </Link>
                                 </SheetHeader>
                                 <div className="flex h-full flex-1 flex-col space-y-4 p-4">
                                     <div className="flex h-full flex-col justify-between text-sm">
@@ -584,7 +678,7 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                         </Sheet>
                     </div>
 
-                    <Link href="/dashboard" prefetch className="hidden flex-shrink-0 items-center sm:flex">
+                    <Link href={homeHref} prefetch className="hidden flex-shrink-0 items-center sm:flex">
                         <AppLogo />
                     </Link>
 

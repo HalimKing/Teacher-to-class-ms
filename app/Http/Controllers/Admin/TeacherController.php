@@ -3,18 +3,20 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\Faculty;
 use App\Models\Department;
+use App\Models\Faculty;
 use App\Models\Teacher;
 use App\Notifications\TemporaryPasswordNotification;
 use App\Services\ActivityLogService;
 use App\Services\AdminTeacherManagementService;
+use App\Support\LeadershipAssignment;
 use App\Support\PasswordShareSession;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Maatwebsite\Excel\Facades\Excel;
 
@@ -37,18 +39,18 @@ class TeacherController extends Controller
      */
     public function create()
     {
-        
+
         $faculties = Faculty::select('id', 'name')->orderBy('name')->get();
         $facultyOptions = [];
-        
-        foreach($faculties as $faculty) {
+
+        foreach ($faculties as $faculty) {
             $facultyOptions[] = [
                 'label' => $faculty->name,
-                'value' => $faculty->id
+                'value' => $faculty->id,
             ];
         }
-        
-        return Inertia::render('admin/teacher/create', 
+
+        return Inertia::render('admin/teacher/create',
             compact('facultyOptions'));
     }
 
@@ -68,11 +70,18 @@ class TeacherController extends Controller
             'title' => 'required|string|max:255|in:Prof.,Dr.,Mr.,Ms.',
             'staffType' => ['required', Rule::in(Teacher::STAFF_TYPES)],
             'employmentStatus' => ['required', Rule::in(Teacher::EMPLOYMENT_STATUSES)],
-            // Add other validation rules
+            ...LeadershipAssignment::rules(),
         ]);
-        
-        try{
-            $teacher = new Teacher();
+
+        $this->assertDepartmentBelongsToFaculty((int) $validated['department'], (int) $validated['faculty']);
+        [$leadershipRole, $leadershipFacultyId, $leadershipDepartmentId] = LeadershipAssignment::normalize(
+            $validated['leadershipRole'] ?? null,
+            $validated['leadershipFaculty'] ?? null,
+            $validated['leadershipDepartment'] ?? null,
+        );
+
+        try {
+            $teacher = new Teacher;
             $teacher->first_name = $validated['firstName'];
             $teacher->last_name = $validated['lastName'];
             $teacher->email = $validated['email'];
@@ -83,7 +92,9 @@ class TeacherController extends Controller
             $teacher->title = $validated['title'];
             $teacher->staff_type = $validated['staffType'];
             $teacher->employment_status = $validated['employmentStatus'];
-            // Assign other fields
+            $teacher->leadership_role = $leadershipRole;
+            $teacher->leadership_faculty_id = $leadershipFacultyId;
+            $teacher->leadership_department_id = $leadershipDepartmentId;
             $teacher->save();
 
             app(ActivityLogService::class)->logUserManagement(
@@ -93,10 +104,10 @@ class TeacherController extends Controller
             );
 
             return redirect()->route('admin.teachers.index')
-            ->with('success', 'Staff member created successfully!');
-        } catch(\Throwable $e) {
+                ->with('success', 'Staff member created successfully!');
+        } catch (\Throwable $e) {
             return redirect()->route('admin.teachers.create')
-                ->with('error', 'Error creating staff member: ' . $e->getMessage());
+                ->with('error', 'Error creating staff member: '.$e->getMessage());
         }
     }
 
@@ -124,18 +135,18 @@ class TeacherController extends Controller
         //
         $faculties = Faculty::select('id', 'name')->orderBy('name')->get();
         $facultyOptions = [];
-        
-        foreach($faculties as $faculty) {
+
+        foreach ($faculties as $faculty) {
             $facultyOptions[] = [
                 'label' => $faculty->name,
-                'value' => $faculty->id
+                'value' => $faculty->id,
             ];
         }
 
         $teacher = Teacher::findOrFail($id);
         $teacher->setAttribute('face_enrollment_status', $teacher->faceEnrollmentStatus());
-        
-        return Inertia::render('admin/teacher/edit', 
+
+        return Inertia::render('admin/teacher/edit',
             compact('facultyOptions', 'teacher'));
     }
 
@@ -143,48 +154,59 @@ class TeacherController extends Controller
      * Update the specified resource in storage.
      */
     public function update(Request $request, string $id)
-{
-    $teacher = Teacher::findOrFail($id);
-    
-    $validated = $request->validate([
-        'firstName' => 'required|string|max:255',
-        'lastName' => 'required|string|max:255',
-        'email' => 'required|email|unique:teachers,email,' . $id,
-        'phone' => 'required|string|max:20',
-        'faculty' => 'required|exists:faculties,id',
-        'department' => 'required|exists:departments,id',
-        'employeeId' => 'required|string|unique:teachers,employee_id,' . $id,
-        'title' => 'required|string|max:255|in:Prof.,Dr.,Mr.,Ms.',
-        'staffType' => ['required', Rule::in(Teacher::STAFF_TYPES)],
-        'employmentStatus' => ['required', Rule::in(Teacher::EMPLOYMENT_STATUSES)],
-    ]);
-    
-    try {
-        $teacher->first_name = $validated['firstName'];
-        $teacher->last_name = $validated['lastName'];
-        $teacher->email = $validated['email'];
-        $teacher->phone = $validated['phone'];
-        $teacher->faculty_id = $validated['faculty'];
-        $teacher->department_id = $validated['department'];
-        $teacher->employee_id = $validated['employeeId'];
-        $teacher->title = $validated['title'];
-        $teacher->staff_type = $validated['staffType'];
-        $teacher->employment_status = $validated['employmentStatus'];
-        $teacher->save();
+    {
+        $teacher = Teacher::findOrFail($id);
 
-        app(ActivityLogService::class)->logUserManagement(
-            'teacher_updated',
-            "Updated {$teacher->staff_type} {$teacher->first_name} {$teacher->last_name}",
-            ['teacher_id' => $teacher->id, 'employee_id' => $teacher->employee_id]
+        $validated = $request->validate([
+            'firstName' => 'required|string|max:255',
+            'lastName' => 'required|string|max:255',
+            'email' => 'required|email|unique:teachers,email,'.$id,
+            'phone' => 'required|string|max:20',
+            'faculty' => 'required|exists:faculties,id',
+            'department' => 'required|exists:departments,id',
+            'employeeId' => 'required|string|unique:teachers,employee_id,'.$id,
+            'title' => 'required|string|max:255|in:Prof.,Dr.,Mr.,Ms.',
+            'staffType' => ['required', Rule::in(Teacher::STAFF_TYPES)],
+            'employmentStatus' => ['required', Rule::in(Teacher::EMPLOYMENT_STATUSES)],
+            ...LeadershipAssignment::rules(),
+        ]);
+
+        $this->assertDepartmentBelongsToFaculty((int) $validated['department'], (int) $validated['faculty']);
+        [$leadershipRole, $leadershipFacultyId, $leadershipDepartmentId] = LeadershipAssignment::normalize(
+            $validated['leadershipRole'] ?? null,
+            $validated['leadershipFaculty'] ?? null,
+            $validated['leadershipDepartment'] ?? null,
         );
-        
-        return redirect()->route('admin.teachers.index')
-            ->with('success', 'Staff member updated successfully!');
-    } catch(\Throwable $e) {
-        return redirect()->back()
-            ->with('error', 'Error updating staff member: ' . $e->getMessage());
+
+        try {
+            $teacher->first_name = $validated['firstName'];
+            $teacher->last_name = $validated['lastName'];
+            $teacher->email = $validated['email'];
+            $teacher->phone = $validated['phone'];
+            $teacher->faculty_id = $validated['faculty'];
+            $teacher->department_id = $validated['department'];
+            $teacher->employee_id = $validated['employeeId'];
+            $teacher->title = $validated['title'];
+            $teacher->staff_type = $validated['staffType'];
+            $teacher->employment_status = $validated['employmentStatus'];
+            $teacher->leadership_role = $leadershipRole;
+            $teacher->leadership_faculty_id = $leadershipFacultyId;
+            $teacher->leadership_department_id = $leadershipDepartmentId;
+            $teacher->save();
+
+            app(ActivityLogService::class)->logUserManagement(
+                'teacher_updated',
+                "Updated {$teacher->staff_type} {$teacher->first_name} {$teacher->last_name}",
+                ['teacher_id' => $teacher->id, 'employee_id' => $teacher->employee_id]
+            );
+
+            return redirect()->route('admin.teachers.index')
+                ->with('success', 'Staff member updated successfully!');
+        } catch (\Throwable $e) {
+            return redirect()->back()
+                ->with('error', 'Error updating staff member: '.$e->getMessage());
+        }
     }
-}
 
     /**
      * Remove the specified resource from storage.
@@ -324,7 +346,7 @@ class TeacherController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Login credentials have been emailed to ' . $teacher->email . '.',
+                'message' => 'Login credentials have been emailed to '.$teacher->email.'.',
             ]);
         } catch (\Throwable $e) {
             Log::error('Failed to email teacher password credentials', [
@@ -386,7 +408,7 @@ class TeacherController extends Controller
     public function export(Request $request, $format = 'csv')
     {
         $format = strtolower((string) $format);
-        $fileName = 'teachers_' . now()->format('Ymd_His') . ($format === 'excel' ? '.xlsx' : '.csv');
+        $fileName = 'teachers_'.now()->format('Ymd_His').($format === 'excel' ? '.xlsx' : '.csv');
         $teachers = $this->teacherManagementService->filteredQuery($request)
             ->with(['faculty', 'department'])
             ->get();
@@ -417,7 +439,7 @@ class TeacherController extends Controller
         }
 
         if ($format === 'pdf') {
-            if (!class_exists(\Barryvdh\DomPDF\Facade\Pdf::class)) {
+            if (! class_exists(\Barryvdh\DomPDF\Facade\Pdf::class)) {
                 abort(500, 'PDF export requires barryvdh/laravel-dompdf.');
             }
 
@@ -440,7 +462,7 @@ class TeacherController extends Controller
 
         $callback = function () use ($rows) {
             $out = fopen('php://output', 'w');
-            if (!empty($rows)) {
+            if (! empty($rows)) {
                 fputcsv($out, array_keys($rows[0]));
                 foreach ($rows as $row) {
                     fputcsv($out, array_values($row));
@@ -457,7 +479,7 @@ class TeacherController extends Controller
      */
     public function template()
     {
-        $fileName = 'teachers_template_' . now()->format('Ymd') . '.csv';
+        $fileName = 'teachers_template_'.now()->format('Ymd').'.csv';
         $headers = [
             'Content-Type' => 'text/csv',
             'Content-Disposition' => "attachment; filename=\"{$fileName}\"",
@@ -494,12 +516,13 @@ class TeacherController extends Controller
                 'required',
                 'file',
                 function ($attribute, $value, $fail) {
-                    if (!$value) {
+                    if (! $value) {
                         $fail('The file field is required.');
+
                         return;
                     }
                     $ext = strtolower($value->getClientOriginalExtension());
-                    if (!in_array($ext, ['xlsx', 'xls', 'csv'])) {
+                    if (! in_array($ext, ['xlsx', 'xls', 'csv'])) {
                         $fail('The file must be a file of type: xlsx, xls, csv.');
                     }
                 },
@@ -507,7 +530,7 @@ class TeacherController extends Controller
         ]);
 
         $file = $request->file('file');
-        if (!$file) {
+        if (! $file) {
             return response()->json(['error' => 'No file uploaded'], 422);
         }
 
@@ -531,10 +554,11 @@ class TeacherController extends Controller
 
                 if ($header === null) {
                     fclose($handle);
+
                     return response()->json(['error' => 'Header row not found in CSV file'], 422);
                 }
 
-                $normalizedHeader = array_map(fn($h) => strtolower(trim(str_replace(' ', '_', $h))), $header);
+                $normalizedHeader = array_map(fn ($h) => strtolower(trim(str_replace(' ', '_', $h))), $header);
                 $seen = [];
                 while (($data = fgetcsv($handle)) !== false) {
                     $line++;
@@ -557,7 +581,7 @@ class TeacherController extends Controller
                     }
                     if (empty($row['email'])) {
                         $errors[] = 'Email is required';
-                    } elseif (!filter_var(trim($row['email']), FILTER_VALIDATE_EMAIL)) {
+                    } elseif (! filter_var(trim($row['email']), FILTER_VALIDATE_EMAIL)) {
                         $errors[] = 'Invalid email format';
                     }
                     if (empty($row['phone'])) {
@@ -569,25 +593,25 @@ class TeacherController extends Controller
                     if (empty($row['faculty'])) {
                         $errors[] = 'Faculty is required';
                     } else {
-                        if (!Faculty::where('name', trim($row['faculty']))->exists()) {
-                            $errors[] = 'Faculty "' . $row['faculty'] . '" not found';
+                        if (! Faculty::where('name', trim($row['faculty']))->exists()) {
+                            $errors[] = 'Faculty "'.$row['faculty'].'" not found';
                         }
                     }
                     if (empty($row['department'])) {
                         $errors[] = 'Department is required';
-                    } elseif (!empty($row['faculty'])) {
+                    } elseif (! empty($row['faculty'])) {
                         $faculty = Faculty::where('name', trim($row['faculty']))->first();
                         if ($faculty) {
                             $dept = Department::where('name', trim($row['department']))->where('faculty_id', $faculty->id)->first();
-                            if (!$dept) {
-                                $errors[] = 'Department "' . $row['department'] . '" not found or does not belong to faculty';
+                            if (! $dept) {
+                                $errors[] = 'Department "'.$row['department'].'" not found or does not belong to faculty';
                             }
                         }
                     }
                     $title = trim($row['title'] ?? '');
                     if (empty($title)) {
                         $errors[] = 'Title is required';
-                    } elseif (!in_array($title, ['Prof.', 'Dr.', 'Mr.', 'Ms.'])) {
+                    } elseif (! in_array($title, ['Prof.', 'Dr.', 'Mr.', 'Ms.'])) {
                         $errors[] = 'Title must be Prof., Dr., Mr., or Ms.';
                     }
                     $staffTypeError = $this->getStaffTypeValidationError($row['staff_type'] ?? null);
@@ -601,12 +625,12 @@ class TeacherController extends Controller
 
                     $empKey = strtolower(trim($row['employee_id'] ?? ''));
                     if ($empKey && isset($seen[$empKey])) {
-                        $errors[] = 'Duplicate employee_id in file (line ' . $seen[$empKey] . ')';
+                        $errors[] = 'Duplicate employee_id in file (line '.$seen[$empKey].')';
                     } elseif ($empKey) {
                         $seen[$empKey] = $line;
                     }
 
-                    $exists = !empty($row['employee_id']) && Teacher::where('employee_id', $row['employee_id'])->exists();
+                    $exists = ! empty($row['employee_id']) && Teacher::where('employee_id', $row['employee_id'])->exists();
 
                     $rows[] = [
                         'line' => $line,
@@ -619,18 +643,18 @@ class TeacherController extends Controller
             }
         } else {
             try {
-                $array = Excel::toArray(new \App\Imports\RawSheetImport(), $file);
-                if (!empty($array) && isset($array[0])) {
+                $array = Excel::toArray(new \App\Imports\RawSheetImport, $file);
+                if (! empty($array) && isset($array[0])) {
                     $sheet = $array[0];
                     $headerRowIndex = 0;
                     for ($i = 0; $i < count($sheet); $i++) {
                         $firstCell = trim($sheet[$i][0] ?? '');
-                        if (!empty($firstCell) && strpos($firstCell, '#') !== 0) {
+                        if (! empty($firstCell) && strpos($firstCell, '#') !== 0) {
                             $headerRowIndex = $i;
                             break;
                         }
                     }
-                    $header = array_map(fn($h) => strtolower(trim(str_replace(' ', '_', (string)$h))), $sheet[$headerRowIndex] ?? []);
+                    $header = array_map(fn ($h) => strtolower(trim(str_replace(' ', '_', (string) $h))), $sheet[$headerRowIndex] ?? []);
                     $seen = [];
                     for ($i = $headerRowIndex + 1; $i < count($sheet); $i++) {
                         $data = $sheet[$i];
@@ -652,7 +676,7 @@ class TeacherController extends Controller
                         }
                         if (empty($row['email'])) {
                             $errors[] = 'Email is required';
-                        } elseif (!filter_var(trim((string)$row['email']), FILTER_VALIDATE_EMAIL)) {
+                        } elseif (! filter_var(trim((string) $row['email']), FILTER_VALIDATE_EMAIL)) {
                             $errors[] = 'Invalid email format';
                         }
                         if (empty($row['phone'])) {
@@ -664,25 +688,25 @@ class TeacherController extends Controller
                         if (empty($row['faculty'])) {
                             $errors[] = 'Faculty is required';
                         } else {
-                            if (!Faculty::where('name', trim($row['faculty']))->exists()) {
-                                $errors[] = 'Faculty "' . $row['faculty'] . '" not found';
+                            if (! Faculty::where('name', trim($row['faculty']))->exists()) {
+                                $errors[] = 'Faculty "'.$row['faculty'].'" not found';
                             }
                         }
                         if (empty($row['department'])) {
                             $errors[] = 'Department is required';
-                        } elseif (!empty($row['faculty'])) {
+                        } elseif (! empty($row['faculty'])) {
                             $faculty = Faculty::where('name', trim($row['faculty']))->first();
                             if ($faculty) {
                                 $dept = Department::where('name', trim($row['department']))->where('faculty_id', $faculty->id)->first();
-                                if (!$dept) {
+                                if (! $dept) {
                                     $errors[] = 'Department not found or does not belong to faculty';
                                 }
                             }
                         }
-                        $title = trim((string)($row['title'] ?? ''));
+                        $title = trim((string) ($row['title'] ?? ''));
                         if (empty($title)) {
                             $errors[] = 'Title is required';
-                        } elseif (!in_array($title, ['Prof.', 'Dr.', 'Mr.', 'Ms.'])) {
+                        } elseif (! in_array($title, ['Prof.', 'Dr.', 'Mr.', 'Ms.'])) {
                             $errors[] = 'Title must be Prof., Dr., Mr., or Ms.';
                         }
                         $staffTypeError = $this->getStaffTypeValidationError($row['staff_type'] ?? null);
@@ -697,16 +721,16 @@ class TeacherController extends Controller
                         $line = $i + 1;
                         $empKey = strtolower(trim($row['employee_id'] ?? ''));
                         if ($empKey && isset($seen[$empKey])) {
-                            $errors[] = 'Duplicate employee_id in file (line ' . $seen[$empKey] . ')';
+                            $errors[] = 'Duplicate employee_id in file (line '.$seen[$empKey].')';
                         } elseif ($empKey) {
                             $seen[$empKey] = $line;
                         }
-                        $exists = !empty($row['employee_id']) && Teacher::where('employee_id', $row['employee_id'])->exists();
+                        $exists = ! empty($row['employee_id']) && Teacher::where('employee_id', $row['employee_id'])->exists();
                         $rows[] = ['line' => $line, 'data' => $row, 'errors' => $errors, 'exists' => $exists];
                     }
                 }
             } catch (\Throwable $e) {
-                return response()->json(['error' => 'Unable to parse uploaded file: ' . $e->getMessage()], 422);
+                return response()->json(['error' => 'Unable to parse uploaded file: '.$e->getMessage()], 422);
             }
         }
 
@@ -723,12 +747,13 @@ class TeacherController extends Controller
                 'required',
                 'file',
                 function ($attribute, $value, $fail) {
-                    if (!$value) {
+                    if (! $value) {
                         $fail('The file field is required.');
+
                         return;
                     }
                     $ext = strtolower($value->getClientOriginalExtension());
-                    if (!in_array($ext, ['xlsx', 'xls', 'csv'])) {
+                    if (! in_array($ext, ['xlsx', 'xls', 'csv'])) {
                         $fail('The file must be a file of type: xlsx, xls, csv.');
                     }
                 },
@@ -753,9 +778,10 @@ class TeacherController extends Controller
                 }
                 if ($header === null) {
                     fclose($handle);
+
                     return response()->json(['error' => 'Header row not found in CSV file'], 422);
                 }
-                $normalizedHeader = array_map(fn($h) => strtolower(trim(str_replace(' ', '_', $h))), $header);
+                $normalizedHeader = array_map(fn ($h) => strtolower(trim(str_replace(' ', '_', $h))), $header);
                 while (($data = fgetcsv($handle)) !== false) {
                     $firstCell = trim($data[0] ?? '');
                     if (empty($firstCell) || strpos($firstCell, '#') === 0) {
@@ -771,18 +797,18 @@ class TeacherController extends Controller
             }
         } else {
             try {
-                $array = Excel::toArray(new \App\Imports\RawSheetImport(), $file);
-                if (!empty($array) && isset($array[0])) {
+                $array = Excel::toArray(new \App\Imports\RawSheetImport, $file);
+                if (! empty($array) && isset($array[0])) {
                     $sheet = $array[0];
                     $headerRowIndex = 0;
                     for ($i = 0; $i < count($sheet); $i++) {
                         $firstCell = trim($sheet[$i][0] ?? '');
-                        if (!empty($firstCell) && strpos($firstCell, '#') !== 0) {
+                        if (! empty($firstCell) && strpos($firstCell, '#') !== 0) {
                             $headerRowIndex = $i;
                             break;
                         }
                     }
-                    $header = array_map(fn($h) => strtolower(trim(str_replace(' ', '_', $h))), $sheet[$headerRowIndex] ?? []);
+                    $header = array_map(fn ($h) => strtolower(trim(str_replace(' ', '_', $h))), $sheet[$headerRowIndex] ?? []);
                     for ($i = $headerRowIndex + 1; $i < count($sheet); $i++) {
                         $data = $sheet[$i];
                         $firstCell = trim($data[0] ?? '');
@@ -797,7 +823,7 @@ class TeacherController extends Controller
                     }
                 }
             } catch (\Throwable $e) {
-                return response()->json(['error' => 'Unable to parse uploaded file: ' . $e->getMessage()], 422);
+                return response()->json(['error' => 'Unable to parse uploaded file: '.$e->getMessage()], 422);
             }
         }
 
@@ -820,50 +846,59 @@ class TeacherController extends Controller
             if (empty($firstName) || empty($lastName) || empty($email) || empty($phone) || empty($employeeId)) {
                 $skipped++;
                 $failed[] = ['index' => $idx, 'reason' => 'Required field missing (first_name, last_name, email, phone, employee_id)'];
+
                 continue;
             }
-            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 $skipped++;
                 $failed[] = ['index' => $idx, 'reason' => 'Invalid email format'];
+
                 continue;
             }
             if (empty($facultyName)) {
                 $skipped++;
                 $failed[] = ['index' => $idx, 'reason' => 'Faculty is required'];
+
                 continue;
             }
             $faculty = Faculty::where('name', $facultyName)->first();
-            if (!$faculty) {
+            if (! $faculty) {
                 $skipped++;
-                $failed[] = ['index' => $idx, 'reason' => 'Faculty "' . $facultyName . '" not found'];
+                $failed[] = ['index' => $idx, 'reason' => 'Faculty "'.$facultyName.'" not found'];
+
                 continue;
             }
             if (empty($departmentName)) {
                 $skipped++;
                 $failed[] = ['index' => $idx, 'reason' => 'Department is required'];
+
                 continue;
             }
             $department = Department::where('name', $departmentName)->where('faculty_id', $faculty->id)->first();
-            if (!$department) {
+            if (! $department) {
                 $skipped++;
-                $failed[] = ['index' => $idx, 'reason' => 'Department "' . $departmentName . '" not found or does not belong to faculty'];
+                $failed[] = ['index' => $idx, 'reason' => 'Department "'.$departmentName.'" not found or does not belong to faculty'];
+
                 continue;
             }
-            if (!in_array($title, ['Prof.', 'Dr.', 'Mr.', 'Ms.'])) {
+            if (! in_array($title, ['Prof.', 'Dr.', 'Mr.', 'Ms.'])) {
                 $skipped++;
                 $failed[] = ['index' => $idx, 'reason' => 'Title must be Prof., Dr., Mr., or Ms.'];
+
                 continue;
             }
             $staffTypeError = $this->getStaffTypeValidationError($r['staff_type'] ?? null);
             if ($staffTypeError) {
                 $skipped++;
                 $failed[] = ['index' => $idx, 'reason' => $staffTypeError];
+
                 continue;
             }
             $employmentStatusError = $this->getEmploymentStatusValidationError($r['employment_status'] ?? null);
             if ($employmentStatusError) {
                 $skipped++;
                 $failed[] = ['index' => $idx, 'reason' => $employmentStatusError];
+
                 continue;
             }
 
@@ -902,7 +937,7 @@ class TeacherController extends Controller
     {
         $normalized = $this->normalizeStaffType($staffType);
 
-        if (!in_array($normalized, Teacher::STAFF_TYPES, true)) {
+        if (! in_array($normalized, Teacher::STAFF_TYPES, true)) {
             return 'Staff type must be lecturer or administrator.';
         }
 
@@ -939,5 +974,19 @@ class TeacherController extends Controller
         }
 
         return null;
+    }
+
+    private function assertDepartmentBelongsToFaculty(int $departmentId, int $facultyId): void
+    {
+        $belongs = Department::query()
+            ->where('id', $departmentId)
+            ->where('faculty_id', $facultyId)
+            ->exists();
+
+        if (! $belongs) {
+            throw ValidationException::withMessages([
+                'department' => 'The selected department does not belong to the selected Directorate/Faculty.',
+            ]);
+        }
     }
 }
