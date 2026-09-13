@@ -44,34 +44,34 @@ export function ConversationFilters({
                 const data = new FormData(event.currentTarget);
                 router.get(action, Object.fromEntries(data.entries()), { preserveState: true, replace: true });
             }}
-            className="flex flex-col gap-3 rounded-2xl border border-sidebar-border/70 bg-card p-3 sm:flex-row sm:flex-wrap sm:items-center"
+            className="grid grid-cols-1 gap-3 rounded-2xl border border-sidebar-border/70 bg-card p-3 sm:flex sm:flex-row sm:flex-wrap sm:items-center"
         >
-            <label className="relative min-w-[14rem] flex-1">
+            <label className="relative min-w-0 flex-1 sm:min-w-[14rem]">
                 <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-sidebar-foreground/40" />
                 <input
                     name="search"
                     defaultValue={filters.search || ''}
                     placeholder="Search subject, people, or message text"
-                    className="w-full rounded-xl border border-sidebar-border/80 bg-background py-2 pl-9 pr-3 text-sm text-sidebar-foreground outline-none ring-primary/20 placeholder:text-sidebar-foreground/45 focus:ring-2"
+                    className="h-11 w-full rounded-xl border border-sidebar-border/80 bg-background py-2 pl-9 pr-3 text-base text-sidebar-foreground outline-none ring-primary/20 placeholder:text-sidebar-foreground/45 focus:ring-2 md:text-sm"
                 />
             </label>
             <input
                 name="from"
                 type="date"
                 defaultValue={filters.from || ''}
-                className="rounded-xl border border-sidebar-border/80 bg-background px-3 py-2 text-sm text-sidebar-foreground"
+                className="h-11 w-full min-w-0 rounded-xl border border-sidebar-border/80 bg-background px-3 py-2 text-base text-sidebar-foreground sm:w-auto md:text-sm"
             />
             <input
                 name="to"
                 type="date"
                 defaultValue={filters.to || ''}
-                className="rounded-xl border border-sidebar-border/80 bg-background px-3 py-2 text-sm text-sidebar-foreground"
+                className="h-11 w-full min-w-0 rounded-xl border border-sidebar-border/80 bg-background px-3 py-2 text-base text-sidebar-foreground sm:w-auto md:text-sm"
             />
-            <label className="inline-flex items-center gap-2 rounded-xl border border-sidebar-border/80 px-3 py-2 text-sm text-sidebar-foreground/80">
-                <input name="unread" type="checkbox" value="1" defaultChecked={Boolean(filters.unread)} className="accent-primary" />
+            <label className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-sidebar-border/80 px-3 py-2 text-sm text-sidebar-foreground/80">
+                <input name="unread" type="checkbox" value="1" defaultChecked={Boolean(filters.unread)} className="size-4 accent-primary" />
                 Unread
             </label>
-            <button type="submit" className="rounded-xl bg-sidebar-foreground px-4 py-2 text-sm font-semibold text-sidebar dark:bg-white dark:text-neutral-950">
+            <button type="submit" className="min-h-11 w-full rounded-xl bg-sidebar-foreground px-4 py-2 text-sm font-semibold text-sidebar sm:w-auto dark:bg-white dark:text-neutral-950">
                 Search
             </button>
         </form>
@@ -184,16 +184,16 @@ export function ConversationList({
                 ))}
             </div>
             {conversations.links && conversations.links.length > 3 && (
-                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-sidebar-border/60 px-4 py-3">
+                <div className="flex flex-col gap-2 border-t border-sidebar-border/60 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
                     <p className="text-xs text-sidebar-foreground/50">{conversations.total ?? rows.length} conversations</p>
-                    <div className="flex flex-wrap gap-1">
+                    <div className="-mx-1 flex max-w-full gap-1 overflow-x-auto px-1 pb-0.5">
                         {conversations.links.map((link, index) => (
                             <button
                                 key={`${link.label}-${index}`}
                                 disabled={!link.url}
                                 onClick={() => link.url && router.get(link.url, {}, { preserveState: true })}
                                 className={cn(
-                                    'rounded-md px-2.5 py-1 text-xs',
+                                    'min-h-9 shrink-0 rounded-md px-2.5 py-1 text-xs',
                                     link.active
                                         ? 'bg-sidebar-foreground text-sidebar dark:bg-white dark:text-neutral-950'
                                         : 'border border-sidebar-border text-sidebar-foreground/70 hover:bg-sidebar-accent disabled:opacity-40',

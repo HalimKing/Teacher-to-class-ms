@@ -113,8 +113,8 @@ export default function TeacherVenueChangeRequestCreate({ venues }: PageProps) {
                 <div>
                     <h1 className="text-2xl font-bold text-slate-900">Submit Venue Change Request</h1>
                     <p className="mt-1 text-sm text-slate-500">
-                        Your request will remain pending until an authorized administrator approves it. Approval creates a
-                        Venue Change Authorization.
+                        Your request is routed to the assigned Director/Dean, Head of Department, and administrator. It
+                        stays pending until all required approvers approve. Final approval creates a Venue Change Authorization.
                     </p>
                 </div>
 

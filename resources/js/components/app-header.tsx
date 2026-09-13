@@ -16,7 +16,7 @@ import { useInitials } from '@/hooks/use-initials';
 import { cn } from '@/lib/utils';
 import { type BreadcrumbItem, type NavItem, type SharedData } from '@/types';
 import { Link, router, usePage } from '@inertiajs/react';
-import { LayoutGrid, Menu, ChevronDown, ChevronRight, Users, Book, Settings, LogOut, BookOpen, UserCheck, ClipboardList, BarChart, Folder, Bell, ScrollText, MapPin, LifeBuoy, GraduationCap, CalendarDays, Mail, Inbox, FileText } from 'lucide-react';
+import { LayoutGrid, Menu, ChevronDown, ChevronRight, Users, Book, Settings, LogOut, BookOpen, UserCheck, ClipboardList, BarChart, Folder, Bell, ScrollText, MapPin, LifeBuoy, GraduationCap, CalendarDays, Mail, Inbox, FileText, ShieldCheck } from 'lucide-react';
 import { useState, useMemo, useEffect } from 'react';
 import AppLogo from './app-logo';
 import AppLogoIcon from './app-logo-icon';
@@ -175,6 +175,24 @@ const teacherNavItems: NavItem[] = [
                 title: 'Unit Attendance',
                 href: '/teacher/unit/attendance',
                 icon: ClipboardList,
+                requiresLeadership: true,
+            },
+            {
+                title: 'Self-reported Absences',
+                href: '/teacher/unit/self-reported-absences',
+                icon: ClipboardList,
+                requiresLeadership: true,
+            },
+            {
+                title: 'Venue Change Requests',
+                href: '/teacher/unit/venue-change-requests',
+                icon: MapPin,
+                requiresLeadership: true,
+            },
+            {
+                title: 'Venue Change Authorizations',
+                href: '/teacher/unit/venue-change-authorizations',
+                icon: ShieldCheck,
                 requiresLeadership: true,
             },
         ],
@@ -620,16 +638,16 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
     return (
         <>
             <div className="border-b border-sidebar-border/80 sticky top-0 z-50 bg-sidebar">
-                <div className="mx-auto flex h-16 items-center justify-between gap-2 px-3 sm:px-4 md:max-w-7xl">
+                <div className="mx-auto flex h-16 min-w-0 items-center justify-between gap-2 px-3 sm:px-4 md:max-w-7xl">
                     {/* Mobile Menu */}
                     <div className="lg:hidden">
                         <Sheet>
                             <SheetTrigger asChild>
-                                <Button variant="ghost" size="icon" className="mr-2 h-[34px] w-[34px]">
+                                <Button variant="ghost" size="icon" className="mr-1 size-11">
                                     <Menu className="h-5 w-5" />
                                 </Button>
                             </SheetTrigger>
-                            <SheetContent side="left" className="flex h-full w-[min(18rem,85vw)] flex-col items-stretch justify-between overflow-y-auto bg-sidebar">
+                            <SheetContent side="left" className="flex h-full w-[min(18rem,90vw)] flex-col items-stretch justify-between overflow-y-auto bg-sidebar">
                                 <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
                                 <SheetHeader className="flex justify-start text-left">
                                     <Link href={homeHref} prefetch className="inline-flex items-center">
@@ -646,7 +664,7 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                                                             <button
                                                                 onClick={() => toggleMobileSubmenu(item.title)}
                                                                 className={cn(
-                                                                    'w-full flex items-center space-x-3 rounded-md px-3 py-2 font-medium transition-colors text-left',
+                                                                    'w-full flex min-h-11 items-center space-x-3 rounded-md px-3 py-2 font-medium transition-colors text-left',
                                                                     'hover:bg-neutral-100 dark:hover:bg-neutral-800',
                                                                     expandedItems[item.title] && 'bg-neutral-100 dark:bg-neutral-800'
                                                                 )}
@@ -675,7 +693,7 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                                                                             key={subItem.title}
                                                                             href={subItem.href}
                                                                             className={cn(
-                                                                                'text-sm rounded px-2 py-1.5 transition-colors',
+                                                                                'min-h-10 rounded px-2 py-2 text-sm transition-colors',
                                                                                 'text-slate-600 dark:text-slate-400 hover:text-slate-900 hover:bg-neutral-100 dark:hover:text-slate-200 dark:hover:bg-neutral-800',
                                                                                 isActive && 'bg-neutral-100 text-slate-900 dark:bg-neutral-800 dark:text-slate-100'
                                                                             )}
@@ -698,7 +716,7 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                                                         <Link 
                                                             href={item.href} 
                                                             className={cn(
-                                                                'flex items-center space-x-3 rounded-md px-3 py-2 font-medium transition-colors',
+                                                                'flex min-h-11 items-center space-x-3 rounded-md px-3 py-2 font-medium transition-colors',
                                                                 'hover:bg-neutral-100 dark:hover:bg-neutral-800',
                                                                 page.url === item.href && 'bg-neutral-100 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-50'
                                                             )}
@@ -716,7 +734,7 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                         </Sheet>
                     </div>
 
-                    <Link href={homeHref} prefetch className="hidden flex-shrink-0 items-center sm:flex">
+                    <Link href={homeHref} prefetch className="flex min-w-0 flex-shrink-0 items-center">
                         <AppLogo />
                     </Link>
 
@@ -888,7 +906,7 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
             </div>
             {breadcrumbs.length > 1 && (
                 <div className="flex w-full border-b border-sidebar-border/70">
-                    <div className="mx-auto flex min-h-12 w-full min-w-0 items-center justify-start overflow-x-auto px-3 py-2 text-neutral-500 sm:px-4 md:max-w-7xl">
+                    <div className="mx-auto flex min-h-12 w-full min-w-0 items-center justify-start overflow-x-auto px-3 py-2 text-neutral-500 [scrollbar-width:none] sm:px-4 md:max-w-7xl [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                         <Breadcrumbs breadcrumbs={breadcrumbs} />
                     </div>
                 </div>

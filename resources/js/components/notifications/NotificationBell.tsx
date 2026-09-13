@@ -72,7 +72,7 @@ export default function NotificationBell({ className, pollIntervalMs = 60000 }: 
         <div className={cn('relative', className)}>
             <DropdownMenu onOpenChange={(open) => open && refreshSummary()}>
                 <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="relative h-9 w-9 cursor-pointer">
+                    <Button variant="ghost" size="icon" className="relative size-11 cursor-pointer">
                         <Bell className="h-5 w-5" />
                         {unreadCount > 0 && (
                             <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">

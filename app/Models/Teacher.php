@@ -153,6 +153,22 @@ class Teacher extends Authenticatable
         return $this->hasMany(SessionReminder::class);
     }
 
+    public function displayName(): string
+    {
+        $name = trim(implode(' ', array_filter([
+            $this->title,
+            $this->first_name,
+            $this->last_name,
+        ])));
+
+        return $name !== '' ? $name : (string) ($this->email ?? 'Staff member');
+    }
+
+    public function staffTypeLabel(): string
+    {
+        return $this->isAdministrator() ? 'Administrator' : 'Lecturer';
+    }
+
     public function isLecturer(): bool
     {
         return $this->staff_type === self::STAFF_TYPE_LECTURER;

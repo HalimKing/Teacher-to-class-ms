@@ -54,14 +54,14 @@ function MessageCard({
             <button
                 type="button"
                 onClick={onToggle}
-                className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-sidebar-accent/50"
+                className="flex min-h-14 w-full items-start gap-3 px-3 py-3 text-left hover:bg-sidebar-accent/50 sm:px-4"
             >
                 <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
                     {message.sender?.initials ?? '•'}
                 </div>
                 <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <p className="font-semibold text-sidebar-foreground">{message.sender?.name ?? 'Unknown sender'}</p>
+                        <p className="break-words font-semibold text-sidebar-foreground">{message.sender?.name ?? 'Unknown sender'}</p>
                         {message.kind === 'reply' || message.kind === 'reply_all' ? (
                             <span className="text-[11px] font-medium uppercase tracking-wide text-sidebar-foreground/45">
                                 {message.kind === 'reply_all' ? 'Reply all' : 'Reply'}
@@ -71,7 +71,7 @@ function MessageCard({
                             <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">Latest</span>
                         )}
                     </div>
-                    <p className="mt-0.5 text-xs text-sidebar-foreground/55">
+                    <p className="mt-0.5 break-words text-xs text-sidebar-foreground/55">
                         To {recipientNames.length > 0 ? recipientNames.join(', ') : (message.audience_summary ?? []).join(' · ') || 'recipients'}
                     </p>
                     {!expanded && <p className="mt-1 truncate text-sm text-sidebar-foreground/60">{message.excerpt || message.body}</p>}
@@ -95,7 +95,7 @@ function MessageCard({
                             <p className="mt-1 line-clamp-2">{message.in_reply_to.excerpt}</p>
                         </div>
                     )}
-                    <div className="whitespace-pre-wrap text-sm leading-6 text-sidebar-foreground">{message.body}</div>
+                    <div className="whitespace-pre-wrap break-words text-sm leading-6 text-sidebar-foreground">{message.body}</div>
                     {message.recipients.length > 0 && (
                         <div className="rounded-xl border border-sidebar-border/60 bg-background/60 p-3">
                             <p className="text-xs font-semibold uppercase tracking-wide text-sidebar-foreground/45">Delivery</p>
@@ -113,13 +113,13 @@ function MessageCard({
                         </div>
                     )}
                     {canReply && message.status !== 'draft' && (
-                        <div className="flex flex-wrap gap-2">
-                            <Button type="button" variant="outline" size="sm" onClick={() => onReply('reply', message.id)}>
+                        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                            <Button type="button" variant="outline" size="sm" className="min-h-11 w-full sm:w-auto" onClick={() => onReply('reply', message.id)}>
                                 <Reply className="size-3.5" />
                                 Reply
                             </Button>
                             {canReplyAll && (
-                                <Button type="button" variant="outline" size="sm" onClick={() => onReply('reply_all', message.id)}>
+                                <Button type="button" variant="outline" size="sm" className="min-h-11 w-full sm:w-auto" onClick={() => onReply('reply_all', message.id)}>
                                     <ReplyAll className="size-3.5" />
                                     Reply all
                                 </Button>
@@ -218,34 +218,34 @@ export function ConversationThreadView({
     };
 
     return (
-        <div className="space-y-5 p-4 md:p-6">
+        <div className="min-w-0 space-y-5 p-3 sm:p-4 md:p-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                     <Link
                         href={mailboxHref(prefix, folder)}
-                        className="inline-flex items-center gap-1.5 text-sm text-sidebar-foreground/65 hover:text-sidebar-foreground"
+                        className="inline-flex min-h-10 items-center gap-1.5 text-sm text-sidebar-foreground/65 hover:text-sidebar-foreground"
                     >
                         <ArrowLeft className="size-4" />
                         Back to {folder === 'all' ? 'All Mail' : folder}
                     </Link>
-                    <h1 className="mt-2 text-2xl font-semibold tracking-tight text-sidebar-foreground">{conversation.subject}</h1>
+                    <h1 className="mt-2 text-xl font-semibold tracking-tight break-words text-sidebar-foreground sm:text-2xl">{conversation.subject}</h1>
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-sidebar-foreground/65">
-                        <Users className="size-3.5" />
-                        <span>{conversation.participants.map((item) => item.name).join(', ')}</span>
+                        <Users className="size-3.5 shrink-0" />
+                        <span className="min-w-0 break-words">{conversation.participants.map((item) => item.name).join(', ')}</span>
                         <span className="rounded-full bg-sidebar-accent px-2 py-0.5 text-xs">
                             {conversation.message_count} {conversation.message_count === 1 ? 'message' : 'messages'}
                         </span>
                     </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
                     {conversation.can_reply && (
                         <>
-                            <Button type="button" variant="outline" onClick={() => startReply('reply')}>
+                            <Button type="button" variant="outline" className="min-h-11 w-full sm:w-auto" onClick={() => startReply('reply')}>
                                 <Reply className="size-4" />
                                 Reply
                             </Button>
                             {conversation.can_reply_all && (
-                                <Button type="button" variant="outline" onClick={() => startReply('reply_all')}>
+                                <Button type="button" variant="outline" className="min-h-11 w-full sm:w-auto" onClick={() => startReply('reply_all')}>
                                     <ReplyAll className="size-4" />
                                     Reply all
                                 </Button>
@@ -255,7 +255,7 @@ export function ConversationThreadView({
                     {capabilities.can_compose && (
                         <Link
                             href={route(`${prefix}.communication.compose`)}
-                            className="inline-flex items-center justify-center rounded-lg border border-sidebar-border px-3 py-2 text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent"
+                            className="inline-flex min-h-11 items-center justify-center rounded-lg border border-sidebar-border px-3 py-2 text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent"
                         >
                             New message
                         </Link>
@@ -325,13 +325,13 @@ export function ConversationThreadView({
             )}
 
             {conversation.can_reply && composerOpen && (
-                <section className="rounded-2xl border border-sidebar-border/70 bg-card p-4">
-                    <div className="flex flex-wrap items-center gap-2">
+                <section className="rounded-2xl border border-sidebar-border/70 bg-card p-3 sm:p-4">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                         <button
                             type="button"
                             onClick={() => startReply('reply', parentId)}
                             className={cn(
-                                'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium',
+                                'inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium',
                                 mode === 'reply' ? 'bg-primary text-primary-foreground' : 'bg-sidebar-accent text-sidebar-foreground/75',
                             )}
                         >
@@ -343,7 +343,7 @@ export function ConversationThreadView({
                                 type="button"
                                 onClick={() => startReply('reply_all', parentId)}
                                 className={cn(
-                                    'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium',
+                                    'inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium',
                                     mode === 'reply_all' ? 'bg-primary text-primary-foreground' : 'bg-sidebar-accent text-sidebar-foreground/75',
                                 )}
                             >
@@ -352,7 +352,7 @@ export function ConversationThreadView({
                             </button>
                         )}
                     </div>
-                    <p className="mt-3 text-xs text-sidebar-foreground/55">
+                    <p className="mt-3 break-words text-xs text-sidebar-foreground/55">
                         Replying to {replyTarget || 'this conversation'} · Subject stays “{conversation.subject}”
                     </p>
                     <form
@@ -368,11 +368,11 @@ export function ConversationThreadView({
                             onChange={(event) => form.setData('body', event.target.value)}
                             rows={6}
                             placeholder="Write your reply..."
-                            className="w-full rounded-xl border border-sidebar-border/80 bg-background px-3 py-2.5 text-sm text-sidebar-foreground outline-none ring-primary/20 placeholder:text-sidebar-foreground/40 focus:ring-2"
+                            className="min-h-32 w-full rounded-xl border border-sidebar-border/80 bg-background px-3 py-2.5 text-base text-sidebar-foreground outline-none ring-primary/20 placeholder:text-sidebar-foreground/40 focus:ring-2 md:text-sm"
                         />
                         {form.errors.body && <p className="text-sm text-rose-600">{form.errors.body}</p>}
                         <div className="flex justify-end">
-                            <Button type="submit" disabled={form.processing}>
+                            <Button type="submit" disabled={form.processing} className="min-h-11 w-full sm:w-auto">
                                 {form.processing ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
                                 Send reply
                             </Button>

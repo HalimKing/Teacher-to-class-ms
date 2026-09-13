@@ -38,6 +38,10 @@ class StaffAttendance extends Model
         'auto_generated',
         'auto_generated_at',
         'auto_absence_reason',
+        'self_reported',
+        'self_reported_reason',
+        'self_reported_notes',
+        'self_reported_at',
         'exception_category',
         'holiday_break_id',
     ];
@@ -52,6 +56,8 @@ class StaffAttendance extends Model
         'face_verified_at' => 'datetime',
         'auto_generated' => 'boolean',
         'auto_generated_at' => 'datetime',
+        'self_reported' => 'boolean',
+        'self_reported_at' => 'datetime',
         'minutes_early' => 'integer',
         'minutes_late' => 'integer',
         'minutes_overtime' => 'integer',
@@ -102,5 +108,10 @@ class StaffAttendance extends Model
     public function isAbsenceLocked(): bool
     {
         return AttendanceLock::isLocked($this->attendance_status);
+    }
+
+    public function isSelfReported(): bool
+    {
+        return (bool) $this->self_reported;
     }
 }

@@ -52,6 +52,7 @@ class SystemSettingsSeeder extends Seeder
             ['key' => 'log_failed_attempts', 'value' => '1', 'group' => 'notifications', 'type' => 'boolean', 'description' => 'Log failed attendance attempts'],
             ['key' => 'notify_venue_change_authorized', 'value' => '1', 'group' => 'notifications', 'type' => 'boolean', 'description' => 'Notify staff when a venue change authorization is approved'],
             ['key' => 'notify_admin_venue_change_request_submitted', 'value' => '1', 'group' => 'notifications', 'type' => 'boolean', 'description' => 'Notify admins when an administrator submits a venue change request'],
+            ['key' => 'notify_leadership_venue_change_request_submitted', 'value' => '1', 'group' => 'notifications', 'type' => 'boolean', 'description' => 'Notify the assigned Director/Dean and Head of Department when a venue change request is submitted'],
             ['key' => 'notify_venue_change_request_approved', 'value' => '1', 'group' => 'notifications', 'type' => 'boolean', 'description' => 'Notify staff when their venue change request is approved'],
             ['key' => 'notify_venue_change_request_rejected', 'value' => '1', 'group' => 'notifications', 'type' => 'boolean', 'description' => 'Notify staff when their venue change request is rejected'],
             ['key' => 'notify_admin_explanation_submitted', 'value' => '1', 'group' => 'notifications', 'type' => 'boolean', 'description' => 'Notify admins when an absence or early departure explanation is submitted'],

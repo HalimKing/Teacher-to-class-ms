@@ -1,3 +1,4 @@
+import VenueChangeApprovalStatus, { type VenueChangeApprovalItem } from '@/components/attendance/VenueChangeApprovalStatus';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
@@ -22,6 +23,8 @@ interface RequestRecord {
 
 interface PageProps {
     requestRecord: RequestRecord;
+    approvals?: VenueChangeApprovalItem[];
+    approvalProgress?: string | null;
     flash?: { success?: string; error?: string };
 }
 
@@ -31,7 +34,7 @@ const breadcrumbs = (id: number): BreadcrumbItem[] => [
     { title: `Request #${id}`, href: `/teacher/venue-change-requests/${id}` },
 ];
 
-export default function TeacherVenueChangeRequestShow({ requestRecord }: PageProps) {
+export default function TeacherVenueChangeRequestShow({ requestRecord, approvals = [], approvalProgress }: PageProps) {
     const { flash } = usePage().props as PageProps;
 
     const cancel = () => {
@@ -85,6 +88,13 @@ export default function TeacherVenueChangeRequestShow({ requestRecord }: PagePro
                         </p>
                     )}
                 </div>
+
+                {approvals.length > 0 && (
+                    <div className="rounded-xl border border-slate-200 bg-white p-6">
+                        <h2 className="mb-3 text-sm font-semibold text-slate-900">Approval status</h2>
+                        <VenueChangeApprovalStatus approvals={approvals} progress={approvalProgress} />
+                    </div>
+                )}
 
                 <div className="rounded-xl border border-slate-200 bg-white p-6">
                     <h2 className="mb-3 text-sm font-semibold text-slate-900">Affected schedules</h2>

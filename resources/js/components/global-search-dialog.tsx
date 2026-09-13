@@ -311,7 +311,7 @@ export function GlobalSearchDialog() {
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="group h-9 w-9 cursor-pointer"
+                className="group size-11 cursor-pointer"
                 onClick={() => setOpen(true)}
                 aria-label="Open global search"
             >

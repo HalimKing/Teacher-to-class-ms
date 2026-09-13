@@ -81,6 +81,11 @@ Route::middleware(['auth:teacher', 'attendance.portal.restrict'])->group(functio
                 Route::get('/history', [TeacherAttendanceController::class, 'getAttendanceHistory']);
                 Route::get('/records', [TeacherAttendanceController::class, 'getAttendanceRecords']);
                 Route::get('/by-timetable/{timetableId}', [TeacherAttendanceController::class, 'getAttendanceByTimetable']);
+                Route::get('/mark-absent/{timetable}', [TeacherAttendanceController::class, 'createSelfReportedAbsence'])
+                    ->whereNumber('timetable')
+                    ->name('teacher.attendance.mark-absent.create');
+                Route::post('/mark-absent', [TeacherAttendanceController::class, 'storeSelfReportedAbsence'])
+                    ->name('teacher.attendance.mark-absent.store');
                 Route::get('/', [TeacherAttendanceController::class, 'index'])->name('teacher.attendance');
             }
         );
@@ -104,7 +109,44 @@ Route::middleware(['auth:teacher', 'attendance.portal.restrict'])->group(functio
         Route::get('/staff/{teacher}/edit', [UnitStaffController::class, 'edit'])->name('staff.edit');
         Route::put('/staff/{teacher}', [UnitStaffController::class, 'update'])->name('staff.update');
         Route::get('/attendance', [UnitAttendanceController::class, 'index'])->name('attendance.index');
+        Route::get('/self-reported-absences', [UnitAttendanceController::class, 'selfReportedIndex'])->name('self-reported-absences.index');
+        Route::get('/self-reported-absences/{kind}/{attendance}', [UnitAttendanceController::class, 'selfReportedShow'])
+            ->whereIn('kind', ['lecturer', 'administrator'])
+            ->whereNumber('attendance')
+            ->name('self-reported-absences.show');
+        Route::post('/self-reported-absences/{kind}/{attendance}/replies', [UnitAttendanceController::class, 'selfReportedReply'])
+            ->whereIn('kind', ['lecturer', 'administrator'])
+            ->whereNumber('attendance')
+            ->name('self-reported-absences.reply');
+        Route::get('/venue-change-requests', [\App\Http\Controllers\Teacher\UnitVenueChangeRequestController::class, 'index'])
+            ->name('venue-change-requests.index');
+        Route::get('/venue-change-requests/{venueChangeRequest}', [\App\Http\Controllers\Teacher\UnitVenueChangeRequestController::class, 'show'])
+            ->whereNumber('venueChangeRequest')
+            ->name('venue-change-requests.show');
+        Route::post('/venue-change-requests/{venueChangeRequest}/approve', [\App\Http\Controllers\Teacher\UnitVenueChangeRequestController::class, 'approve'])
+            ->whereNumber('venueChangeRequest')
+            ->name('venue-change-requests.approve');
+        Route::post('/venue-change-requests/{venueChangeRequest}/reject', [\App\Http\Controllers\Teacher\UnitVenueChangeRequestController::class, 'reject'])
+            ->whereNumber('venueChangeRequest')
+            ->name('venue-change-requests.reject');
+        Route::get('/venue-change-authorizations', [\App\Http\Controllers\Teacher\UnitVenueChangeAuthorizationController::class, 'index'])
+            ->name('venue-change-authorizations.index');
+        Route::get('/venue-change-authorizations/create', [\App\Http\Controllers\Teacher\UnitVenueChangeAuthorizationController::class, 'create'])
+            ->name('venue-change-authorizations.create');
+        Route::post('/venue-change-authorizations', [\App\Http\Controllers\Teacher\UnitVenueChangeAuthorizationController::class, 'store'])
+            ->name('venue-change-authorizations.store');
+        Route::get('/venue-change-authorizations/staff/{teacher}/schedules', [\App\Http\Controllers\Teacher\UnitVenueChangeAuthorizationController::class, 'staffSchedules'])
+            ->whereNumber('teacher')
+            ->name('venue-change-authorizations.staff-schedules');
+        Route::get('/venue-change-authorizations/{venueChangeAuthorization}', [\App\Http\Controllers\Teacher\UnitVenueChangeAuthorizationController::class, 'show'])
+            ->whereNumber('venueChangeAuthorization')
+            ->name('venue-change-authorizations.show');
     });
+
+    Route::get('/teacher/self-reported-absences/{kind}/{attendance}', [UnitAttendanceController::class, 'ownerShow'])
+        ->whereIn('kind', ['lecturer', 'administrator'])
+        ->whereNumber('attendance')
+        ->name('teacher.self-reported-absences.show');
 
     Route::prefix('teacher/communication')->name('teacher.communication.')->group(function () {
         Route::get('/inbox', [TeacherCommunicationController::class, 'inbox'])->name('inbox');
@@ -150,6 +192,11 @@ Route::middleware(['auth:teacher', 'attendance.portal.restrict'])->group(functio
             Route::post('/check-in', [StaffAttendanceController::class, 'checkIn']);
             Route::post('/check-out', [StaffAttendanceController::class, 'checkOut']);
             Route::get('/history', [StaffAttendanceController::class, 'history']);
+            Route::get('/mark-absent/{timetable}', [StaffAttendanceController::class, 'createSelfReportedAbsence'])
+                ->whereNumber('timetable')
+                ->name('teacher.staff-attendance.mark-absent.create');
+            Route::post('/mark-absent', [StaffAttendanceController::class, 'storeSelfReportedAbsence'])
+                ->name('teacher.staff-attendance.mark-absent.store');
         });
 
     Route::middleware('teacher.staff_type:administrator')->group(function () {

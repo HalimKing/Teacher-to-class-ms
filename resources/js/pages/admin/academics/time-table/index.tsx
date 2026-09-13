@@ -143,6 +143,7 @@ const TimeTablesIndexPage = ({
     day: initialFilters.day || ''
   });
   const [showFilters, setShowFilters] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -433,73 +434,72 @@ const TimeTablesIndexPage = ({
   return (
     <AppLayout breadcrumbs={breadcrumbs}>
       <Head title="Assigned Schedules" />
-      <div className="min-h-screen bg-slate-50 flex">
+      <div className="flex min-h-screen min-w-0 bg-slate-50 dark:bg-background">
         {/* Main Content Area */}
         <div className="flex-1 min-w-0 flex flex-col">
           {/* Page Content */}
-          <div className="p-4 sm:p-6 lg:p-8 flex-1 overflow-auto">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
-              <div>
-                <h2 className="text-3xl font-extrabold text-slate-900 mb-2">Assigned Schedules</h2>
-                <p className="text-slate-600">Manage class schedules and time slots</p>
+          <div className="min-w-0 p-3 sm:p-6 lg:p-8 flex-1 overflow-x-hidden">
+            <div className="mb-6 flex flex-col gap-4 sm:mb-8 lg:flex-row lg:items-center lg:justify-between">
+              <div className="min-w-0">
+                <h2 className="mb-1 text-2xl font-extrabold text-slate-900 sm:text-3xl dark:text-sidebar-foreground">Assigned Schedules</h2>
+                <p className="text-sm text-slate-600 sm:text-base dark:text-sidebar-foreground/65">Manage class schedules and time slots</p>
               </div>
-              <div className="flex space-x-3 mt-4 sm:mt-0">
-                {/* Export Dropdown */}
-                <div className="relative group">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:flex lg:flex-wrap lg:justify-end">
+                <div className="relative sm:col-span-2 lg:col-span-1">
                   <button
-                    onClick={() => handleExport('excel')}
+                    type="button"
+                    onClick={() => setShowExportMenu((open) => !open)}
                     disabled={isExporting}
-                    className="flex items-center justify-center px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-semibold rounded-xl transition-all duration-200 shadow-md hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-emerald-500/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex min-h-11 w-full items-center justify-center rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 px-4 py-3 font-semibold text-white shadow-md transition-all hover:from-emerald-700 hover:to-teal-800 focus:outline-none focus:ring-4 focus:ring-emerald-500/50 disabled:cursor-not-allowed disabled:opacity-50 lg:w-auto lg:px-6"
                   >
-                    <Download className="w-5 h-5 mr-2" />
+                    <Download className="mr-2 h-5 w-5" />
                     {isExporting ? 'Exporting...' : 'Export'}
+                    <ChevronDown className="ml-2 h-4 w-4" />
                   </button>
-                  
-                  {/* Export Options Dropdown */}
-                  <div className="absolute right-0 mt-1 w-48 bg-white rounded-xl shadow-lg border border-slate-200 py-1 z-10 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
-                    <button
-                      onClick={() => handleExport('excel')}
-                      disabled={isExporting}
-                      className="flex items-center w-full px-4 py-2.5 text-sm text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 transition-colors"
-                    >
-                      <Download className="w-4 h-4 mr-2" />
-                      Export as Excel
-                    </button>
-                    <button
-                      onClick={() => handleExport('csv')}
-                      disabled={isExporting}
-                      className="flex items-center w-full px-4 py-2.5 text-sm text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 transition-colors"
-                    >
-                      <Download className="w-4 h-4 mr-2" />
-                      Export as CSV
-                    </button>
-                    {/* Uncomment when PDF export is implemented
-                    <button
-                      onClick={() => handleExport('pdf')}
-                      disabled={isExporting}
-                      className="flex items-center w-full px-4 py-2.5 text-sm text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 transition-colors"
-                    >
-                      <Download className="w-4 h-4 mr-2" />
-                      Export as PDF
-                    </button>
-                    */}
-                  </div>
+                  {showExportMenu && (
+                    <div className="absolute right-0 z-20 mt-1 w-full rounded-xl border border-slate-200 bg-white py-1 shadow-lg sm:w-48 dark:border-sidebar-border dark:bg-card">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowExportMenu(false);
+                          handleExport('excel');
+                        }}
+                        disabled={isExporting}
+                        className="flex min-h-11 w-full items-center px-4 py-2.5 text-sm text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 dark:text-sidebar-foreground dark:hover:bg-sidebar-accent"
+                      >
+                        <Download className="mr-2 h-4 w-4" />
+                        Export as Excel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowExportMenu(false);
+                          handleExport('csv');
+                        }}
+                        disabled={isExporting}
+                        className="flex min-h-11 w-full items-center px-4 py-2.5 text-sm text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 dark:text-sidebar-foreground dark:hover:bg-sidebar-accent"
+                      >
+                        <Download className="mr-2 h-4 w-4" />
+                        Export as CSV
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {can('admin.academics.time-tables.create') && (
                   <>
                     <Link
                       href={route('admin.academics.time-tables.bulk-create')}
-                      className="flex items-center justify-center px-6 py-3 bg-gradient-to-r from-slate-700 to-slate-900 hover:from-slate-800 hover:to-black text-white font-semibold rounded-xl transition-all duration-200 shadow-md hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-slate-500/50"
+                      className="flex min-h-11 items-center justify-center rounded-xl bg-gradient-to-r from-slate-700 to-slate-900 px-4 py-3 font-semibold text-white shadow-md transition-all hover:from-slate-800 hover:to-black focus:outline-none focus:ring-4 focus:ring-slate-500/50 lg:px-6"
                     >
-                      <Layers className="w-5 h-5 mr-2" />
+                      <Layers className="mr-2 h-5 w-5" />
                       Bulk Create
                     </Link>
                     <Link
                       href={route('admin.academics.time-tables.create')}
-                      className="flex items-center justify-center px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-700 hover:from-indigo-700 hover:to-purple-800 text-white font-semibold rounded-xl transition-all duration-200 shadow-md hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-500/50"
+                      className="flex min-h-11 items-center justify-center rounded-xl bg-gradient-to-r from-indigo-600 to-purple-700 px-4 py-3 font-semibold text-white shadow-md transition-all hover:from-indigo-700 hover:to-purple-800 focus:outline-none focus:ring-4 focus:ring-indigo-500/50 lg:px-6"
                     >
-                      <Plus className="w-5 h-5 mr-2" />
+                      <Plus className="mr-2 h-5 w-5" />
                       Create Schedule
                     </Link>
                   </>
@@ -519,7 +519,7 @@ const TimeTablesIndexPage = ({
                   <div className="space-y-3">
                     <a
                       href={route('admin.academics.time-tables.template')}
-                      className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                      className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 sm:w-auto dark:border-sidebar-border dark:text-sidebar-foreground dark:hover:bg-sidebar-accent"
                     >
                       <Download className="h-4 w-4" />
                       Download Template
@@ -548,12 +548,12 @@ const TimeTablesIndexPage = ({
                         onChange={(event) => setImportFile(event.target.files?.[0] ?? null)}
                       />
                     </label>
-                    <div className="flex gap-2">
+                    <div className="flex flex-col gap-2 sm:flex-row">
                       {importFile && (
                         <button
                           type="button"
                           onClick={() => setImportFile(null)}
-                          className="inline-flex items-center gap-1 rounded-lg px-3 py-2 text-sm text-slate-600 hover:bg-slate-100"
+                          className="inline-flex min-h-11 items-center justify-center gap-1 rounded-lg px-3 py-2 text-sm text-slate-600 hover:bg-slate-100 dark:text-sidebar-foreground dark:hover:bg-sidebar-accent"
                         >
                           <X className="h-4 w-4" />
                           Clear
@@ -562,7 +562,7 @@ const TimeTablesIndexPage = ({
                       <button
                         type="submit"
                         disabled={previewLoading || !importFile}
-                        className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
                       >
                         {previewLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                         {previewLoading ? 'Previewing...' : 'Preview Import'}
@@ -574,30 +574,30 @@ const TimeTablesIndexPage = ({
             )}
 
             {/* Filters Section */}
-            <div className="mb-6 bg-white rounded-2xl shadow-lg border border-slate-200 p-4">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center space-x-2">
-                  <Filter className="w-5 h-5 text-slate-500" />
-                  <h3 className="text-lg font-semibold text-slate-900">Filters</h3>
+            <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-lg dark:border-sidebar-border dark:bg-card">
+              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Filter className="h-5 w-5 shrink-0 text-slate-500" />
+                  <h3 className="text-lg font-semibold text-slate-900 dark:text-sidebar-foreground">Filters</h3>
                   {activeFilterCount > 0 && (
-                    <span className="bg-indigo-100 text-indigo-800 text-xs font-semibold px-2.5 py-0.5 rounded-full">
+                    <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-semibold text-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-200">
                       {activeFilterCount} active
                     </span>
                   )}
                 </div>
-                <div className="flex space-x-2">
+                <div className="flex flex-wrap gap-2">
                   {activeFilterCount > 0 && (
                     <button
                       onClick={clearAllFilters}
-                      className="text-sm text-slate-600 hover:text-slate-900 flex items-center space-x-1 px-3 py-1.5 hover:bg-slate-100 rounded-lg transition-colors"
+                      className="flex min-h-11 items-center gap-1 rounded-lg px-3 py-2 text-sm text-slate-600 hover:bg-slate-100 dark:text-sidebar-foreground/70 dark:hover:bg-sidebar-accent"
                     >
-                      <X className="w-4 h-4" />
+                      <X className="h-4 w-4" />
                       <span>Clear all</span>
                     </button>
                   )}
                   <button
                     onClick={() => setShowFilters(!showFilters)}
-                    className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center space-x-1 px-3 py-1.5 hover:bg-indigo-50 rounded-lg transition-colors"
+                    className="flex min-h-11 items-center gap-1 rounded-lg px-3 py-2 text-sm text-indigo-600 hover:bg-indigo-50 dark:text-indigo-300 dark:hover:bg-indigo-950/30"
                   >
                     {showFilters ? 'Hide filters' : 'Show filters'}
                   </button>
@@ -768,16 +768,16 @@ const TimeTablesIndexPage = ({
                   </div>
 
                   {/* Apply Filter Button */}
-                  <div className="md:col-span-2 lg:col-span-5 flex justify-end space-x-3">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:justify-end md:col-span-2 lg:col-span-4">
                     <button
                       onClick={clearAllFilters}
-                      className="px-4 py-2.5 border border-slate-300 text-slate-700 font-medium rounded-xl hover:bg-slate-50 transition-colors"
+                      className="min-h-11 rounded-xl border border-slate-300 px-4 py-2.5 font-medium text-slate-700 hover:bg-slate-50 dark:border-sidebar-border dark:text-sidebar-foreground dark:hover:bg-sidebar-accent"
                     >
                       Reset
                     </button>
                     <button
                       onClick={applyFilters}
-                      className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                      className="min-h-11 rounded-xl bg-indigo-600 px-4 py-2.5 font-medium text-white transition-colors hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
                     >
                       Apply Filters
                     </button>
@@ -788,17 +788,17 @@ const TimeTablesIndexPage = ({
 
             {/* Export Info Bar */}
             {activeFilterCount > 0 && (
-              <div className="mb-4 p-4 bg-emerald-50 border border-emerald-200 rounded-2xl">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-emerald-100 rounded-lg">
-                      <Download className="w-5 h-5 text-emerald-600" />
+              <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900/40 dark:bg-emerald-950/20">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-start gap-3">
+                    <div className="rounded-lg bg-emerald-100 p-2 dark:bg-emerald-900/40">
+                      <Download className="h-5 w-5 text-emerald-600" />
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-emerald-900">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-emerald-900 dark:text-emerald-200">
                         Export with current filters applied
                       </p>
-                      <p className="text-xs text-emerald-700">
+                      <p className="text-xs text-emerald-700 dark:text-emerald-300/80">
                         {activeFilterCount} active filter{activeFilterCount !== 1 ? 's' : ''} will be included in the export
                       </p>
                     </div>
@@ -806,7 +806,7 @@ const TimeTablesIndexPage = ({
                   <button
                     onClick={() => handleExport('excel')}
                     disabled={isExporting}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="min-h-11 w-full rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                   >
                     {isExporting ? 'Exporting...' : 'Export Now'}
                   </button>
@@ -817,18 +817,84 @@ const TimeTablesIndexPage = ({
             {/* Time Tables List - Grouped by Day */}
             <div className="space-y-6">
               {sortedDays.map((day) => (
-                <div key={day} className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
-                  <div className="p-6 border-b border-slate-200 bg-slate-50">
-                    <h3 className="text-xl font-bold text-slate-900 flex items-center">
-                      <Calendar className="w-5 h-5 mr-2 text-indigo-600" />
-                      {day}
-                      <span className="ml-2 text-sm font-normal text-slate-500">
+                <div key={day} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg dark:border-sidebar-border dark:bg-card">
+                  <div className="border-b border-slate-200 bg-slate-50 p-4 sm:p-6 dark:border-sidebar-border dark:bg-sidebar-accent/40">
+                    <h3 className="flex flex-wrap items-center gap-2 text-lg font-bold text-slate-900 sm:text-xl dark:text-sidebar-foreground">
+                      <Calendar className="h-5 w-5 shrink-0 text-indigo-600" />
+                      <span>{day}</span>
+                      <span className="text-sm font-normal text-slate-500 dark:text-sidebar-foreground/55">
                         ({groupedByDay[day].length} time slots)
                       </span>
                     </h3>
                   </div>
+
+                  <div className="space-y-3 p-3 lg:hidden">
+                    {groupedByDay[day]
+                      .sort((a, b) => a.start_time.localeCompare(b.start_time))
+                      .map((timetable) => (
+                        <article key={timetable.id} className="rounded-xl border border-slate-200 p-4 dark:border-sidebar-border">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-slate-900 dark:text-sidebar-foreground">
+                                {formatTime(timetable.start_time)} – {formatTime(timetable.end_time)}
+                              </p>
+                              <p className="mt-1 text-xs text-slate-500 dark:text-sidebar-foreground/55">
+                                {calculateDuration(timetable.start_time, timetable.end_time)}
+                              </p>
+                            </div>
+                            <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                              timetable.staff_type === 'administrator'
+                                ? 'bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-200'
+                                : 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-200'
+                            }`}>
+                              {timetable.staff_type === 'administrator' ? 'Administrator' : 'Lecturer'}
+                            </span>
+                          </div>
+                          <p className="mt-3 truncate text-sm font-medium text-slate-900 dark:text-sidebar-foreground">
+                            {timetable.course?.name || 'Office Schedule'}
+                          </p>
+                          <p className="truncate text-xs text-slate-500 dark:text-sidebar-foreground/55">
+                            {timetable.course?.course_code || 'No course'}
+                            {timetable.class_room?.name ? ` · ${timetable.class_room.name}` : ''}
+                          </p>
+                          <p className="mt-2 truncate text-sm text-slate-700 dark:text-sidebar-foreground/75">
+                            {timetable.teacher
+                              ? `${timetable.teacher.title} ${timetable.teacher.first_name} ${timetable.teacher.last_name}`
+                              : 'No staff assigned'}
+                          </p>
+                          <div className="mt-3 flex gap-2">
+                            {can('admin.academics.time-tables.edit') && (
+                              <Link
+                                href={route('admin.academics.time-tables.edit', timetable.id)}
+                                className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-sidebar-border dark:text-sidebar-foreground dark:hover:bg-sidebar-accent"
+                              >
+                                <Edit className="h-4 w-4" />
+                                Edit
+                              </Link>
+                            )}
+                            {can('admin.academics.time-tables.delete') && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleDelete(
+                                    timetable.id,
+                                    timetable.course?.name || 'Office Schedule',
+                                    timetable.day_of_week || timetable.day,
+                                    `${formatTime(timetable.start_time)} - ${formatTime(timetable.end_time)}`,
+                                  )
+                                }
+                                className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-rose-200 px-3 text-sm font-medium text-rose-700 hover:bg-rose-50 dark:border-rose-900/40 dark:text-rose-300 dark:hover:bg-rose-950/20"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                Delete
+                              </button>
+                            )}
+                          </div>
+                        </article>
+                      ))}
+                  </div>
                   
-                  <div className="overflow-x-auto">
+                  <div className="hidden overflow-x-auto lg:block">
                     <table className="w-full">
                       <thead className="bg-slate-50 border-b border-slate-200">
                         <tr>
@@ -1033,23 +1099,23 @@ const TimeTablesIndexPage = ({
 
             {/* Pagination */}
             {timeTables.total > 0 && (
-              <div className="mt-6 bg-white rounded-2xl shadow-lg border border-slate-200 p-4">
-                <div className="flex items-center justify-between flex-wrap gap-4">
-                  <div className="text-sm text-slate-600">
-                    Showing <span className="font-semibold text-slate-800">
+              <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-lg dark:border-sidebar-border dark:bg-card">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="text-sm text-slate-600 dark:text-sidebar-foreground/65">
+                    Showing <span className="font-semibold text-slate-800 dark:text-sidebar-foreground">
                       {((timeTables.current_page - 1) * timeTables.per_page) + 1}
-                    </span> to <span className="font-semibold text-slate-800">
+                    </span> to <span className="font-semibold text-slate-800 dark:text-sidebar-foreground">
                       {Math.min(timeTables.current_page * timeTables.per_page, timeTables.total)}
-                    </span> of <span className="font-semibold text-slate-800">{timeTables.total}</span> Time Slots
+                    </span> of <span className="font-semibold text-slate-800 dark:text-sidebar-foreground">{timeTables.total}</span> Time Slots
                   </div>
-                  <div className="flex space-x-2">
+                  <div className="flex w-full gap-2 sm:w-auto">
                     <button
                       onClick={() => handlePageChange(timeTables.current_page - 1)}
                       disabled={timeTables.current_page === 1}
-                      className={`px-4 py-2 border border-slate-300 rounded-xl text-sm font-medium ${
+                      className={`min-h-11 flex-1 rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium sm:flex-none ${
                         timeTables.current_page === 1
-                          ? 'text-slate-400 bg-slate-100 cursor-not-allowed'
-                          : 'text-slate-700 hover:bg-slate-50 hover:border-slate-400'
+                          ? 'cursor-not-allowed bg-slate-100 text-slate-400'
+                          : 'text-slate-700 hover:border-slate-400 hover:bg-slate-50 dark:border-sidebar-border dark:text-sidebar-foreground dark:hover:bg-sidebar-accent'
                       }`}
                     >
                       Previous
@@ -1087,9 +1153,9 @@ const TimeTablesIndexPage = ({
                     <button
                       onClick={() => handlePageChange(timeTables.current_page + 1)}
                       disabled={timeTables.current_page === timeTables.last_page}
-                      className={`px-4 py-2 border border-indigo-300 bg-indigo-600 text-white rounded-xl text-sm font-medium ${
+                      className={`min-h-11 flex-1 rounded-xl border border-indigo-300 bg-indigo-600 px-4 py-2 text-sm font-medium text-white sm:flex-none ${
                         timeTables.current_page === timeTables.last_page
-                          ? 'opacity-50 cursor-not-allowed'
+                          ? 'cursor-not-allowed opacity-50'
                           : 'hover:bg-indigo-700'
                       }`}
                     >
@@ -1111,10 +1177,10 @@ const TimeTablesIndexPage = ({
             onClick={() => setShowPreview(false)}
             aria-label="Close import preview"
           />
-          <div className="relative z-10 flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-start justify-between border-b border-slate-200 px-6 py-4">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900">Import Preview</h3>
+          <div className="relative z-10 flex max-h-[min(92dvh,40rem)] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-card">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-4 sm:px-6 dark:border-sidebar-border">
+              <div className="min-w-0">
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-sidebar-foreground">Import Preview</h3>
                 <p className="text-sm text-slate-600">
                   Review {previewRows.length} row(s) before importing.
                   {importSummary && (
@@ -1131,9 +1197,38 @@ const TimeTablesIndexPage = ({
               </button>
             </div>
 
-            <div className="overflow-auto px-6 py-4">
-              <table className="min-w-full text-left text-sm">
-                <thead className="sticky top-0 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+            <div className="overflow-auto px-3 py-4 sm:px-6">
+              <div className="space-y-3 md:hidden">
+                {previewRows.map((row) => (
+                  <article key={row.line} className="rounded-xl border border-slate-200 p-3 dark:border-sidebar-border">
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="text-sm font-semibold text-slate-900 dark:text-sidebar-foreground">Line {row.line}</p>
+                      {row.errors.length === 0 ? (
+                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                          {row.exists ? 'Exists' : 'Ready'}
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-semibold text-rose-700">Invalid</span>
+                      )}
+                    </div>
+                    <p className="mt-2 text-sm text-slate-700 dark:text-sidebar-foreground/75">
+                      {row.data.employee_id || '—'} · {row.data.course_code || '—'}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {row.data.day || '—'} · {row.data.start_time || '—'} – {row.data.end_time || '—'}
+                    </p>
+                    {row.errors.length > 0 && (
+                      <ul className="mt-2 space-y-1 text-xs text-rose-600">
+                        {row.errors.map((error) => (
+                          <li key={error}>• {error}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </article>
+                ))}
+              </div>
+              <table className="hidden min-w-full text-left text-sm md:table">
+                <thead className="sticky top-0 bg-slate-50 text-xs uppercase tracking-wide text-slate-500 dark:bg-sidebar-accent">
                   <tr>
                     <th className="px-3 py-2">Line</th>
                     <th className="px-3 py-2">Staff</th>
@@ -1145,15 +1240,15 @@ const TimeTablesIndexPage = ({
                 </thead>
                 <tbody>
                   {previewRows.map((row) => (
-                    <tr key={row.line} className="border-t border-slate-100 align-top">
-                      <td className="px-3 py-3 font-medium text-slate-700">{row.line}</td>
+                    <tr key={row.line} className="border-t border-slate-100 align-top dark:border-sidebar-border">
+                      <td className="px-3 py-3 font-medium text-slate-700 dark:text-sidebar-foreground">{row.line}</td>
                       <td className="px-3 py-3">
-                        <div className="font-medium text-slate-900">{row.data.employee_id || '—'}</div>
+                        <div className="font-medium text-slate-900 dark:text-sidebar-foreground">{row.data.employee_id || '—'}</div>
                         <div className="text-xs text-slate-500">{row.data.staff_type || '—'}</div>
                       </td>
-                      <td className="px-3 py-3 text-slate-700">{row.data.course_code || '—'}</td>
-                      <td className="px-3 py-3 text-slate-700">{row.data.venue || row.data.classroom || '—'}</td>
-                      <td className="px-3 py-3 text-slate-700">
+                      <td className="px-3 py-3 text-slate-700 dark:text-sidebar-foreground/75">{row.data.course_code || '—'}</td>
+                      <td className="px-3 py-3 text-slate-700 dark:text-sidebar-foreground/75">{row.data.venue || row.data.classroom || '—'}</td>
+                      <td className="px-3 py-3 text-slate-700 dark:text-sidebar-foreground/75">
                         <div>{row.data.day || '—'}</div>
                         <div className="text-xs text-slate-500">
                           {row.data.start_time || '—'} – {row.data.end_time || '—'}
@@ -1178,15 +1273,15 @@ const TimeTablesIndexPage = ({
               </table>
             </div>
 
-            <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-6 py-4">
-              <p className="text-sm text-slate-600">
+            <div className="flex flex-col gap-3 border-t border-slate-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 dark:border-sidebar-border">
+              <p className="text-sm text-slate-600 dark:text-sidebar-foreground/65">
                 Valid rows will be imported. Invalid rows are skipped.
               </p>
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row">
                 <button
                   type="button"
                   onClick={() => setShowPreview(false)}
-                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  className="min-h-11 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-sidebar-border dark:text-sidebar-foreground dark:hover:bg-sidebar-accent"
                 >
                   Cancel
                 </button>
@@ -1194,7 +1289,7 @@ const TimeTablesIndexPage = ({
                   type="button"
                   onClick={handleConfirmImport}
                   disabled={confirmLoading || previewRows.filter((row) => row.errors.length === 0).length === 0}
-                  className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
                 >
                   {confirmLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                   {confirmLoading ? 'Importing...' : 'Confirm Import'}

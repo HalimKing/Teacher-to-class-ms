@@ -45,6 +45,10 @@ beforeEach(function () {
         ['value' => '0', 'group' => 'notifications', 'type' => 'boolean', 'description' => 'test'],
     );
     SystemSetting::query()->updateOrCreate(
+        ['key' => 'notify_leadership_venue_change_request_submitted'],
+        ['value' => '0', 'group' => 'notifications', 'type' => 'boolean', 'description' => 'test'],
+    );
+    SystemSetting::query()->updateOrCreate(
         ['key' => 'notify_venue_change_request_approved'],
         ['value' => '0', 'group' => 'notifications', 'type' => 'boolean', 'description' => 'test'],
     );
@@ -329,7 +333,11 @@ it('lets administrator staff submit a venue change request that stays pending', 
 
     expect($request->status)->toBe(VenueChangeRequest::STATUS_PENDING)
         ->and($request->status_label)->toBe('Pending approval')
-        ->and($request->items)->toHaveCount(1);
+        ->and($request->items)->toHaveCount(1)
+        ->and($request->faculty_id)->toBe($this->faculty->id)
+        ->and($request->department_id)->toBe($this->department->id)
+        ->and($request->approvals)->toHaveCount(1)
+        ->and($request->approvals->first()->role)->toBe('administrator');
 
     $this->assertDatabaseMissing('venue_change_authorizations', [
         'source_request_id' => $request->id,

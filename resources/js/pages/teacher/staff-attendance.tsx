@@ -7,10 +7,11 @@ import { apiJsonRequest, getApiErrorMessage } from '@/lib/http';
 import { getBooleanSetting } from '@/lib/system-settings';
 import { buildFaceVerificationPayload } from '@/lib/teacher-api';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, usePage } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import { Circle, GoogleMap, LoadScript, Marker } from '@react-google-maps/api';
-import { AlertTriangle, CalendarCheck, CheckCircle, Clock, Loader2, LogIn, LogOut, MapPin, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, CalendarCheck, CheckCircle, Clock, Loader2, LogIn, LogOut, MapPin, ShieldCheck, UserMinus } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { Bounce, toast } from 'react-toastify';
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Dashboard', href: '/teacher/dashboard' },
@@ -68,10 +69,13 @@ interface StaffSchedule {
         minutes_late?: number | null;
         location_match: boolean;
         exception_category?: string | null;
+        self_reported?: boolean;
     } | null;
     is_completed: boolean;
     is_missed?: boolean;
     can_take_attendance?: boolean;
+    can_self_report_absence?: boolean;
+    self_reported?: boolean;
     attendance_blocked_message?: string | null;
     attendance_state?: string | null;
     needs_explanation?: boolean;
@@ -134,7 +138,7 @@ export default function StaffAttendancePage({
     todaySchedules?: StaffSchedule[];
     facialRecognitionEnabled?: boolean;
 }) {
-    const { system_settings: systemSettings } = usePage().props as {
+    const { system_settings: systemSettings, flash } = usePage().props as {
         system_settings?: {
             attendance?: {
                 gps_enforcement_enabled?: { value?: boolean };
@@ -146,7 +150,17 @@ export default function StaffAttendancePage({
                 default_campus_lng?: { value?: number };
             };
         };
+        flash?: { success?: string; error?: string };
     };
+
+    useEffect(() => {
+        if (flash?.success) {
+            toast.success(flash.success, { theme: 'dark', transition: Bounce });
+        }
+        if (flash?.error) {
+            toast.error(flash.error, { theme: 'dark', transition: Bounce });
+        }
+    }, [flash?.success, flash?.error]);
 
     const [todaySchedulesState, setTodaySchedulesState] = useState<StaffSchedule[]>(todaySchedules);
     const [selectedSchedule, setSelectedSchedule] = useState<StaffSchedule | null>(todaySchedules[0] || null);
@@ -540,13 +554,13 @@ export default function StaffAttendancePage({
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Take Attendance" />
 
-            <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 p-4 md:p-6">
+            <div className="mx-auto flex w-full min-w-0 max-w-3xl flex-col gap-5 p-3 sm:p-4 md:p-6">
                 <header className="space-y-2">
                     <div className="inline-flex items-center gap-2 rounded-full bg-violet-100 px-3 py-1 text-sm font-medium text-violet-800 dark:bg-violet-900/30 dark:text-violet-200">
                         <ShieldCheck className="size-4" />
                         Take Attendance
                     </div>
-                    <h1 className="text-2xl font-bold tracking-tight text-sidebar-foreground md:text-3xl">Mark your attendance</h1>
+                    <h1 className="text-xl font-bold tracking-tight text-sidebar-foreground sm:text-2xl md:text-3xl">Mark your attendance</h1>
                     <p className="text-sm text-sidebar-foreground/70">{todayLabel}</p>
                 </header>
 
@@ -671,7 +685,7 @@ export default function StaffAttendancePage({
                             </div>
                             <Link
                                 href="/teacher/attendance-explanations"
-                                className="inline-flex shrink-0 items-center justify-center rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700"
+                                className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700"
                             >
                                 Submit explanation
                             </Link>
@@ -687,7 +701,7 @@ export default function StaffAttendancePage({
                             </p>
                             <Link
                                 href="/teacher/venue-change-requests"
-                                className="inline-flex shrink-0 items-center justify-center rounded-lg border border-sidebar-border px-3 py-1.5 text-sm font-medium hover:bg-slate-50 dark:hover:bg-sidebar"
+                                className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg border border-sidebar-border px-3 py-2 text-sm font-medium hover:bg-slate-50 dark:hover:bg-sidebar"
                             >
                                 Venue change requests
                             </Link>
@@ -756,6 +770,23 @@ export default function StaffAttendancePage({
                             {isLoadingApi ? <Loader2 className="size-5 animate-spin" /> : <LogOut className="size-5" />}
                             Check Out
                         </button>
+                    )}
+
+                    {selectedSchedule?.can_self_report_absence && (
+                        <button
+                            type="button"
+                            onClick={() => router.visit(route('teacher.staff-attendance.mark-absent.create', selectedSchedule.id))}
+                            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-rose-600 px-6 py-4 text-base font-semibold text-white transition-colors hover:bg-rose-700"
+                        >
+                            <UserMinus className="size-5" />
+                            Mark Absent
+                        </button>
+                    )}
+
+                    {(selectedSchedule?.self_reported || selectedSchedule?.attendance_status?.self_reported) && (
+                        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4 text-center text-sm font-medium text-rose-800">
+                            You marked yourself absent for this shift. Check-in and check-out are closed.
+                        </div>
                     )}
 
                     {selectedSchedule?.is_completed && !activeSchedule && (

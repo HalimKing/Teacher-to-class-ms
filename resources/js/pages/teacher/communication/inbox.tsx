@@ -22,14 +22,14 @@ export default function TeacherCommunicationInbox({ messages, filters, capabilit
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Inbox" />
-            <div className="space-y-6 p-4 md:p-6">
+            <div className="min-w-0 space-y-6 p-3 sm:p-4 md:p-6">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                    <div>
-                        <h1 className="text-2xl font-bold text-slate-900">Inbox</h1>
-                        <p className="mt-1 text-sm text-slate-500">Messages sent to you by administrators and unit leaders.</p>
+                    <div className="min-w-0">
+                        <h1 className="text-xl font-bold text-sidebar-foreground sm:text-2xl">Inbox</h1>
+                        <p className="mt-1 text-sm text-sidebar-foreground/60">Messages sent to you by administrators and unit leaders.</p>
                     </div>
                     {capabilities.can_compose && (
-                        <Link href={route('teacher.communication.compose')} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
+                        <Link href={route('teacher.communication.compose')} className="inline-flex min-h-11 items-center justify-center rounded-lg bg-sidebar-foreground px-4 py-2 text-sm font-semibold text-sidebar dark:bg-white dark:text-neutral-950">
                             Compose message
                         </Link>
                     )}

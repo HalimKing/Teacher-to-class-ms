@@ -1,6 +1,6 @@
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head, router } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import { FormEvent, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -18,6 +18,9 @@ interface AttendanceRecord {
     status: string;
     check_in: string | null;
     check_out: string | null;
+    self_reported?: boolean;
+    source?: string | null;
+    reason?: string | null;
 }
 
 interface UnitAttendancePageProps {
@@ -46,26 +49,29 @@ export default function UnitAttendancePage({ records, staff, filters, leadership
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Unit Attendance" />
-            <div className="flex flex-col gap-6 p-4 md:p-6">
+            <div className="flex min-w-0 flex-col gap-6 p-3 sm:p-4 md:p-6">
                 <div>
-                    <h1 className="text-2xl font-semibold text-sidebar-foreground">Unit Attendance</h1>
+                    <h1 className="text-xl font-semibold text-sidebar-foreground sm:text-2xl">Unit Attendance</h1>
                     <p className="mt-1 text-sm text-sidebar-foreground/70">
                         {leadershipScope?.role_label || 'Leadership'} · {unitLabel}
                     </p>
+                    <Link href={route('teacher.unit.self-reported-absences.index')} className="mt-2 inline-flex min-h-10 items-center text-sm font-medium text-primary hover:underline">
+                        View self-reported absences
+                    </Link>
                 </div>
 
-                <form onSubmit={handleSubmit} className="grid gap-4 rounded-2xl border border-sidebar-border/60 bg-white p-4 dark:bg-sidebar-accent md:grid-cols-4">
+                <form onSubmit={handleSubmit} className="grid gap-4 rounded-2xl border border-sidebar-border/60 bg-card p-4 md:grid-cols-4">
                     <label className="text-sm">
                         <span className="mb-1 block text-sidebar-foreground/60">From</span>
-                        <input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} className="w-full rounded-lg border px-3 py-2" />
+                        <input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} className="h-11 w-full rounded-lg border border-sidebar-border/80 bg-background px-3 py-2 text-base md:text-sm" />
                     </label>
                     <label className="text-sm">
                         <span className="mb-1 block text-sidebar-foreground/60">To</span>
-                        <input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} className="w-full rounded-lg border px-3 py-2" />
+                        <input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} className="h-11 w-full rounded-lg border border-sidebar-border/80 bg-background px-3 py-2 text-base md:text-sm" />
                     </label>
                     <label className="text-sm">
                         <span className="mb-1 block text-sidebar-foreground/60">Staff member</span>
-                        <select value={teacherId} onChange={(event) => setTeacherId(event.target.value)} className="w-full rounded-lg border px-3 py-2">
+                        <select value={teacherId} onChange={(event) => setTeacherId(event.target.value)} className="h-11 w-full rounded-lg border border-sidebar-border/80 bg-background px-3 py-2 text-base md:text-sm">
                             <option value="">All staff in unit</option>
                             {staff.map((member) => (
                                 <option key={member.id} value={member.id}>
@@ -75,13 +81,45 @@ export default function UnitAttendancePage({ records, staff, filters, leadership
                         </select>
                     </label>
                     <div className="flex items-end">
-                        <button type="submit" className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
+                        <button type="submit" className="min-h-11 w-full rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
                             Apply filters
                         </button>
                     </div>
                 </form>
 
-                <div className="overflow-hidden rounded-2xl border border-sidebar-border/60 bg-white dark:bg-sidebar-accent">
+                <div className="space-y-3 md:hidden">
+                    {records.length === 0 ? (
+                        <div className="rounded-2xl border border-dashed border-sidebar-border px-4 py-8 text-center text-sm text-sidebar-foreground/60">
+                            No attendance records in this range for your unit.
+                        </div>
+                    ) : (
+                        records.map((record) => (
+                            <div key={`${record.kind}-${record.id}`} className="rounded-2xl border border-sidebar-border/60 bg-card p-4">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0">
+                                        <p className="truncate font-medium text-sidebar-foreground">{record.staff_name}</p>
+                                        <p className="truncate text-xs text-sidebar-foreground/60">{record.employee_id || record.staff_type}</p>
+                                    </div>
+                                    <span className="shrink-0 capitalize text-xs font-medium text-sidebar-foreground/70">{record.status?.replaceAll('_', ' ')}</span>
+                                </div>
+                                <p className="mt-2 text-sm text-sidebar-foreground/70">{record.date}</p>
+                                <p className="mt-1 text-xs text-sidebar-foreground/55">
+                                    In {record.check_in || '—'} · Out {record.check_out || '—'}
+                                </p>
+                                {record.self_reported && (
+                                    <Link
+                                        href={route('teacher.unit.self-reported-absences.show', { kind: record.kind, attendance: record.id })}
+                                        className="mt-3 inline-flex min-h-10 items-center text-sm font-medium text-primary hover:underline"
+                                    >
+                                        View reason
+                                    </Link>
+                                )}
+                            </div>
+                        ))
+                    )}
+                </div>
+
+                <div className="hidden overflow-hidden rounded-2xl border border-sidebar-border/60 bg-card md:block">
                     <table className="min-w-full divide-y divide-sidebar-border/60">
                         <thead className="bg-muted/40 text-left text-xs font-semibold tracking-wide text-sidebar-foreground/60 uppercase">
                             <tr>
@@ -89,8 +127,10 @@ export default function UnitAttendancePage({ records, staff, filters, leadership
                                 <th className="px-4 py-3">Staff member</th>
                                 <th className="px-4 py-3">Type</th>
                                 <th className="px-4 py-3">Status</th>
+                                <th className="px-4 py-3">Source</th>
                                 <th className="px-4 py-3">Check in</th>
                                 <th className="px-4 py-3">Check out</th>
+                                <th className="px-4 py-3"></th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-sidebar-border/50">
@@ -103,13 +143,26 @@ export default function UnitAttendancePage({ records, staff, filters, leadership
                                     </td>
                                     <td className="px-4 py-3 text-sm capitalize">{record.staff_type}</td>
                                     <td className="px-4 py-3 text-sm capitalize">{record.status?.replaceAll('_', ' ')}</td>
+                                    <td className="px-4 py-3 text-sm">{record.source || '—'}</td>
                                     <td className="px-4 py-3 text-sm">{record.check_in || '—'}</td>
                                     <td className="px-4 py-3 text-sm">{record.check_out || '—'}</td>
+                                    <td className="px-4 py-3 text-right text-sm">
+                                        {record.self_reported ? (
+                                            <Link
+                                                href={route('teacher.unit.self-reported-absences.show', { kind: record.kind, attendance: record.id })}
+                                                className="font-medium text-primary hover:underline"
+                                            >
+                                                View reason
+                                            </Link>
+                                        ) : (
+                                            '—'
+                                        )}
+                                    </td>
                                 </tr>
                             ))}
                             {records.length === 0 && (
                                 <tr>
-                                    <td colSpan={6} className="px-4 py-8 text-center text-sm text-sidebar-foreground/60">
+                                    <td colSpan={8} className="px-4 py-8 text-center text-sm text-sidebar-foreground/60">
                                         No attendance records in this range for your unit.
                                     </td>
                                 </tr>

@@ -112,7 +112,7 @@ class AttendanceExplanationController extends Controller
             ->latest('date')
             ->limit(20)
             ->get()
-            ->reject(fn (StaffAttendance $record) => $isExplained(
+            ->reject(fn (StaffAttendance $record) => $record->self_reported || $isExplained(
                 AttendanceExplanation::ATTENDANCE_STAFF,
                 (int) $record->id,
                 AttendanceExplanation::TYPE_ABSENCE,
@@ -156,7 +156,7 @@ class AttendanceExplanationController extends Controller
             ->latest('date')
             ->limit(20)
             ->get()
-            ->reject(fn (TeacherAttendance $record) => $isExplained(
+            ->reject(fn (TeacherAttendance $record) => $record->self_reported || $isExplained(
                 AttendanceExplanation::ATTENDANCE_TEACHER,
                 (int) $record->id,
                 AttendanceExplanation::TYPE_ABSENCE,

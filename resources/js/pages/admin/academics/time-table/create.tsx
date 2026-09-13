@@ -3,7 +3,6 @@ import ComboBox from '@/components/combobox';
 import AppLayout from '@/layouts/app-layout';
 import { PagePropsWithFlash } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
-import TextField from '@mui/material/TextField';
 import { AlertCircle, ArrowLeft, Save } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { ToastContainer, toast } from 'react-toastify';
@@ -286,37 +285,39 @@ const CreateTimeTablePage = ({ academicYear, courses, classRooms, teachers, staf
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Create Schedule" />
-            <div className="min-h-screen bg-slate-50 py-8">
-                <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
-                    <div className="mb-8">
+            <div className="min-h-screen min-w-0 bg-slate-50 py-4 dark:bg-background sm:py-8">
+                <div className="mx-auto max-w-4xl min-w-0 px-3 sm:px-6 lg:px-8">
+                    <div className="mb-5 sm:mb-8">
                         <Link
                             href={route('admin.academics.time-tables.index')}
-                            className="mb-6 inline-flex items-center text-slate-600 hover:text-slate-900"
+                            className="mb-3 inline-flex min-h-10 items-center text-sm text-slate-600 hover:text-slate-900 dark:text-sidebar-foreground/70 dark:hover:text-sidebar-foreground"
                         >
                             <ArrowLeft className="mr-2 h-5 w-5" />
-                            Back to Assigned Schedules
+                            Back to schedules
                         </Link>
-                        <h1 className="text-3xl font-extrabold text-slate-900">Create Schedule</h1>
-                        <p className="mt-2 text-slate-600">Add a new schedule assignment</p>
+                        <h1 className="text-2xl font-extrabold text-slate-900 sm:text-3xl dark:text-sidebar-foreground">Create Schedule</h1>
+                        <p className="mt-2 text-sm text-slate-600 sm:text-base dark:text-sidebar-foreground/65">Add a new schedule assignment</p>
                     </div>
 
-                    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg">
-                        <div className="border-b border-slate-200 bg-gradient-to-r from-indigo-50 to-purple-50 p-6">
-                            <h2 className="text-xl font-bold text-slate-900">Time Slot Details</h2>
-                            <p className="mt-1 text-slate-600">Fill in the details for the new time slot</p>
+                    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg dark:border-sidebar-border dark:bg-card">
+                        <div className="border-b border-slate-200 bg-gradient-to-r from-indigo-50 to-purple-50 p-4 sm:p-6 dark:border-sidebar-border dark:from-indigo-950/30 dark:to-purple-950/20">
+                            <h2 className="text-lg font-bold text-slate-900 sm:text-xl dark:text-sidebar-foreground">Time Slot Details</h2>
+                            <p className="mt-1 text-sm text-slate-600 dark:text-sidebar-foreground/65">Fill in the details for the new time slot</p>
                         </div>
 
-                        <form onSubmit={handleSubmit} className="space-y-6 p-6">
+                        <form onSubmit={handleSubmit} className="min-w-0 space-y-5 p-4 sm:space-y-6 sm:p-6">
                             {/* Academic Year */}
                             <div>
                                 <label className="mb-2 block text-sm font-medium text-slate-700">Academic Year *</label>
-                                <span className="rounded-2xl bg-purple-700 p-2 text-sm text-white">{academicYear.name}</span>
+                                <span className="inline-flex max-w-full break-words rounded-2xl bg-purple-700 px-3 py-2 text-sm text-white">
+                                    {academicYear.name}
+                                </span>
                             </div>
 
                             {/* Course */}
-                            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                                <div>
-                                    <label className="mb-2 block text-sm font-medium text-slate-700">Staff Type *</label>
+                            <div className="grid min-w-0 grid-cols-1 gap-5 md:grid-cols-2 md:gap-6">
+                                <div className="min-w-0">
+                                    <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-sidebar-foreground">Staff Type *</label>
                                     <ComboBox
                                         options={staffTypeOptions}
                                         label="Select Staff Type"
@@ -340,8 +341,8 @@ const CreateTimeTablePage = ({ academicYear, courses, classRooms, teachers, staf
                                     )}
                                 </div>
 
-                                <div>
-                                    <label className="mb-2 block text-sm font-medium text-slate-700">Assigned Staff *</label>
+                                <div className="min-w-0">
+                                    <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-sidebar-foreground">Assigned Staff *</label>
                                     <ComboBox
                                         options={teachers.filter((teacher) => !teacher.staff_type || teacher.staff_type === data.staff_type)}
                                         label="Assign Staff"
@@ -358,8 +359,8 @@ const CreateTimeTablePage = ({ academicYear, courses, classRooms, teachers, staf
                             </div>
 
                             {data.staff_type === 'lecturer' && (
-                                <div>
-                                    <label className="mb-2 block text-sm font-medium text-slate-700">Course *</label>
+                                <div className="min-w-0">
+                                    <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-sidebar-foreground">Course *</label>
                                     <ComboBox
                                         options={courses}
                                         label="Select Course"
@@ -376,8 +377,8 @@ const CreateTimeTablePage = ({ academicYear, courses, classRooms, teachers, staf
                             )}
 
                             {/* Venue */}
-                            <div>
-                                <label className="mb-2 block text-sm font-medium text-slate-700">Venue *</label>
+                            <div className="min-w-0">
+                                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-sidebar-foreground">Venue *</label>
                                 <div>
                                     <ComboBox
                                         options={classRooms}
@@ -398,9 +399,9 @@ const CreateTimeTablePage = ({ academicYear, courses, classRooms, teachers, staf
                             {data.staff_type === 'administrator' ? (
                                 <div>
                                     <label className="mb-2 block text-sm font-medium text-slate-700">Days *</label>
-                                    <div className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 p-4 sm:grid-cols-2 md:grid-cols-3">
+                                    <div className="grid grid-cols-2 gap-2 rounded-xl border border-slate-200 p-3 sm:grid-cols-3 sm:gap-3 sm:p-4 dark:border-sidebar-border">
                                         {daysOptions.map((day) => (
-                                            <label key={day.value} className="flex items-center space-x-3 text-sm text-slate-700">
+                                            <label key={day.value} className="flex min-h-11 items-center gap-2 rounded-lg px-2 text-sm text-slate-700 dark:text-sidebar-foreground">
                                                 <input
                                                     type="checkbox"
                                                     value={day.value}
@@ -436,53 +437,51 @@ const CreateTimeTablePage = ({ academicYear, courses, classRooms, teachers, staf
                             )}
 
                             {/* Time Slot */}
-                            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                                <div>
-                                    <label className="mb-2 block text-sm font-medium text-slate-700">Start Time *</label>
-                                    <div className="relative">
-                                        <TextField
-                                            type="time"
-                                            name="start_time"
-                                            placeholder="Start time"
-                                            value={data.start_time}
-                                            onChange={(e) => setData('start_time', e.target.value)}
-                                            fullWidth
-                                            error={!!errors.start_time}
-                                            helperText={errors.start_time}
-                                            slotProps={{
-                                                input: {
-                                                    className: 'w-full',
-                                                },
-                                            }}
-                                        />
-                                    </div>
+                            <div className="grid min-w-0 grid-cols-1 gap-5 md:grid-cols-2 md:gap-6">
+                                <div className="min-w-0">
+                                    <label htmlFor="start_time" className="mb-2 block text-sm font-medium text-slate-700 dark:text-sidebar-foreground">
+                                        Start Time *
+                                    </label>
+                                    <input
+                                        id="start_time"
+                                        type="time"
+                                        name="start_time"
+                                        value={data.start_time}
+                                        onChange={(e) => setData('start_time', e.target.value)}
+                                        className="h-12 w-full min-w-0 rounded-xl border border-slate-300 bg-background px-3 text-base text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 md:text-sm dark:border-sidebar-border dark:text-sidebar-foreground"
+                                    />
+                                    {errors.start_time && (
+                                        <p className="mt-2 flex items-center text-sm text-red-500">
+                                            <AlertCircle className="mr-1 h-4 w-4" />
+                                            {errors.start_time}
+                                        </p>
+                                    )}
                                 </div>
 
-                                <div>
-                                    <label className="mb-2 block text-sm font-medium text-slate-700">End Time *</label>
-                                    <div className="relative">
-                                        <TextField
-                                            type="time"
-                                            name="end_time"
-                                            placeholder="End time"
-                                            value={data.end_time}
-                                            onChange={(e) => setData('end_time', e.target.value)}
-                                            fullWidth
-                                            error={!!errors.end_time}
-                                            helperText={errors.end_time}
-                                            slotProps={{
-                                                input: {
-                                                    className: 'w-full',
-                                                },
-                                            }}
-                                        />
-                                    </div>
+                                <div className="min-w-0">
+                                    <label htmlFor="end_time" className="mb-2 block text-sm font-medium text-slate-700 dark:text-sidebar-foreground">
+                                        End Time *
+                                    </label>
+                                    <input
+                                        id="end_time"
+                                        type="time"
+                                        name="end_time"
+                                        value={data.end_time}
+                                        onChange={(e) => setData('end_time', e.target.value)}
+                                        className="h-12 w-full min-w-0 rounded-xl border border-slate-300 bg-background px-3 text-base text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 md:text-sm dark:border-sidebar-border dark:text-sidebar-foreground"
+                                    />
+                                    {errors.end_time && (
+                                        <p className="mt-2 flex items-center text-sm text-red-500">
+                                            <AlertCircle className="mr-1 h-4 w-4" />
+                                            {errors.end_time}
+                                        </p>
+                                    )}
                                 </div>
                             </div>
 
                             {/* Conflict Warning */}
                             {checkingConflict ? (
-                                <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+                                <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-900/40 dark:bg-blue-950/20">
                                     <div className="flex items-center">
                                         <div className="mr-3 h-4 w-4 animate-spin rounded-full border-b-2 border-blue-600"></div>
                                         <span className="text-blue-700">Checking for time conflicts...</span>
@@ -490,7 +489,7 @@ const CreateTimeTablePage = ({ academicYear, courses, classRooms, teachers, staf
                                 </div>
                             ) : (
                                 hasConflict && (
-                                    <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+                                    <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-rose-900/40 dark:bg-rose-950/20">
                                         <div className="flex items-start">
                                             <AlertCircle className="mt-0.5 mr-3 h-5 w-5 flex-shrink-0 text-red-600" />
                                             <div>
@@ -507,11 +506,11 @@ const CreateTimeTablePage = ({ academicYear, courses, classRooms, teachers, staf
 
                             {/* Duration Preview */}
                             {data.start_time && data.end_time && !hasConflict && (
-                                <div className="rounded-xl border border-green-200 bg-green-50 p-4">
-                                    <div className="flex items-center justify-between">
+                                <div className="rounded-xl border border-green-200 bg-green-50 p-4 dark:border-emerald-900/40 dark:bg-emerald-950/20">
+                                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                         <div>
-                                            <p className="font-medium text-green-800">Time Slot Duration</p>
-                                            <p className="text-sm text-green-700">
+                                            <p className="font-medium text-green-800 dark:text-emerald-200">Time Slot Duration</p>
+                                            <p className="text-sm text-green-700 dark:text-emerald-300">
                                                 {(() => {
                                                     const start = new Date(`2000-01-01T${data.start_time}`);
                                                     const end = new Date(`2000-01-01T${data.end_time}`);
@@ -528,7 +527,7 @@ const CreateTimeTablePage = ({ academicYear, courses, classRooms, teachers, staf
                                                 })()}
                                             </p>
                                         </div>
-                                        <div className="text-right text-green-600">
+                                        <div className="text-sm text-green-600 sm:text-right dark:text-emerald-300">
                                             <div>
                                                 {new Date(`2000-01-01T${data.start_time}`).toLocaleTimeString('en-US', {
                                                     hour: '2-digit',
@@ -548,21 +547,19 @@ const CreateTimeTablePage = ({ academicYear, courses, classRooms, teachers, staf
                             )}
 
                             {/* Form Actions */}
-                            <div className="flex items-center justify-end space-x-4 border-t border-slate-200 pt-6">
+                            <div className="flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:flex-wrap sm:justify-end dark:border-sidebar-border">
                                 <Link
                                     href={route('admin.academics.time-tables.index')}
-                                    className="rounded-xl border border-slate-300 px-6 py-3 font-medium text-slate-700 transition-colors hover:bg-slate-50"
-                                    disabled={processing}
+                                    className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 px-5 py-3 font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-sidebar-border dark:text-sidebar-foreground dark:hover:bg-sidebar-accent"
                                 >
                                     Cancel
                                 </Link>
 
-                                {/* Save and Add Another button */}
                                 <button
                                     type="button"
                                     onClick={handleSaveAndAddAnother}
                                     disabled={processing || hasConflict}
-                                    className={`flex items-center rounded-xl bg-gradient-to-r from-green-600 to-emerald-700 px-6 py-3 font-medium text-white transition-all duration-200 ${
+                                    className={`inline-flex min-h-11 items-center justify-center rounded-xl bg-gradient-to-r from-green-600 to-emerald-700 px-5 py-3 font-medium text-white transition-all duration-200 ${
                                         processing || hasConflict
                                             ? 'cursor-not-allowed opacity-50'
                                             : 'shadow-md hover:from-green-700 hover:to-emerald-800 hover:shadow-lg'
@@ -581,11 +578,10 @@ const CreateTimeTablePage = ({ academicYear, courses, classRooms, teachers, staf
                                     )}
                                 </button>
 
-                                {/* Regular Save button */}
                                 <button
                                     type="submit"
                                     disabled={processing || hasConflict}
-                                    className={`flex items-center rounded-xl bg-gradient-to-r from-indigo-600 to-purple-700 px-6 py-3 font-medium text-white transition-all duration-200 ${
+                                    className={`inline-flex min-h-11 items-center justify-center rounded-xl bg-gradient-to-r from-indigo-600 to-purple-700 px-5 py-3 font-medium text-white transition-all duration-200 ${
                                         processing || hasConflict
                                             ? 'cursor-not-allowed opacity-50'
                                             : 'shadow-md hover:from-indigo-700 hover:to-purple-800 hover:shadow-lg'

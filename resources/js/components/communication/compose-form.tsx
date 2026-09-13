@@ -60,7 +60,7 @@ function AudienceToggle({
     return (
         <label
             className={cn(
-                'flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 transition-colors',
+                'flex min-h-14 cursor-pointer items-start gap-3 rounded-xl border p-3.5 transition-colors',
                 checked
                     ? 'border-primary/40 bg-primary/5'
                     : 'border-sidebar-border/70 bg-background hover:bg-muted/50',
@@ -68,11 +68,58 @@ function AudienceToggle({
         >
             <Checkbox checked={checked} onCheckedChange={(value) => onCheckedChange(value === true)} className="mt-0.5" />
             <Icon className="mt-0.5 size-4 shrink-0 text-sidebar-foreground/55" />
-            <span>
+            <span className="min-w-0">
                 <span className="block text-sm font-medium text-sidebar-foreground">{title}</span>
                 <span className="mt-0.5 block text-xs leading-relaxed text-sidebar-foreground/60">{description}</span>
             </span>
         </label>
+    );
+}
+
+function AudiencePreviewDetails({
+    hasAudience,
+    recipientCount,
+    previewing,
+    previewError,
+    preview,
+}: {
+    hasAudience: boolean;
+    recipientCount: number;
+    previewing: boolean;
+    previewError: string | null;
+    preview: PreviewResponse | null;
+}) {
+    return (
+        <>
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <h2 className="text-sm font-semibold text-sidebar-foreground">Audience preview</h2>
+                    <p className="mt-1 text-xs text-sidebar-foreground/60">Review the reach before you send.</p>
+                </div>
+                {previewing && <Loader2 className="size-4 shrink-0 animate-spin text-sidebar-foreground/50" />}
+            </div>
+
+            <div className="mt-4 rounded-xl bg-muted/50 px-4 py-4">
+                <p className="text-xs font-medium tracking-wide text-sidebar-foreground/55 uppercase">Eligible staff</p>
+                <p className="mt-1 text-3xl font-semibold tracking-tight text-sidebar-foreground">{hasAudience ? recipientCount : 0}</p>
+            </div>
+
+            <div className="mt-4 space-y-2 text-sm text-sidebar-foreground/70">
+                {!hasAudience && <p>Select a recipient group to calculate who will receive this message.</p>}
+                {previewError && <p className="break-words text-rose-600">{previewError}</p>}
+                {preview?.groups?.map((group) => (
+                    <p key={group} className="break-words rounded-lg bg-muted/40 px-3 py-2 text-xs leading-5">
+                        {group}
+                    </p>
+                ))}
+                {preview?.warning && (
+                    <p className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
+                        <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                        {preview.warning}
+                    </p>
+                )}
+            </div>
+        </>
     );
 }
 
@@ -314,11 +361,28 @@ export function CommunicationComposeForm({
         meta: [item.employee_id, item.department, item.faculty].filter(Boolean).join(' · '),
     }));
 
+    const actionButtons = (
+        <div className="flex flex-col gap-2">
+            <Button type="submit" disabled={processing || !capabilities.can_send} className="min-h-11 w-full">
+                {processing ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+                {processing ? 'Sending...' : 'Send message'}
+            </Button>
+            {capabilities.can_manage_drafts && (
+                <Button type="button" variant="outline" disabled={processing} className="min-h-11 w-full" onClick={() => submit(true)}>
+                    Save draft
+                </Button>
+            )}
+            <Button type="button" variant="ghost" className="min-h-11 w-full" asChild>
+                <Link href={cancelHref}>Cancel</Link>
+            </Button>
+        </div>
+    );
+
     return (
         <>
-            <form onSubmit={handleSubmit} className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_20.5rem]">
-                <div className="space-y-6">
-                    <section className="rounded-2xl border border-sidebar-border/70 bg-white p-5 shadow-sm dark:bg-sidebar-accent sm:p-6">
+            <form onSubmit={handleSubmit} className="relative grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_20.5rem] xl:gap-6">
+                <div className="min-w-0 space-y-5">
+                    <section className="rounded-2xl border border-sidebar-border/70 bg-card p-4 shadow-sm sm:p-6">
                         <div className="mb-4">
                             <h2 className="text-base font-semibold text-sidebar-foreground">Recipients</h2>
                             <p className="mt-1 text-sm text-sidebar-foreground/60">
@@ -428,7 +492,29 @@ export function CommunicationComposeForm({
                         </div>
                     </section>
 
-                    <section className="rounded-2xl border border-sidebar-border/70 bg-white p-5 shadow-sm dark:bg-sidebar-accent sm:p-6">
+                    <section className="rounded-2xl border border-sidebar-border/70 bg-card p-3 shadow-sm sm:p-4 xl:hidden">
+                        <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                                <p className="text-[11px] font-medium uppercase tracking-wide text-sidebar-foreground/50">Audience</p>
+                                <p className="mt-0.5 truncate text-sm font-semibold text-sidebar-foreground">
+                                    {hasAudience ? `${recipientCount} eligible staff` : 'Select recipients to preview the audience'}
+                                </p>
+                            </div>
+                            {previewing && <Loader2 className="size-4 shrink-0 animate-spin text-sidebar-foreground/50" />}
+                        </div>
+                        {previewError && <p className="mt-2 break-words text-sm text-rose-600">{previewError}</p>}
+                        {preview?.groups?.length ? (
+                            <p className="mt-2 break-words text-xs leading-5 text-sidebar-foreground/60">{preview.groups.join(' · ')}</p>
+                        ) : null}
+                        {preview?.warning && (
+                            <p className="mt-2 flex items-start gap-2 text-xs text-amber-700 dark:text-amber-200">
+                                <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                                {preview.warning}
+                            </p>
+                        )}
+                    </section>
+
+                    <section className="rounded-2xl border border-sidebar-border/70 bg-card p-4 shadow-sm sm:p-6">
                         <div className="mb-4">
                             <h2 className="text-base font-semibold text-sidebar-foreground">Message</h2>
                             <p className="mt-1 text-sm text-sidebar-foreground/60">Write a clear subject and the full message staff will receive.</p>
@@ -442,7 +528,7 @@ export function CommunicationComposeForm({
                                     value={data.subject}
                                     onChange={(event) => setData('subject', event.target.value)}
                                     placeholder="e.g. Attendance briefing for this week"
-                                    className="h-11 bg-background"
+                                    className="h-11 bg-background text-base md:text-sm"
                                     aria-invalid={Boolean(errors.subject)}
                                     required
                                 />
@@ -456,16 +542,16 @@ export function CommunicationComposeForm({
                                     value={data.body}
                                     onChange={(event) => setData('body', event.target.value)}
                                     placeholder="Write the announcement, instruction, or update you want staff to receive..."
-                                    rows={12}
+                                    rows={8}
                                     required
                                     aria-invalid={Boolean(errors.body)}
                                     className={cn(
-                                        'border-input placeholder:text-muted-foreground min-h-64 w-full rounded-md border bg-background px-3 py-3 text-sm leading-6 shadow-xs outline-none',
+                                        'border-input placeholder:text-muted-foreground min-h-40 w-full rounded-md border bg-background px-3 py-3 text-base leading-6 shadow-xs outline-none sm:min-h-64 md:text-sm',
                                         'focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]',
                                         errors.body && 'border-destructive',
                                     )}
                                 />
-                                <div className="flex items-center justify-between gap-3 text-xs text-sidebar-foreground/50">
+                                <div className="flex flex-col gap-1 text-xs text-sidebar-foreground/50 sm:flex-row sm:items-center sm:justify-between">
                                     <span>Staff will also receive an in-app notification.</span>
                                     <span>{data.body.trim().length} characters</span>
                                 </div>
@@ -473,59 +559,26 @@ export function CommunicationComposeForm({
                             </div>
                         </div>
                     </section>
+
+                    <section className="rounded-2xl border border-sidebar-border/70 bg-card p-4 shadow-sm xl:hidden">
+                        {actionButtons}
+                    </section>
                 </div>
 
-                <aside className="space-y-4 xl:sticky xl:top-24">
-                    <section className="rounded-2xl border border-sidebar-border/70 bg-white p-5 shadow-sm dark:bg-sidebar-accent">
-                        <div className="flex items-start justify-between gap-3">
-                            <div>
-                                <h2 className="text-sm font-semibold text-sidebar-foreground">Audience preview</h2>
-                                <p className="mt-1 text-xs text-sidebar-foreground/60">Review the reach before you send.</p>
-                            </div>
-                            {previewing && <Loader2 className="size-4 animate-spin text-sidebar-foreground/50" />}
-                        </div>
-
-                        <div className="mt-4 rounded-xl bg-muted/50 px-4 py-4">
-                            <p className="text-xs font-medium tracking-wide text-sidebar-foreground/55 uppercase">Eligible staff</p>
-                            <p className="mt-1 text-3xl font-semibold tracking-tight text-sidebar-foreground">
-                                {hasAudience ? recipientCount : 0}
-                            </p>
-                        </div>
-
-                        <div className="mt-4 space-y-2 text-sm text-sidebar-foreground/70">
-                            {!hasAudience && <p>Select a recipient group to calculate who will receive this message.</p>}
-                            {previewError && <p className="text-rose-600">{previewError}</p>}
-                            {preview?.groups?.map((group) => (
-                                <p key={group} className="rounded-lg bg-muted/40 px-3 py-2 text-xs leading-5">
-                                    {group}
-                                </p>
-                            ))}
-                            {preview?.warning && (
-                                <p className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
-                                    <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                                    {preview.warning}
-                                </p>
-                            )}
-                        </div>
-
+                <aside className="hidden space-y-4 xl:sticky xl:top-24 xl:block">
+                    <section className="rounded-2xl border border-sidebar-border/70 bg-card p-5 shadow-sm">
+                        <AudiencePreviewDetails
+                            hasAudience={hasAudience}
+                            recipientCount={recipientCount}
+                            previewing={previewing}
+                            previewError={previewError}
+                            preview={preview}
+                        />
                         <Separator className="my-5" />
-
-                        <div className="flex flex-col gap-2">
-                            <Button type="submit" disabled={processing || !capabilities.can_send} className="h-10 w-full">
-                                {processing ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-                                {processing ? 'Sending...' : 'Send message'}
-                            </Button>
-                            {capabilities.can_manage_drafts && (
-                                <Button type="button" variant="outline" disabled={processing} className="h-10 w-full" onClick={() => submit(true)}>
-                                    Save draft
-                                </Button>
-                            )}
-                            <Button type="button" variant="ghost" className="h-10 w-full" asChild>
-                                <Link href={cancelHref}>Cancel</Link>
-                            </Button>
-                        </div>
+                        {actionButtons}
                     </section>
                 </aside>
+
             </form>
 
             <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
@@ -539,7 +592,7 @@ export function CommunicationComposeForm({
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-3 rounded-xl border border-sidebar-border/70 bg-muted/40 p-4 text-sm">
-                        <p>
+                        <p className="break-words">
                             <span className="font-medium text-sidebar-foreground">Subject:</span>{' '}
                             <span className="text-sidebar-foreground/70">{data.subject || '—'}</span>
                         </p>
@@ -552,12 +605,13 @@ export function CommunicationComposeForm({
                         ) : null}
                     </div>
                     <DialogFooter>
-                        <Button type="button" variant="outline" onClick={() => setConfirmOpen(false)}>
+                        <Button type="button" variant="outline" className="min-h-11 w-full sm:w-auto" onClick={() => setConfirmOpen(false)}>
                             Review message
                         </Button>
                         <Button
                             type="button"
                             disabled={processing}
+                            className="min-h-11 w-full sm:w-auto"
                             onClick={() => {
                                 setConfirmOpen(false);
                                 submit(false);

@@ -27,7 +27,7 @@ class VenueChangeAuthorizationService
      *
      * @param  array<string, mixed>  $data
      */
-    public function create(array $data, User $approver): VenueChangeAuthorization
+    public function create(array $data, User|Teacher $approver): VenueChangeAuthorization
     {
         // Backwards-compatible mapping for single-date callers.
         if (empty($data['start_date']) && !empty($data['authorization_date'])) {
@@ -47,7 +47,7 @@ class VenueChangeAuthorizationService
      * @param  array<int, int>  $timetableIds
      * @return Collection<int, VenueChangeAuthorization>
      */
-    public function createBulk(array $shared, array $timetableIds, User $approver): Collection
+    public function createBulk(array $shared, array $timetableIds, User|Teacher $approver): Collection
     {
         $timetableIds = array_values(array_unique(array_map('intval', $timetableIds)));
 
@@ -139,10 +139,12 @@ class VenueChangeAuthorizationService
      * @param  array<int, array<string, mixed>>  $rows
      * @return Collection<int, VenueChangeAuthorization>
      */
-    private function createMany(array $rows, User $approver, ?string $bulkGroupId, ?int $sourceRequestId = null): Collection
+    private function createMany(array $rows, User|Teacher $approver, ?string $bulkGroupId, ?int $sourceRequestId = null): Collection
     {
         return DB::transaction(function () use ($rows, $approver, $bulkGroupId, $sourceRequestId) {
             $created = collect();
+            $approvedByUserId = $approver instanceof User ? $approver->id : null;
+            $approvedByTeacherId = $approver instanceof Teacher ? $approver->id : null;
 
             foreach ($rows as $data) {
                 $startDate = $data['start_date'] ?? $data['authorization_date'] ?? null;
@@ -163,7 +165,8 @@ class VenueChangeAuthorizationService
                     'reason' => $data['reason'],
                     'notes' => $data['notes'] ?? null,
                     'status' => VenueChangeAuthorization::STATUS_ACTIVE,
-                    'approved_by' => $approver->id,
+                    'approved_by' => $approvedByUserId,
+                    'approved_by_teacher_id' => $approvedByTeacherId,
                     'approved_at' => now(),
                 ]);
 
@@ -192,7 +195,9 @@ class VenueChangeAuthorizationService
                     'period_label' => $first->period_label,
                     'reason' => $first->reason,
                     'schedule_count' => $created->count(),
-                    'approved_by' => $approver->id,
+                    'approved_by' => $approvedByUserId,
+                    'approved_by_teacher_id' => $approvedByTeacherId,
+                    'approved_by_type' => $approver::class,
                 ],
             );
 
@@ -207,6 +212,7 @@ class VenueChangeAuthorizationService
                     'originalClassroom',
                     'authorizedClassroom',
                     'approver',
+                    'teacherApprover',
                     'timetable',
                 ])
             );

@@ -62,16 +62,49 @@ export default function UnitStaffPage({
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Unit Staff" />
-            <div className="flex flex-col gap-6 p-4 md:p-6">
+            <div className="flex min-w-0 flex-col gap-6 p-3 sm:p-4 md:p-6">
                 <div>
-                    <h1 className="text-2xl font-semibold text-sidebar-foreground">Unit Staff</h1>
+                    <h1 className="text-xl font-semibold text-sidebar-foreground sm:text-2xl">Unit Staff</h1>
                     <p className="mt-1 text-sm text-sidebar-foreground/70">
                         {leadershipScope?.role_label || 'Leadership'} · {unitLabel}. You still keep your original
                         lecturer or administrator features.
                     </p>
                 </div>
 
-                <div className="overflow-hidden rounded-2xl border border-sidebar-border/60 bg-white dark:bg-sidebar-accent">
+                <div className="space-y-3 md:hidden">
+                    {teachers.data.length === 0 ? (
+                        <div className="rounded-2xl border border-dashed border-sidebar-border px-4 py-8 text-center text-sm text-sidebar-foreground/60">
+                            No staff members in this unit.
+                        </div>
+                    ) : (
+                        teachers.data.map((teacher) => (
+                            <div key={teacher.id} className="rounded-2xl border border-sidebar-border/60 bg-card p-4">
+                                <p className="truncate font-medium text-sidebar-foreground">{teacher.full_name}</p>
+                                <p className="truncate text-xs text-sidebar-foreground/60">{teacher.email}</p>
+                                <p className="mt-2 text-sm text-sidebar-foreground/75">
+                                    {teacher.employee_id} · <span className="capitalize">{teacher.staff_type}</span>
+                                </p>
+                                <p className="mt-1 text-xs text-sidebar-foreground/55">
+                                    {[teacher.department, teacher.faculty].filter(Boolean).join(' · ') || '—'}
+                                </p>
+                                <div className="mt-3 flex gap-3">
+                                    <button
+                                        type="button"
+                                        className="inline-flex min-h-10 items-center text-sm font-medium text-primary hover:underline"
+                                        onClick={() => handleQuickView(teacher)}
+                                    >
+                                        View
+                                    </button>
+                                    <Link href={route('teacher.unit.staff.edit', teacher.id)} className="inline-flex min-h-10 items-center text-sm font-medium text-primary hover:underline">
+                                        Edit
+                                    </Link>
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </div>
+
+                <div className="hidden overflow-hidden rounded-2xl border border-sidebar-border/60 bg-card md:block">
                     <table className="min-w-full divide-y divide-sidebar-border/60">
                         <thead className="bg-muted/40 text-left text-xs font-semibold tracking-wide text-sidebar-foreground/60 uppercase">
                             <tr>
@@ -136,11 +169,11 @@ export default function UnitStaffPage({
                 </div>
 
                 {teachers.last_page > 1 && (
-                    <div className="flex justify-end gap-2 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
                         {teachers.current_page > 1 && (
                             <button
                                 type="button"
-                                className="rounded-lg border px-3 py-1"
+                                className="min-h-11 rounded-lg border border-sidebar-border px-4 py-2"
                                 onClick={() => router.get(route('teacher.unit.staff.index'), { page: teachers.current_page - 1 })}
                             >
                                 Previous
@@ -152,7 +185,7 @@ export default function UnitStaffPage({
                         {teachers.current_page < teachers.last_page && (
                             <button
                                 type="button"
-                                className="rounded-lg border px-3 py-1"
+                                className="min-h-11 rounded-lg border border-sidebar-border px-4 py-2"
                                 onClick={() => router.get(route('teacher.unit.staff.index'), { page: teachers.current_page + 1 })}
                             >
                                 Next

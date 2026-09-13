@@ -14,6 +14,7 @@ interface RequestRow {
     authorized_classroom?: { name?: string } | null;
     staff?: { first_name?: string; last_name?: string; employee_id?: string };
     created_at?: string;
+    approval_progress?: string | null;
 }
 
 interface PageProps {
@@ -51,7 +52,8 @@ export default function VenueChangeRequestIndex({ requests, filters }: PageProps
                     <div>
                         <h1 className="text-2xl font-bold text-slate-900">Venue Change Requests</h1>
                         <p className="mt-1 text-sm text-slate-500">
-                            Review administrator-submitted requests. Approved requests become Venue Change Authorizations.
+                            Review administrator-submitted requests. A request is fully approved only after the required
+                            Director/Dean, Head of Department, and administrator reviews. Approved requests become Venue Change Authorizations.
                             Direct authorizations remain available under Schedules → Venue Change Authorizations.
                         </p>
                     </div>
@@ -113,9 +115,14 @@ export default function VenueChangeRequestIndex({ requests, filters }: PageProps
                                         <td className="px-4 py-3">{row.period_label || '—'}</td>
                                         <td className="px-4 py-3">{row.schedule_count ?? '—'}</td>
                                         <td className="px-4 py-3">
-                                            <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusBadge(row.status)}`}>
-                                                {row.status_label || row.status}
-                                            </span>
+                                            <div>
+                                                <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusBadge(row.status)}`}>
+                                                    {row.status_label || row.status}
+                                                </span>
+                                                {row.approval_progress && (
+                                                    <p className="mt-1 text-xs text-slate-500">{row.approval_progress}</p>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="px-4 py-3 text-right">
                                             <Link

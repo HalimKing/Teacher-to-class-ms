@@ -24,14 +24,14 @@ export default function AdminCommunicationSent({ messages, filters, statuses, ca
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Sent Messages" />
-            <div className="space-y-6 p-4 md:p-6">
+            <div className="min-w-0 space-y-6 p-3 sm:p-4 md:p-6">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                    <div>
-                        <h1 className="text-2xl font-bold text-slate-900">Sent messages</h1>
-                        <p className="mt-1 text-sm text-slate-500">Search and review messages you have sent or saved as drafts.</p>
+                    <div className="min-w-0">
+                        <h1 className="text-xl font-bold text-sidebar-foreground sm:text-2xl">Sent messages</h1>
+                        <p className="mt-1 text-sm text-sidebar-foreground/60">Search and review messages you have sent or saved as drafts.</p>
                     </div>
                     {capabilities.can_compose && (
-                        <Link href={route('admin.communication.compose')} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
+                        <Link href={route('admin.communication.compose')} className="inline-flex min-h-11 items-center justify-center rounded-lg bg-sidebar-foreground px-4 py-2 text-sm font-semibold text-sidebar dark:bg-white dark:text-neutral-950">
                             Compose message
                         </Link>
                     )}

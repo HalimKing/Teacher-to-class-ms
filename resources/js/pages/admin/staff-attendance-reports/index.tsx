@@ -683,7 +683,7 @@ export default function StaffAttendanceReportsIndex({ filterOptions, initialFilt
                         </div>
                         <div className="flex items-center gap-2">
                             <label className="text-sm text-sidebar-foreground/60">Per page</label>
-                            <select value={perPage} onChange={(e) => setPerPage(Number(e.target.value))} className="rounded-lg border border-sidebar-border/50 px-2 py-1 text-sm">
+                            <select value={perPage} onChange={(e) => setPerPage(Number(e.target.value))} className="h-10 rounded-lg border border-sidebar-border/50 bg-background px-2 text-sm">
                                 {[10, 15, 25, 50, 100].map((size) => (
                                     <option key={size} value={size}>
                                         {size}
@@ -698,97 +698,183 @@ export default function StaffAttendanceReportsIndex({ filterOptions, initialFilt
                             <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
                         </div>
                     ) : records && records.data.length > 0 ? (
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full text-sm">
-                                <thead className="bg-sidebar-accent/50 text-left text-xs uppercase tracking-wider text-sidebar-foreground/60">
-                                    <tr>
-                                        {[
-                                            ['administrator_name', 'Staff Name'],
-                                            ['staff_id', 'Staff ID'],
-                                            ['staff_type_label', 'Staff Type'],
-                                            ['employment_status_label', 'Employment Status'],
-                                            ['department', 'Department'],
-                                            ['date', 'Date'],
-                                            ['check_in_time', 'Check-in'],
-                                            ['check_out_time', 'Check-out'],
-                                            ['working_hours', 'Hours'],
-                                            ['attendance_status', 'Status'],
-                                            ['exception_category_label', 'Exception'],
-                                            ['arrival_category_label', 'Arrival'],
-                                            ['minutes_early', 'Min Early'],
-                                            ['minutes_late', 'Min Late'],
-                                            ['geolocation_status', 'Geolocation'],
-                                            ['face_verification_status', 'Face'],
-                                            ['face_match_score', 'Score'],
-                                            ['attendance_source', 'Source'],
-                                            ['created_at', 'Created'],
-                                        ].map(([key, label]) => (
-                                            <th key={key} className="px-4 py-3">
-                                                <button onClick={() => handleSort(key)} className="inline-flex items-center gap-1 hover:text-sidebar-foreground">
-                                                    {label}
-                                                    {sortBy === key && (sortDir === 'asc' ? '↑' : '↓')}
-                                                </button>
-                                            </th>
-                                        ))}
-                                        <th className="px-4 py-3">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {records.data.map((record) => (
-                                        <tr key={record.id} className="border-t border-sidebar-border/40">
-                                            <td className="px-4 py-3 font-medium">{record.administrator_name}</td>
-                                            <td className="px-4 py-3">{record.staff_id}</td>
-                                            <td className="px-4 py-3 capitalize">{record.staff_type_label || 'Administrator'}</td>
-                                            <td className="px-4 py-3">{record.employment_status_label || 'Permanent Staff'}</td>
-                                            <td className="px-4 py-3">{record.department}</td>
-                                            <td className="px-4 py-3">{record.date}</td>
-                                            <td className="px-4 py-3">{record.check_in_time ?? '—'}</td>
-                                            <td className="px-4 py-3">{record.check_out_time ?? '—'}</td>
-                                            <td className="px-4 py-3">{record.working_hours ?? '—'}</td>
-                                            <td className="px-4 py-3">
-                                                <span className={`rounded-full px-2 py-1 text-xs capitalize ${statusColors[record.attendance_status] ?? 'bg-gray-100 text-gray-700'}`}>
-                                                    {record.attendance_status.replace('_', ' ')}
-                                                </span>
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <span className="text-xs">
-                                                    {record.exception_category_label || 'Normal attendance'}
-                                                    {record.authorized_venue_used && record.authorized_venue
-                                                        ? ` · ${record.authorized_venue}`
-                                                        : ''}
-                                                </span>
-                                            </td>
-                                            <td className="px-4 py-3">{record.arrival_category_label ?? '—'}</td>
-                                            <td className="px-4 py-3">{record.minutes_early ?? '—'}</td>
-                                            <td className="px-4 py-3">{record.minutes_late ?? '—'}</td>
-                                            <td className="px-4 py-3">{record.geolocation_status}</td>
-                                            <td className="px-4 py-3">{record.face_verification_status}</td>
-                                            <td className="px-4 py-3">{record.face_match_score ?? '—'}</td>
-                                            <td className="px-4 py-3">{record.attendance_source}</td>
-                                            <td className="px-4 py-3">{record.created_at}</td>
-                                            <td className="px-4 py-3">
-                                                <Link
-                                                    href={`/admin/settings-reports/staff-attendance-reports/${record.staff_member_id}`}
-                                                    className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700"
-                                                >
-                                                    View <ExternalLink className="h-3.5 w-3.5" />
-                                                </Link>
-                                            </td>
+                        <>
+                            <div className="flex items-center gap-2 border-b border-sidebar-border/50 px-4 py-3 lg:hidden">
+                                <label className="text-xs font-medium text-sidebar-foreground/55">Sort</label>
+                                <select
+                                    value={sortBy}
+                                    onChange={(event) => {
+                                        setSortBy(event.target.value);
+                                        setSortDir('desc');
+                                    }}
+                                    className="h-10 min-w-0 flex-1 rounded-lg border border-sidebar-border/50 bg-background px-2 text-sm"
+                                >
+                                    <option value="date">Date</option>
+                                    <option value="administrator_name">Staff name</option>
+                                    <option value="attendance_status">Status</option>
+                                    <option value="check_in_time">Check-in</option>
+                                    <option value="department">Department</option>
+                                </select>
+                                <button
+                                    type="button"
+                                    onClick={() => setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
+                                    className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-sidebar-border/50"
+                                    aria-label={sortDir === 'asc' ? 'Sort descending' : 'Sort ascending'}
+                                >
+                                    {sortDir === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
+                                </button>
+                            </div>
+
+                            <div className="space-y-3 p-3 lg:hidden">
+                                {records.data.map((record) => (
+                                    <article key={record.id} className="rounded-2xl border border-sidebar-border/60 bg-background p-4 shadow-sm">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <p className="truncate font-semibold text-sidebar-foreground">{record.administrator_name}</p>
+                                                <p className="mt-0.5 truncate text-xs text-sidebar-foreground/55">
+                                                    {record.staff_id} · {record.staff_type_label || 'Administrator'}
+                                                </p>
+                                            </div>
+                                            <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold capitalize ${statusColors[record.attendance_status] ?? 'bg-gray-100 text-gray-700'}`}>
+                                                {record.attendance_status.replace('_', ' ')}
+                                            </span>
+                                        </div>
+
+                                        <p className="mt-3 text-sm text-sidebar-foreground/70">{record.date}</p>
+                                        <p className="truncate text-xs text-sidebar-foreground/55">
+                                            {record.department || 'No department'}
+                                            {record.employment_status_label ? ` · ${record.employment_status_label}` : ''}
+                                        </p>
+
+                                        <div className="mt-3 grid grid-cols-3 gap-2">
+                                            <div className="rounded-xl bg-sidebar-accent/60 px-2 py-2">
+                                                <p className="text-[10px] font-medium uppercase tracking-wide text-sidebar-foreground/45">In</p>
+                                                <p className="mt-0.5 truncate text-xs font-semibold text-sidebar-foreground">{record.check_in_time ?? '—'}</p>
+                                            </div>
+                                            <div className="rounded-xl bg-sidebar-accent/60 px-2 py-2">
+                                                <p className="text-[10px] font-medium uppercase tracking-wide text-sidebar-foreground/45">Out</p>
+                                                <p className="mt-0.5 truncate text-xs font-semibold text-sidebar-foreground">{record.check_out_time ?? '—'}</p>
+                                            </div>
+                                            <div className="rounded-xl bg-sidebar-accent/60 px-2 py-2">
+                                                <p className="text-[10px] font-medium uppercase tracking-wide text-sidebar-foreground/45">Hours</p>
+                                                <p className="mt-0.5 truncate text-xs font-semibold text-sidebar-foreground">{record.working_hours ?? '—'}</p>
+                                            </div>
+                                        </div>
+
+                                        <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] text-sidebar-foreground/60">
+                                            {record.arrival_category_label && (
+                                                <span className="rounded-full bg-sidebar-accent px-2 py-1">{record.arrival_category_label}</span>
+                                            )}
+                                            {record.exception_category_label && (
+                                                <span className="rounded-full bg-sidebar-accent px-2 py-1">{record.exception_category_label}</span>
+                                            )}
+                                            <span className="rounded-full bg-sidebar-accent px-2 py-1 capitalize">{record.geolocation_status}</span>
+                                            <span className="rounded-full bg-sidebar-accent px-2 py-1 capitalize">{record.face_verification_status}</span>
+                                        </div>
+
+                                        <Link
+                                            href={`/admin/settings-reports/staff-attendance-reports/${record.staff_member_id}`}
+                                            className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-sidebar-foreground px-3 text-sm font-semibold text-sidebar dark:bg-white dark:text-neutral-950"
+                                        >
+                                            View staff report
+                                            <ExternalLink className="h-3.5 w-3.5" />
+                                        </Link>
+                                    </article>
+                                ))}
+                            </div>
+
+                            <div className="hidden overflow-x-auto lg:block">
+                                <table className="min-w-full text-sm">
+                                    <thead className="bg-sidebar-accent/50 text-left text-xs uppercase tracking-wider text-sidebar-foreground/60">
+                                        <tr>
+                                            {[
+                                                ['administrator_name', 'Staff Name'],
+                                                ['staff_id', 'Staff ID'],
+                                                ['staff_type_label', 'Staff Type'],
+                                                ['employment_status_label', 'Employment Status'],
+                                                ['department', 'Department'],
+                                                ['date', 'Date'],
+                                                ['check_in_time', 'Check-in'],
+                                                ['check_out_time', 'Check-out'],
+                                                ['working_hours', 'Hours'],
+                                                ['attendance_status', 'Status'],
+                                                ['exception_category_label', 'Exception'],
+                                                ['arrival_category_label', 'Arrival'],
+                                                ['minutes_early', 'Min Early'],
+                                                ['minutes_late', 'Min Late'],
+                                                ['geolocation_status', 'Geolocation'],
+                                                ['face_verification_status', 'Face'],
+                                                ['face_match_score', 'Score'],
+                                                ['attendance_source', 'Source'],
+                                                ['created_at', 'Created'],
+                                            ].map(([key, label]) => (
+                                                <th key={key} className="px-4 py-3">
+                                                    <button onClick={() => handleSort(key)} className="inline-flex items-center gap-1 hover:text-sidebar-foreground">
+                                                        {label}
+                                                        {sortBy === key && (sortDir === 'asc' ? '↑' : '↓')}
+                                                    </button>
+                                                </th>
+                                            ))}
+                                            <th className="px-4 py-3">Actions</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
+                                    </thead>
+                                    <tbody>
+                                        {records.data.map((record) => (
+                                            <tr key={record.id} className="border-t border-sidebar-border/40">
+                                                <td className="px-4 py-3 font-medium">{record.administrator_name}</td>
+                                                <td className="px-4 py-3">{record.staff_id}</td>
+                                                <td className="px-4 py-3 capitalize">{record.staff_type_label || 'Administrator'}</td>
+                                                <td className="px-4 py-3">{record.employment_status_label || 'Permanent Staff'}</td>
+                                                <td className="px-4 py-3">{record.department}</td>
+                                                <td className="px-4 py-3">{record.date}</td>
+                                                <td className="px-4 py-3">{record.check_in_time ?? '—'}</td>
+                                                <td className="px-4 py-3">{record.check_out_time ?? '—'}</td>
+                                                <td className="px-4 py-3">{record.working_hours ?? '—'}</td>
+                                                <td className="px-4 py-3">
+                                                    <span className={`rounded-full px-2 py-1 text-xs capitalize ${statusColors[record.attendance_status] ?? 'bg-gray-100 text-gray-700'}`}>
+                                                        {record.attendance_status.replace('_', ' ')}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <span className="text-xs">
+                                                        {record.exception_category_label || 'Normal attendance'}
+                                                        {record.authorized_venue_used && record.authorized_venue
+                                                            ? ` · ${record.authorized_venue}`
+                                                            : ''}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3">{record.arrival_category_label ?? '—'}</td>
+                                                <td className="px-4 py-3">{record.minutes_early ?? '—'}</td>
+                                                <td className="px-4 py-3">{record.minutes_late ?? '—'}</td>
+                                                <td className="px-4 py-3">{record.geolocation_status}</td>
+                                                <td className="px-4 py-3">{record.face_verification_status}</td>
+                                                <td className="px-4 py-3">{record.face_match_score ?? '—'}</td>
+                                                <td className="px-4 py-3">{record.attendance_source}</td>
+                                                <td className="px-4 py-3">{record.created_at}</td>
+                                                <td className="px-4 py-3">
+                                                    <Link
+                                                        href={`/admin/settings-reports/staff-attendance-reports/${record.staff_member_id}`}
+                                                        className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700"
+                                                    >
+                                                        View <ExternalLink className="h-3.5 w-3.5" />
+                                                    </Link>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </>
                     ) : (
                         <div className="p-10 text-center text-sidebar-foreground/60">No attendance records match the selected filters.</div>
                     )}
 
                     {records && records.last_page > 1 && (
-                        <div className="flex items-center justify-between border-t border-sidebar-border/50 p-4">
+                        <div className="flex items-center justify-between gap-2 border-t border-sidebar-border/50 p-4">
                             <button
                                 disabled={records.current_page <= 1}
                                 onClick={() => fetchReportData(records.current_page - 1)}
-                                className="rounded-lg border border-sidebar-border px-3 py-1.5 text-sm disabled:opacity-50"
+                                className="min-h-11 rounded-lg border border-sidebar-border px-4 py-2 text-sm disabled:opacity-50"
                             >
                                 Previous
                             </button>
@@ -798,7 +884,7 @@ export default function StaffAttendanceReportsIndex({ filterOptions, initialFilt
                             <button
                                 disabled={records.current_page >= records.last_page}
                                 onClick={() => fetchReportData(records.current_page + 1)}
-                                className="rounded-lg border border-sidebar-border px-3 py-1.5 text-sm disabled:opacity-50"
+                                className="min-h-11 rounded-lg border border-sidebar-border px-4 py-2 text-sm disabled:opacity-50"
                             >
                                 Next
                             </button>

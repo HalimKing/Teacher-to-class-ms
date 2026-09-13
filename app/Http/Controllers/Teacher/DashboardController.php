@@ -6,8 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Models\AcademicYear;
 use App\Models\Course;
 use App\Models\SessionReminder;
+use App\Models\Teacher;
 use App\Models\TeacherAttendance;
 use App\Models\TimeTable;
+use App\Models\VenueChangeRequest;
+use App\Models\VenueChangeRequestApproval;
+use App\Support\VenueChangeApprovalRole;
 use Carbon\Carbon;
 use DateTime;
 use Illuminate\Http\Request;
@@ -107,6 +111,7 @@ class DashboardController extends Controller
             'profileData' => $profileData,
             'upcomingReminders' => $upcomingReminders,
             'staffType' => $teacher?->staff_type,
+            'pendingVenueChangeApprovals' => $this->pendingVenueChangeApprovalsCount($teacher),
         ]);
     }
 
@@ -367,5 +372,41 @@ class DashboardController extends Controller
             'nextClass' => $nextClass,
             'upcomingOfficeHours' => 'Not scheduled',
         ];
+    }
+
+    private function pendingVenueChangeApprovalsCount(?Teacher $teacher): int
+    {
+        if (!$teacher instanceof Teacher) {
+            return 0;
+        }
+
+        $role = $teacher->isDirectorDean()
+            ? VenueChangeApprovalRole::DIRECTOR_DEAN
+            : ($teacher->isHeadOfDepartment() ? VenueChangeApprovalRole::HEAD_OF_DEPARTMENT : null);
+
+        if (!$role) {
+            return 0;
+        }
+
+        return VenueChangeRequest::query()
+            ->pending()
+            ->whereHas('approvals', function ($query) use ($role) {
+                $query->where('role', $role)
+                    ->where('status', VenueChangeRequestApproval::STATUS_PENDING);
+            })
+            ->where(function ($query) use ($teacher) {
+                if ($teacher->isDirectorDean() && $teacher->leadership_faculty_id) {
+                    $query->where('faculty_id', $teacher->leadership_faculty_id)
+                        ->orWhereHas('staff', fn ($staff) => $staff->where('faculty_id', $teacher->leadership_faculty_id));
+
+                    return;
+                }
+
+                if ($teacher->isHeadOfDepartment() && $teacher->leadership_department_id) {
+                    $query->where('department_id', $teacher->leadership_department_id)
+                        ->orWhereHas('staff', fn ($staff) => $staff->where('department_id', $teacher->leadership_department_id));
+                }
+            })
+            ->count();
     }
 }

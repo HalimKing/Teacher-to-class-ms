@@ -7,6 +7,7 @@ use App\Models\RescheduledSession;
 use App\Models\TeacherAttendance;
 use App\Models\TimeTable;
 use App\Support\AttendanceLock;
+use App\Support\SelfReportedAbsence;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
@@ -383,6 +384,7 @@ class RescheduledAttendanceService
                     ? 'absent'
                     : ($attendance->check_out_time ? 'completed' : 'checked_in'),
                 'location_match' => (bool) $attendance->check_in_within_range,
+                'self_reported' => (bool) $attendance->self_reported,
             ];
         } else {
             $isMissed = false;
@@ -439,6 +441,8 @@ class RescheduledAttendanceService
             'is_missed' => $isMissed,
             'attendance_state' => $isMissed ? 'missed' : $attendanceContext['state'],
             'can_take_attendance' => $canTakeAttendance,
+            'can_self_report_absence' => SelfReportedAbsence::isPermitted($attendance, $isMissed, $isRescheduledAway),
+            'self_reported' => (bool) $attendance?->self_reported,
             'attendance_blocked_message' => $attendanceBlockedMessage,
             'rescheduled_session_id' => $attendanceContext['rescheduled_session_id'],
             'reschedule' => $attendanceContext['reschedule'],

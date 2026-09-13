@@ -13,6 +13,7 @@ interface RequestRow {
     authorized_classroom?: { name?: string } | null;
     items?: unknown[];
     admin_comments?: string | null;
+    approval_progress?: string | null;
 }
 
 interface PageProps {
@@ -49,8 +50,8 @@ export default function TeacherVenueChangeRequestIndex({ requests, filters, feat
                     <div>
                         <h1 className="text-2xl font-bold text-slate-900">Venue Change Requests</h1>
                         <p className="mt-1 text-sm text-slate-500">
-                            Submit a request to attend at a replacement venue. Requests stay pending until an authorized
-                            administrator approves them.
+                            Submit a request to attend at a replacement venue. Requests stay pending until the assigned
+                            Director/Dean, Head of Department, and administrator have all approved.
                         </p>
                     </div>
                     {featureEnabled ? (
@@ -110,9 +111,14 @@ export default function TeacherVenueChangeRequestIndex({ requests, filters, feat
                                         <td className="px-4 py-3">{row.period_label || '—'}</td>
                                         <td className="px-4 py-3">{row.items?.length ?? 0}</td>
                                         <td className="px-4 py-3">
-                                            <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusBadge(row.status)}`}>
-                                                {row.status_label || row.status}
-                                            </span>
+                                            <div>
+                                                <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusBadge(row.status)}`}>
+                                                    {row.status_label || row.status}
+                                                </span>
+                                                {row.approval_progress && (
+                                                    <p className="mt-1 text-xs text-slate-500">{row.approval_progress}</p>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="px-4 py-3 text-right">
                                             <Link

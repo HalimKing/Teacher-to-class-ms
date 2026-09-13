@@ -7,10 +7,11 @@ import { formatOutOfRangeAttendanceMessage } from '@/lib/geo';
 import { getBooleanSetting } from '@/lib/system-settings';
 import { buildFaceVerificationPayload, getApiErrorMessage, teacherJsonRequest } from '@/lib/teacher-api';
 import { BreadcrumbItem } from '@/types';
-import { usePage } from '@inertiajs/react';
+import { router, usePage } from '@inertiajs/react';
 import { Circle, GoogleMap, LoadScript, Marker } from '@react-google-maps/api';
-import { AlertTriangle, CalendarClock, CheckCircle, Clock, Loader2, Map as MapIcon, MapPin, RefreshCw, XCircle } from 'lucide-react';
+import { AlertTriangle, CalendarClock, CheckCircle, Clock, Loader2, Map as MapIcon, MapPin, RefreshCw, UserMinus, XCircle } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
+import { Bounce, toast } from 'react-toastify';
 
 // Types (keep as before)
 interface RescheduleInfo {
@@ -51,6 +52,8 @@ interface ClassLocation {
     attendance_taken: boolean;
     attendance_state?: 'normal' | 'rescheduled_away' | 'rescheduled_active' | 'missed';
     can_take_attendance?: boolean;
+    can_self_report_absence?: boolean;
+    self_reported?: boolean;
     attendance_blocked_message?: string | null;
     rescheduled_session_id?: number | null;
     reschedule?: RescheduleInfo | null;
@@ -61,6 +64,7 @@ interface ClassLocation {
         check_out_time: string | null;
         status: 'completed' | 'checked_in' | 'present' | 'absent';
         location_match: boolean;
+        self_reported?: boolean;
     };
     is_completed: boolean;
     timing?: {
@@ -245,13 +249,23 @@ export default function AttendancePage() {
     const [isWithinRange, setIsWithinRange] = useState(false);
     const [isLoadingLocation, setIsLoadingLocation] = useState(false);
     const [locationError, setLocationError] = useState<string | null>(null);
-    const { system_settings: systemSettings, facialRecognitionEnabled: facialRecognitionEnabledProp } = usePage().props as {
+    const { system_settings: systemSettings, facialRecognitionEnabled: facialRecognitionEnabledProp, flash } = usePage().props as {
         system_settings?: {
             attendance?: Record<string, { value?: string | number | boolean }>;
             map?: Record<string, { value?: string | number | boolean }>;
         };
         facialRecognitionEnabled?: boolean;
+        flash?: { success?: string; error?: string };
     };
+
+    useEffect(() => {
+        if (flash?.success) {
+            toast.success(flash.success, { theme: 'dark', transition: Bounce });
+        }
+        if (flash?.error) {
+            toast.error(flash.error, { theme: 'dark', transition: Bounce });
+        }
+    }, [flash?.success, flash?.error]);
     const [lateCheckInTime] = useState(Number(systemSettings?.attendance?.late_check_in_minutes?.value ?? 15));
     const teacherEarlyCheckInMinutes = Number(systemSettings?.attendance?.teacher_early_checkin_minutes?.value ?? 30);
     const checkoutGracePeriodMinutes = Number(systemSettings?.attendance?.checkout_grace_period_minutes?.value ?? 30);
@@ -936,6 +950,7 @@ export default function AttendancePage() {
 
     const getCheckInButtonText = () => {
         if (isLoadingApi && currentStatus === 'not_checked_in') return 'Processing...';
+        if (selectedClass?.self_reported || selectedClass?.attendance_status?.self_reported) return 'Absent';
         if (selectedClass?.is_missed || selectedClass?.attendance_status?.status === 'absent') return 'Missed';
         if (!selectedClass?.attendance_status && (selectedClass?.timing?.is_after_checkout_grace || timeValidation.isAfterCheckoutDeadline)) {
             return 'Missed';
@@ -971,11 +986,11 @@ export default function AttendancePage() {
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <div className="min-h-screen bg-slate-50 p-4 font-sans md:p-8">
+            <div className="min-h-screen min-w-0 bg-slate-50 p-3 font-sans sm:p-4 md:p-8">
                 <div className="mx-auto max-w-6xl">
-                    <header className="mb-8">
-                        <h1 className="text-3xl font-bold text-slate-900">Attendance Portal</h1>
-                        <p className="text-slate-500">Verify your location to check in for your classes.</p>
+                    <header className="mb-6 sm:mb-8">
+                        <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">Attendance Portal</h1>
+                        <p className="text-sm text-slate-500 sm:text-base">Verify your location to check in for your classes.</p>
                     </header>
 
                     {apiSuccess && (
@@ -1124,7 +1139,8 @@ export default function AttendancePage() {
                                                 const isCompleted = c.is_completed;
                                                 const isRescheduledAway = c.attendance_state === 'rescheduled_away';
                                                 const isRescheduledActive = c.attendance_state === 'rescheduled_active';
-                                                const isMissed = c.is_missed || c.attendance_status?.status === 'absent';
+                                                const isSelfReported = Boolean(c.self_reported || c.attendance_status?.self_reported);
+                                                const isMissed = !isSelfReported && (c.is_missed || c.attendance_status?.status === 'absent');
                                                 const hasAttendance = c.attendance_taken;
                                                 const isOtherCheckedIn =
                                                     checkedInClass &&
@@ -1147,6 +1163,12 @@ export default function AttendancePage() {
                                                     borderColor = 'border-emerald-200';
                                                     textColor = 'text-emerald-800';
                                                     cursorStyle = 'cursor-default';
+                                                    hoverStyle = '';
+                                                } else if (isSelfReported) {
+                                                    bgColor = 'bg-rose-50';
+                                                    borderColor = 'border-rose-300';
+                                                    textColor = 'text-rose-900';
+                                                    cursorStyle = 'cursor-pointer';
                                                     hoverStyle = '';
                                                 } else if (isRescheduledAway) {
                                                     bgColor = 'bg-amber-50';
@@ -1234,6 +1256,12 @@ export default function AttendancePage() {
                                                                     <div className="flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5">
                                                                         <AlertTriangle size={12} className="text-amber-700" />
                                                                         <span className="text-[10px] font-bold text-amber-800">RESCHEDULED</span>
+                                                                    </div>
+                                                                )}
+                                                                {isSelfReported && (
+                                                                    <div className="flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5">
+                                                                        <UserMinus size={12} className="text-rose-700" />
+                                                                        <span className="text-[10px] font-bold text-rose-800">ABSENT</span>
                                                                     </div>
                                                                 )}
                                                                 {isMissed && (
@@ -1383,9 +1411,9 @@ export default function AttendancePage() {
 
                                     {todaysClasses.some((c) => c.is_completed) && (
                                         <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
-                                            <div className="flex items-center justify-between">
+                                            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                                                 <div className="flex items-center gap-2">
-                                                    <CheckCircle size={16} className="text-emerald-600" />
+                                                    <CheckCircle size={16} className="shrink-0 text-emerald-600" />
                                                     <span className="text-sm font-medium text-emerald-700">
                                                         {todaysClasses.filter((c) => c.is_completed).length} session(s) completed
                                                     </span>
@@ -1519,6 +1547,20 @@ export default function AttendancePage() {
                                             </div>
                                         )}
 
+                                    {(selectedClass?.self_reported || selectedClass?.attendance_status?.self_reported) && (
+                                        <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
+                                            <div className="flex items-center gap-3">
+                                                <UserMinus size={24} className="text-rose-600" />
+                                                <div>
+                                                    <p className="font-medium text-rose-700">Self-reported absent</p>
+                                                    <p className="text-sm text-rose-600">
+                                                        You marked yourself absent for this session. Check-in and check-out are closed.
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {selectedClass?.is_completed && (
                                         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
                                             <div className="flex items-center gap-3">
@@ -1539,11 +1581,11 @@ export default function AttendancePage() {
                                         </div>
                                     )}
 
-                                    <div className="grid grid-cols-2 gap-3 pt-2">
+                                    <div className={`grid gap-3 pt-2 ${selectedClass?.can_self_report_absence ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-2'}`}>
                                         <button
                                             disabled={isCheckInDisabled}
                                             onClick={handleCheckIn}
-                                            className={`flex flex-col items-center gap-1 rounded-xl px-4 py-3 font-bold text-white shadow-sm transition-all ${
+                                            className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-4 py-3 font-bold text-white shadow-sm transition-all ${
                                                 !isCheckInDisabled
                                                     ? 'bg-blue-600 hover:bg-blue-700'
                                                     : 'cursor-not-allowed bg-slate-200 text-slate-400'
@@ -1560,7 +1602,7 @@ export default function AttendancePage() {
                                         <button
                                             disabled={isCheckOutDisabled}
                                             onClick={handleCheckOut}
-                                            className={`flex flex-col items-center gap-1 rounded-xl px-4 py-3 font-bold text-white shadow-sm transition-all ${
+                                            className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-4 py-3 font-bold text-white shadow-sm transition-all ${
                                                 !isCheckOutDisabled
                                                     ? 'bg-slate-800 hover:bg-slate-900'
                                                     : 'cursor-not-allowed bg-slate-200 text-slate-400'
@@ -1573,6 +1615,19 @@ export default function AttendancePage() {
                                             )}
                                             <span>{getCheckOutButtonText()}</span>
                                         </button>
+
+                                        {selectedClass?.can_self_report_absence && (
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    router.visit(route('teacher.attendance.mark-absent.create', selectedClass.timetable_id))
+                                                }
+                                                className="flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl bg-rose-600 px-4 py-3 font-bold text-white shadow-sm transition-all hover:bg-rose-700"
+                                            >
+                                                <UserMinus size={20} />
+                                                <span>Mark Absent</span>
+                                            </button>
+                                        )}
                                     </div>
 
                                     {currentStatus === 'checked_in' && !isSelectedClassCheckedIn && selectedClass && (

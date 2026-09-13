@@ -1,3 +1,4 @@
+import VenueChangeApprovalStatus, { type VenueChangeApprovalItem } from '@/components/attendance/VenueChangeApprovalStatus';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
@@ -16,7 +17,14 @@ interface RequestRecord {
     admin_comments?: string | null;
     reviewed_at?: string | null;
     resulting_authorization_id?: number | null;
-    staff?: { title?: string; first_name?: string; last_name?: string; employee_id?: string };
+    staff?: {
+        title?: string;
+        first_name?: string;
+        last_name?: string;
+        employee_id?: string;
+        faculty?: { name?: string } | null;
+        department?: { name?: string } | null;
+    };
     authorized_classroom?: { name?: string } | null;
     reviewer?: { name?: string } | null;
     items?: Array<{
@@ -29,6 +37,9 @@ interface RequestRecord {
 
 interface PageProps {
     requestRecord: RequestRecord;
+    approvals?: VenueChangeApprovalItem[];
+    approvalProgress?: string | null;
+    canDecide?: boolean;
     flash?: { success?: string; error?: string };
 }
 
@@ -38,10 +49,11 @@ const breadcrumbs = (id: number): BreadcrumbItem[] => [
     { title: `Request #${id}`, href: `/admin/venue-change-requests/${id}` },
 ];
 
-export default function VenueChangeRequestShow({ requestRecord }: PageProps) {
+export default function VenueChangeRequestShow({ requestRecord, approvals = [], approvalProgress, canDecide }: PageProps) {
     const { flash } = usePage().props as PageProps;
     const canManage = can('admin.venue-change-requests.manage');
     const form = useForm({ admin_comments: requestRecord.admin_comments || '' });
+    const showActions = requestRecord.status === 'pending' && canManage && (canDecide ?? true);
 
     const approve = () => form.post(route('admin.venue-change-requests.approve', requestRecord.id));
     const reject = () => form.post(route('admin.venue-change-requests.reject', requestRecord.id));
@@ -63,6 +75,16 @@ export default function VenueChangeRequestShow({ requestRecord }: PageProps) {
                         <span className="font-semibold">Requester:</span> {requestRecord.staff?.title} {requestRecord.staff?.first_name}{' '}
                         {requestRecord.staff?.last_name}
                     </p>
+                    {requestRecord.staff?.faculty?.name && (
+                        <p>
+                            <span className="font-semibold">Directorate/Faculty:</span> {requestRecord.staff.faculty.name}
+                        </p>
+                    )}
+                    {requestRecord.staff?.department?.name && (
+                        <p>
+                            <span className="font-semibold">Department:</span> {requestRecord.staff.department.name}
+                        </p>
+                    )}
                     <p>
                         <span className="font-semibold">Replacement venue:</span> {requestRecord.authorized_classroom?.name}
                     </p>
@@ -85,6 +107,13 @@ export default function VenueChangeRequestShow({ requestRecord }: PageProps) {
                     )}
                 </div>
 
+                {approvals.length > 0 && (
+                    <div className="rounded-xl border border-slate-200 bg-white p-6">
+                        <h2 className="mb-3 text-sm font-semibold text-slate-900">Approval status</h2>
+                        <VenueChangeApprovalStatus approvals={approvals} progress={approvalProgress} />
+                    </div>
+                )}
+
                 <div className="rounded-xl border border-slate-200 bg-white p-6">
                     <h2 className="mb-3 text-sm font-semibold text-slate-900">Affected schedules</h2>
                     <ul className="space-y-2 text-sm text-slate-700">
@@ -98,7 +127,7 @@ export default function VenueChangeRequestShow({ requestRecord }: PageProps) {
                     </ul>
                 </div>
 
-                {requestRecord.status === 'pending' && canManage ? (
+                {showActions ? (
                     <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-6">
                         <label className="block space-y-1.5">
                             <span className="text-sm font-medium">Reviewer comments</span>
@@ -108,6 +137,9 @@ export default function VenueChangeRequestShow({ requestRecord }: PageProps) {
                                 className="min-h-24 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                             />
                         </label>
+                        <p className="text-xs text-slate-500">
+                            Your approval is one of the required reviews. The venue change is authorized only after all required approvers approve.
+                        </p>
                         <div className="flex gap-3">
                             <button
                                 type="button"
@@ -115,7 +147,7 @@ export default function VenueChangeRequestShow({ requestRecord }: PageProps) {
                                 onClick={approve}
                                 className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
                             >
-                                Approve & authorize
+                                Approve
                             </button>
                             <button
                                 type="button"

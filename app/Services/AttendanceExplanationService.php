@@ -40,6 +40,16 @@ class AttendanceExplanationService
                 throw new \InvalidArgumentException('An explanation has already been submitted for this attendance record.');
             }
 
+            $attendanceRecord = match ($data['attendance_type']) {
+                AttendanceExplanation::ATTENDANCE_STAFF => StaffAttendance::query()->find($data['attendance_id']),
+                AttendanceExplanation::ATTENDANCE_TEACHER => TeacherAttendance::query()->find($data['attendance_id']),
+                default => null,
+            };
+
+            if ($attendanceRecord?->self_reported) {
+                throw new \InvalidArgumentException('This absence was self-reported. A separate explanation is not required.');
+            }
+
             $documentPath = null;
             $documentName = null;
             if ($document) {

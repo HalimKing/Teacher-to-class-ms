@@ -8,15 +8,20 @@ use App\Models\SystemSetting;
 use App\Models\Teacher;
 use App\Models\TimeTable;
 use App\Services\ActivityLogService;
+use App\Http\Requests\StoreSelfReportedAbsenceRequest;
 use App\Services\AttendanceTimingService;
 use App\Services\FacialRecognitionService;
 use App\Services\HolidayBreakService;
+use App\Services\SelfReportedAbsenceService;
 use App\Services\VenueChangeAuthorizationService;
 use App\Support\AttendanceExceptionCategory;
 use App\Support\AttendanceLock;
+use App\Support\SelfReportedAbsence;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -26,7 +31,44 @@ class StaffAttendanceController extends Controller
         private AttendanceTimingService $timingService,
         private VenueChangeAuthorizationService $venueChangeAuthorization,
         private HolidayBreakService $holidayBreaks,
+        private SelfReportedAbsenceService $selfReportedAbsences,
     ) {}
+
+    public function createSelfReportedAbsence(TimeTable $timetable): Response|RedirectResponse
+    {
+        try {
+            $session = $this->selfReportedAbsences->composeStaffForm(auth('teacher')->user(), $timetable);
+        } catch (ValidationException $exception) {
+            return redirect()
+                ->route('teacher.staff-attendance')
+                ->with('error', collect($exception->errors())->flatten()->first());
+        }
+
+        return Inertia::render('teacher/self-reported-absence/create', [
+            'session' => $session,
+        ]);
+    }
+
+    public function storeSelfReportedAbsence(StoreSelfReportedAbsenceRequest $request): RedirectResponse
+    {
+        $timetable = TimeTable::query()->findOrFail($request->validated('timetable_id'));
+
+        try {
+            [, $notify] = $this->selfReportedAbsences->submitForStaff(
+                auth('teacher')->user(),
+                $timetable,
+                $request->validated(),
+            );
+        } catch (ValidationException $exception) {
+            return back()
+                ->withErrors($exception->errors())
+                ->with('error', collect($exception->errors())->flatten()->first());
+        }
+
+        return redirect()
+            ->route('teacher.staff-attendance')
+            ->with('success', $this->selfReportedAbsences->successMessage($notify));
+    }
 
     public function index(FacialRecognitionService $facialRecognition): Response
     {
@@ -543,13 +585,17 @@ class StaffAttendanceController extends Controller
                 'minutes_late' => $attendance->minutes_late,
                 'location_match' => $attendance->check_in_within_range,
                 'exception_category' => $attendance->exception_category,
+                'self_reported' => (bool) $attendance->self_reported,
             ] : null,
             'is_completed' => $attendance && $attendance->check_out_time !== null,
             'is_missed' => $isMissed,
             'can_take_attendance' => $canTakeAttendance,
+            'can_self_report_absence' => SelfReportedAbsence::isPermitted($attendance, $isMissed),
+            'self_reported' => (bool) $attendance?->self_reported,
             'attendance_blocked_message' => $attendanceBlockedMessage,
             'attendance_state' => $isMissed ? 'missed' : null,
             'needs_explanation' => $attendance
+                && ! $attendance->self_reported
                 && ! in_array($attendance->attendance_status, ['excused_absence'], true)
                 && ! in_array($attendance->exception_category, [
                     AttendanceExceptionCategory::EXCUSED_ABSENCE,

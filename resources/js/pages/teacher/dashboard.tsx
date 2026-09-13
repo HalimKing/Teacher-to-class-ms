@@ -124,6 +124,7 @@ export default function TeacherDashboard({
     profileData,
     upcomingReminders = [],
     staffType,
+    pendingVenueChangeApprovals = 0,
 }: {
     upcomingClasses: any[];
     todayLectures: TodayLectures[];
@@ -132,6 +133,7 @@ export default function TeacherDashboard({
     profileData: TeacherProfile;
     upcomingReminders?: UpcomingReminder[];
     staffType?: string;
+    pendingVenueChangeApprovals?: number;
 }) {
     const [timeFilter, setTimeFilter] = useState('week');
     const [activeTab, setActiveTab] = useState('overview');
@@ -301,6 +303,18 @@ export default function TeacherDashboard({
                         )}
                     </div>
                 </div>
+
+                {pendingVenueChangeApprovals > 0 && (
+                    <Link
+                        href="/teacher/unit/venue-change-requests?status=pending"
+                        className="flex flex-col gap-1 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-950 transition-colors hover:bg-amber-100 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100 dark:hover:bg-amber-950/50 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                        <span className="text-sm font-medium">
+                            {pendingVenueChangeApprovals} venue change {pendingVenueChangeApprovals === 1 ? 'request' : 'requests'} awaiting your approval
+                        </span>
+                        <span className="text-sm font-semibold">Review requests</span>
+                    </Link>
+                )}
 
                 {isLecturer && <RecentNotificationsWidget notifications={unreadNotifications} />}
 

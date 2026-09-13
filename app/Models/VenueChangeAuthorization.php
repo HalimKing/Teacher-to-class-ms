@@ -33,6 +33,7 @@ class VenueChangeAuthorization extends Model
         'notes',
         'status',
         'approved_by',
+        'approved_by_teacher_id',
         'approved_at',
         'revoked_by',
         'revoked_at',
@@ -76,6 +77,20 @@ class VenueChangeAuthorization extends Model
     public function approver(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    public function teacherApprover(): BelongsTo
+    {
+        return $this->belongsTo(Teacher::class, 'approved_by_teacher_id');
+    }
+
+    public function approvedByName(): ?string
+    {
+        if ($this->teacherApprover) {
+            return $this->teacherApprover->displayName();
+        }
+
+        return $this->approver?->name;
     }
 
     public function revoker(): BelongsTo

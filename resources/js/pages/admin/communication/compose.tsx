@@ -40,25 +40,27 @@ export default function AdminCommunicationCompose({ capabilities, faculties, dep
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Compose Message" />
             <ToastContainer />
-            <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6 lg:p-8">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0">
-                        <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-                            <Mail className="size-3.5" />
-                            Institutional communication
-                        </div>
-                        <h1 className="mt-3 text-2xl font-semibold tracking-tight text-sidebar-foreground sm:text-3xl">Compose message</h1>
-                        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-sidebar-foreground/65">
-                            Send a targeted or institution-wide message to selected faculties, departments, and staff.
-                        </p>
-                    </div>
+            <div className="mx-auto max-w-6xl min-w-0 space-y-5 px-3 py-3 sm:space-y-6 sm:px-4 sm:py-4 md:px-6 md:py-6 lg:px-8">
+                <div className="min-w-0">
                     <Link
-                        href={route('admin.communication.index')}
-                        className="inline-flex items-center gap-2 text-sm font-medium text-sidebar-foreground/70 hover:text-sidebar-foreground"
+                        href={route('admin.communication.inbox')}
+                        className="inline-flex min-h-10 items-center gap-1.5 text-sm font-medium text-sidebar-foreground/70 hover:text-sidebar-foreground"
                     >
                         <ArrowLeft className="size-4" />
-                        Back to dashboard
+                        Back to inbox
                     </Link>
+                    <div className="mt-3 flex items-start gap-3">
+                        <div className="mt-0.5 hidden size-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary sm:flex">
+                            <Mail className="size-5" />
+                        </div>
+                        <div className="min-w-0">
+                            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sidebar-foreground/50">Institutional communication</p>
+                            <h1 className="mt-1 text-xl font-semibold tracking-tight text-sidebar-foreground sm:text-2xl">Compose message</h1>
+                            <p className="mt-1 max-w-2xl text-sm leading-relaxed text-sidebar-foreground/65">
+                                Send a targeted or institution-wide message to selected faculties, departments, and staff.
+                            </p>
+                        </div>
+                    </div>
                 </div>
 
                 <CommunicationComposeForm
@@ -71,7 +73,7 @@ export default function AdminCommunicationCompose({ capabilities, faculties, dep
                     faculties={faculties}
                     departments={departments}
                     capabilities={capabilities}
-                    cancelHref={route('admin.communication.index')}
+                    cancelHref={route('admin.communication.inbox')}
                 />
             </div>
         </AppLayout>

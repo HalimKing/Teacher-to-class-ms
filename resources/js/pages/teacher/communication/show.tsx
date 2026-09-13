@@ -55,14 +55,14 @@ export default function TeacherCommunicationShow({ message, capabilities }: Page
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title={message.subject} />
             <ToastContainer />
-            <div className="mx-auto max-w-5xl space-y-6 p-4 md:p-6 lg:p-8">
+            <div className="mx-auto max-w-5xl min-w-0 space-y-6 p-3 sm:p-4 md:p-6 lg:p-8">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
                         <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
                             <Mail className="size-3.5" />
                             {isDraft ? 'Draft' : isSenderView ? 'Sent message' : 'Inbox'}
                         </div>
-                        <h1 className="mt-3 text-2xl font-semibold tracking-tight text-sidebar-foreground sm:text-3xl">{message.subject}</h1>
+                        <h1 className="mt-3 text-xl font-semibold tracking-tight break-words text-sidebar-foreground sm:text-3xl">{message.subject}</h1>
                         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-sidebar-foreground/65">
                             <span className="inline-flex items-center gap-1.5">
                                 <UserRound className="size-3.5" />
@@ -80,17 +80,17 @@ export default function TeacherCommunicationShow({ message, capabilities }: Page
                             )}
                         </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
                         <CommunicationStatusBadge status={message.status} label={message.status_label} />
                         {isDraft && capabilities.can_send && (
-                            <Button type="button" onClick={() => setConfirmOpen(true)} disabled={sending}>
+                            <Button type="button" className="min-h-11 w-full sm:w-auto" onClick={() => setConfirmOpen(true)} disabled={sending}>
                                 {sending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
                                 Send message
                             </Button>
                         )}
                         <Link
                             href={isSenderView ? route('teacher.communication.sent') : route('teacher.communication.inbox')}
-                            className="inline-flex items-center gap-2 text-sm font-medium text-sidebar-foreground/70 hover:text-sidebar-foreground"
+                            className="inline-flex min-h-11 items-center gap-2 text-sm font-medium text-sidebar-foreground/70 hover:text-sidebar-foreground"
                         >
                             <ArrowLeft className="size-4" />
                             {isDraft || isSenderView ? 'Back to sent' : 'Back to inbox'}
@@ -127,7 +127,7 @@ export default function TeacherCommunicationShow({ message, capabilities }: Page
                             <span className="text-sm text-sidebar-foreground/55">No audience summary available.</span>
                         )}
                     </div>
-                    <div className="mt-5 whitespace-pre-wrap rounded-xl bg-muted/40 px-4 py-4 text-sm leading-7 text-sidebar-foreground">
+                    <div className="mt-5 whitespace-pre-wrap break-words rounded-xl bg-muted/40 px-4 py-4 text-sm leading-7 text-sidebar-foreground">
                         {message.body}
                     </div>
                 </section>
@@ -146,7 +146,20 @@ export default function TeacherCommunicationShow({ message, capabilities }: Page
                                 </div>
                             ))}
                         </div>
-                        <div className="overflow-x-auto">
+                        <div className="divide-y divide-sidebar-border/50 md:hidden">
+                            {message.recipients.map((recipient) => (
+                                <div key={recipient.id} className="flex items-start justify-between gap-3 px-4 py-3">
+                                    <div className="min-w-0">
+                                        <p className="truncate font-medium text-sidebar-foreground">{recipient.name}</p>
+                                        <p className="truncate text-xs text-sidebar-foreground/55">
+                                            {[recipient.employee_id, recipient.department, recipient.faculty].filter(Boolean).join(' · ') || '—'}
+                                        </p>
+                                    </div>
+                                    <CommunicationStatusBadge status={recipient.status} label={recipient.status_label} />
+                                </div>
+                            ))}
+                        </div>
+                        <div className="hidden overflow-x-auto md:block">
                             <table className="min-w-full divide-y divide-sidebar-border/60 text-sm">
                                 <thead className="bg-muted/40 text-left text-xs font-semibold tracking-wide text-sidebar-foreground/55 uppercase">
                                     <tr>
@@ -201,12 +214,13 @@ export default function TeacherCommunicationShow({ message, capabilities }: Page
                         )}
                     </div>
                     <DialogFooter>
-                        <Button type="button" variant="outline" onClick={() => setConfirmOpen(false)}>
+                        <Button type="button" variant="outline" className="min-h-11 w-full sm:w-auto" onClick={() => setConfirmOpen(false)}>
                             Keep as draft
                         </Button>
                         <Button
                             type="button"
                             disabled={sending}
+                            className="min-h-11 w-full sm:w-auto"
                             onClick={() => {
                                 setSending(true);
                                 router.post(

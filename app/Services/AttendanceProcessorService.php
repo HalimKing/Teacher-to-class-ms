@@ -267,7 +267,7 @@ class AttendanceProcessorService
             return;
         }
 
-        if ($this->isTeacherTerminal($attendance)) {
+        if ($attendance->self_reported || $this->isTeacherTerminal($attendance)) {
             $stats['skipped']++;
 
             return;
@@ -321,7 +321,7 @@ class AttendanceProcessorService
             return;
         }
 
-        if ($this->isStaffTerminal($attendance)) {
+        if ($attendance->self_reported || $this->isStaffTerminal($attendance)) {
             $stats['skipped']++;
 
             return;

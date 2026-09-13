@@ -87,11 +87,11 @@ export function RecipientPicker({
                         onSearch(event.target.value);
                     }}
                     placeholder={placeholder}
-                    className="h-10 bg-background pl-9"
+                    className="h-11 bg-background pl-9 text-base md:text-sm"
                 />
             </div>
 
-            <div className="max-h-56 overflow-y-auto rounded-lg border border-sidebar-border/70 bg-background">
+            <div className="max-h-44 overflow-y-auto rounded-lg border border-sidebar-border/70 bg-background sm:max-h-56">
                 {loading ? (
                     <div className="flex items-center justify-center gap-2 px-3 py-8 text-sm text-sidebar-foreground/60">
                         <Loader2 className="size-4 animate-spin" />
@@ -114,7 +114,7 @@ export function RecipientPicker({
                                 <li key={item.id}>
                                     <label
                                         className={cn(
-                                            'flex cursor-pointer items-start gap-3 px-3 py-2.5 transition-colors hover:bg-muted/60',
+                                            'flex min-h-11 cursor-pointer items-start gap-3 px-3 py-3 transition-colors hover:bg-muted/60',
                                             checked && 'bg-primary/5',
                                         )}
                                     >

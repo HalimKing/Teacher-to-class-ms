@@ -43,7 +43,7 @@ export default function ComboBox({
       onChange={handleOnchange}
       options={options}
       className={className}
-      sx={{ width: '100%' }}
+      sx={{ width: '100%', minWidth: 0 }}
       getOptionLabel={(option) => option.label}
       isOptionEqualToValue={(option, value) => option.value === value.value}
       renderInput={(params) => (

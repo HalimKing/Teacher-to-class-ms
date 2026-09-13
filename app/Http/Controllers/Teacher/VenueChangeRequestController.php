@@ -29,12 +29,20 @@ class VenueChangeRequestController extends Controller
         $featureEnabled = SystemSetting::administratorVenueChangeRequestsEnabled();
 
         $requests = VenueChangeRequest::query()
-            ->with(['authorizedClassroom', 'reviewer', 'items.timetable.course', 'items.originalClassroom'])
+            ->with(['authorizedClassroom', 'reviewer', 'items.timetable.course', 'items.originalClassroom', 'approvals'])
             ->where('staff_id', $staff->id)
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))
             ->latest('id')
             ->paginate(15)
             ->withQueryString();
+
+        $requests->getCollection()->transform(function (VenueChangeRequest $row) {
+            $serialized = $this->service->serializeForLeader($row);
+            $row->setAttribute('approval_progress', $serialized['approval_progress']);
+            $row->setAttribute('approvals', $serialized['approvals']);
+
+            return $row;
+        });
 
         return Inertia::render('teacher/venue-change-requests/index', [
             'requests' => $requests,
@@ -122,10 +130,16 @@ class VenueChangeRequestController extends Controller
             'items.originalClassroom',
             'resultingAuthorization',
             'resultingAuthorizations.authorizedClassroom',
+            'approvals.assignedTeacher',
+            'approvals.decidedBy',
         ]);
+
+        $serialized = $this->service->serializeForLeader($venueChangeRequest);
 
         return Inertia::render('teacher/venue-change-requests/show', [
             'requestRecord' => $venueChangeRequest,
+            'approvals' => $serialized['approvals'],
+            'approvalProgress' => $serialized['approval_progress'],
         ]);
     }
 

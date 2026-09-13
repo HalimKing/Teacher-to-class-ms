@@ -50,6 +50,7 @@ class SystemSettingsUpdateRequest extends FormRequest
             'log_failed_attempts'    => 'nullable|boolean',
             'notify_venue_change_authorized' => 'nullable|boolean',
             'notify_admin_venue_change_request_submitted' => 'nullable|boolean',
+            'notify_leadership_venue_change_request_submitted' => 'nullable|boolean',
             'notify_venue_change_request_approved' => 'nullable|boolean',
             'notify_venue_change_request_rejected' => 'nullable|boolean',
             'notify_admin_explanation_submitted' => 'nullable|boolean',

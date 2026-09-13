@@ -18,6 +18,8 @@ class VenueChangeRequest extends Model
 
     protected $fillable = [
         'staff_id',
+        'faculty_id',
+        'department_id',
         'authorized_classroom_id',
         'authorization_type',
         'start_date',
@@ -51,6 +53,21 @@ class VenueChangeRequest extends Model
     public function staff(): BelongsTo
     {
         return $this->belongsTo(Teacher::class, 'staff_id');
+    }
+
+    public function faculty(): BelongsTo
+    {
+        return $this->belongsTo(Faculty::class);
+    }
+
+    public function department(): BelongsTo
+    {
+        return $this->belongsTo(Department::class);
+    }
+
+    public function approvals(): HasMany
+    {
+        return $this->hasMany(VenueChangeRequestApproval::class);
     }
 
     public function authorizedClassroom(): BelongsTo
