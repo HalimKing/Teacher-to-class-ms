@@ -22,6 +22,7 @@ use App\Http\Controllers\CsrfTokenController;
 use App\Http\Controllers\DeployCheckController;
 use App\Http\Controllers\GlobalSearchController;
 use App\Http\Controllers\RoleController;
+use App\Http\Controllers\Teacher\CommunicationController as TeacherCommunicationController;
 use App\Http\Controllers\Teacher\DashboardController;
 use App\Http\Controllers\Teacher\FaceVerificationController;
 use App\Http\Controllers\Teacher\NotificationController;
@@ -29,7 +30,6 @@ use App\Http\Controllers\Teacher\SessionReminderController;
 use App\Http\Controllers\Teacher\StaffAttendanceController;
 use App\Http\Controllers\Teacher\StaffAttendanceReportController as TeacherStaffAttendanceReportController;
 use App\Http\Controllers\Teacher\TimeTableController as TeacherTimeTableController;
-use App\Http\Controllers\Teacher\CommunicationController as TeacherCommunicationController;
 use App\Http\Controllers\Teacher\UnitAttendanceController;
 use App\Http\Controllers\Teacher\UnitStaffController;
 use App\Http\Controllers\TeacherAttendanceController;
@@ -106,21 +106,32 @@ Route::middleware(['auth:teacher', 'attendance.portal.restrict'])->group(functio
         Route::get('/attendance', [UnitAttendanceController::class, 'index'])->name('attendance.index');
     });
 
-    Route::get('/teacher/communication/inbox', [TeacherCommunicationController::class, 'inbox'])
-        ->name('teacher.communication.inbox');
+    Route::prefix('teacher/communication')->name('teacher.communication.')->group(function () {
+        Route::get('/inbox', [TeacherCommunicationController::class, 'inbox'])->name('inbox');
+        Route::get('/sent', [TeacherCommunicationController::class, 'sent'])->name('sent');
+        Route::get('/drafts', [TeacherCommunicationController::class, 'drafts'])->name('drafts');
+        Route::get('/all', [TeacherCommunicationController::class, 'all'])->name('all');
+        Route::get('/conversations/{conversation}', [TeacherCommunicationController::class, 'thread'])
+            ->whereNumber('conversation')
+            ->name('thread');
+        Route::post('/conversations/{conversation}/reply', [TeacherCommunicationController::class, 'reply'])
+            ->whereNumber('conversation')
+            ->name('reply');
+        Route::get('/{communication}', [TeacherCommunicationController::class, 'show'])
+            ->whereNumber('communication')
+            ->name('show');
+    });
 
     Route::middleware('leadership')->prefix('teacher/communication')->name('teacher.communication.')->group(function () {
         Route::get('/', [TeacherCommunicationController::class, 'index'])->name('index');
         Route::get('/compose', [TeacherCommunicationController::class, 'compose'])->name('compose');
         Route::post('/', [TeacherCommunicationController::class, 'store'])->name('store');
         Route::post('/preview', [TeacherCommunicationController::class, 'preview'])->name('preview');
-        Route::get('/sent', [TeacherCommunicationController::class, 'sent'])->name('sent');
         Route::get('/staff', [TeacherCommunicationController::class, 'staff'])->name('staff');
+        Route::post('/{communication}/send', [TeacherCommunicationController::class, 'send'])
+            ->whereNumber('communication')
+            ->name('send');
     });
-
-    Route::get('/teacher/communication/{communication}', [TeacherCommunicationController::class, 'show'])
-        ->whereNumber('communication')
-        ->name('teacher.communication.show');
 
     Route::get('/teacher/attendance', [TeacherAttendanceController::class, 'index'])
         ->middleware('teacher.staff_type:lecturer')
@@ -362,6 +373,9 @@ Route::middleware(['auth:web', 'verified', 'password.changed'])->group(function 
                 Route::get('/', [\App\Http\Controllers\Admin\CommunicationController::class, 'index'])
                     ->name('index')
                     ->middleware('permission:admin.communication.view');
+                Route::get('/inbox', [\App\Http\Controllers\Admin\CommunicationController::class, 'inbox'])
+                    ->name('inbox')
+                    ->middleware('permission:admin.communication.view');
                 Route::get('/compose', [\App\Http\Controllers\Admin\CommunicationController::class, 'compose'])
                     ->name('compose')
                     ->middleware('permission:admin.communication.compose');
@@ -374,6 +388,12 @@ Route::middleware(['auth:web', 'verified', 'password.changed'])->group(function 
                 Route::get('/sent', [\App\Http\Controllers\Admin\CommunicationController::class, 'sent'])
                     ->name('sent')
                     ->middleware('permission:admin.communication.view-sent|admin.communication.view');
+                Route::get('/drafts', [\App\Http\Controllers\Admin\CommunicationController::class, 'drafts'])
+                    ->name('drafts')
+                    ->middleware('permission:admin.communication.view|admin.communication.manage-drafts');
+                Route::get('/all', [\App\Http\Controllers\Admin\CommunicationController::class, 'all'])
+                    ->name('all')
+                    ->middleware('permission:admin.communication.view');
                 Route::get('/faculties', [\App\Http\Controllers\Admin\CommunicationController::class, 'faculties'])
                     ->name('faculties')
                     ->middleware('permission:admin.communication.compose');
@@ -383,6 +403,18 @@ Route::middleware(['auth:web', 'verified', 'password.changed'])->group(function 
                 Route::get('/staff', [\App\Http\Controllers\Admin\CommunicationController::class, 'staff'])
                     ->name('staff')
                     ->middleware('permission:admin.communication.compose');
+                Route::get('/conversations/{conversation}', [\App\Http\Controllers\Admin\CommunicationController::class, 'thread'])
+                    ->whereNumber('conversation')
+                    ->name('thread')
+                    ->middleware('permission:admin.communication.view-details|admin.communication.view');
+                Route::post('/conversations/{conversation}/reply', [\App\Http\Controllers\Admin\CommunicationController::class, 'reply'])
+                    ->whereNumber('conversation')
+                    ->name('reply')
+                    ->middleware('permission:admin.communication.view-details|admin.communication.view');
+                Route::post('/{communication}/send', [\App\Http\Controllers\Admin\CommunicationController::class, 'send'])
+                    ->whereNumber('communication')
+                    ->name('send')
+                    ->middleware('permission:admin.communication.send');
                 Route::get('/{communication}', [\App\Http\Controllers\Admin\CommunicationController::class, 'show'])
                     ->whereNumber('communication')
                     ->name('show')

@@ -6,8 +6,10 @@ use App\Models\SystemSetting;
 use App\Models\Teacher;
 use App\Models\User;
 use App\Services\AttendancePortalService;
+use App\Services\CommunicationService;
 use App\Services\LeadershipScope;
 use App\Support\AuthenticatedHome;
+use App\Support\CommunicationPermissions;
 use App\Support\LecturerNotificationPayload;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
@@ -110,6 +112,22 @@ class HandleInertiaRequests extends Middleware
             'unreadNotificationsCount' => fn () => auth()->guard('teacher')->check() && $user
                 ? $user->unreadNotifications()->count()
                 : 0,
+
+            'unreadConversationsCount' => fn () => rescue(
+                function () use ($user) {
+                    if ($user instanceof Teacher) {
+                        return app(CommunicationService::class)->unreadConversationCount($user);
+                    }
+
+                    if ($user instanceof User && $user->can(CommunicationPermissions::VIEW)) {
+                        return app(CommunicationService::class)->unreadConversationCount($user);
+                    }
+
+                    return 0;
+                },
+                0,
+                report: false,
+            ),
 
             'ziggy' => fn (): array => rescue(
                 fn () => [

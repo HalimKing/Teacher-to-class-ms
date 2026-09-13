@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Jobs\DeliverCommunicationJob;
 use App\Models\Communication;
+use App\Models\CommunicationConversation;
+use App\Models\CommunicationConversationParticipant;
 use App\Models\CommunicationRecipient;
 use App\Models\CommunicationTarget;
 use App\Models\Department;
@@ -57,7 +59,7 @@ class CommunicationService
     public function canViewSent(User|Teacher $actor): bool
     {
         if ($actor instanceof Teacher) {
-            return $actor->hasLeadershipAssignment();
+            return true;
         }
 
         return $actor->can(CommunicationPermissions::VIEW)
@@ -196,11 +198,28 @@ class CommunicationService
             ]);
         }
 
+        $subject = trim((string) $input['subject']);
+        $body = trim((string) $input['body']);
+
+        $conversation = CommunicationConversation::create([
+            'subject' => $subject,
+            'started_by_type' => $actor::class,
+            'started_by_id' => $actor->getKey(),
+            'message_count' => 0,
+            'last_message_preview' => $this->excerpt($body),
+            'last_message_at' => now(),
+        ]);
+
+        $this->addParticipant($conversation, $actor, markRead: true);
+
         $communication = Communication::create([
+            'conversation_id' => $conversation->id,
+            'parent_id' => null,
+            'kind' => Communication::KIND_ORIGINAL,
             'sender_type' => $actor::class,
             'sender_id' => $actor->getKey(),
-            'subject' => trim((string) $input['subject']),
-            'body' => trim((string) $input['body']),
+            'subject' => $subject,
+            'body' => $body,
             'status' => $asDraft ? Communication::STATUS_DRAFT : Communication::STATUS_SENDING,
             'recipient_count' => $teachers->count(),
             'delivered_count' => 0,
@@ -212,24 +231,70 @@ class CommunicationService
         $this->storeTargets($communication, $actor, $input);
 
         if ($asDraft) {
-            return $communication->fresh(['targets']) ?? $communication;
+            $this->refreshConversation($conversation);
+
+            return $communication->fresh(['targets', 'conversation']) ?? $communication;
         }
 
         foreach ($teachers as $teacher) {
-            CommunicationRecipient::firstOrCreate(
-                [
-                    'communication_id' => $communication->id,
-                    'teacher_id' => $teacher->id,
-                ],
-                ['status' => CommunicationRecipient::STATUS_PENDING],
-            );
+            $this->addParticipant($conversation, $teacher);
+            $this->addTeacherRecipient($communication, $teacher);
         }
 
         $communication->update(['recipient_count' => $communication->recipients()->count()]);
+        $this->refreshConversation($conversation);
 
         DeliverCommunicationJob::dispatch($communication->id);
 
-        return $communication->fresh(['targets', 'recipients.teacher.faculty', 'recipients.teacher.department'])
+        return $communication->fresh(['targets', 'conversation', 'recipients.teacher.faculty', 'recipients.teacher.department'])
+            ?? $communication;
+    }
+
+    public function sendDraft(User|Teacher $actor, Communication $communication): Communication
+    {
+        if (! $this->isSender($actor, $communication)) {
+            abort(403, 'You can only send drafts that you created.');
+        }
+
+        if (! $communication->isDraft()) {
+            throw ValidationException::withMessages([
+                'status' => 'Only draft messages can be sent.',
+            ]);
+        }
+
+        if (! $this->canSend($actor)) {
+            abort(403, 'You are not authorized to send messages.');
+        }
+
+        $input = $this->inputFromTargets($communication);
+        $this->assertTargetPermissions($actor, $input);
+        $teachers = $this->resolveTeachers($actor, $input);
+
+        if ($teachers->isEmpty()) {
+            throw ValidationException::withMessages([
+                'recipients' => 'This draft has no valid recipients. Update the audience before sending.',
+            ]);
+        }
+
+        $communication->update([
+            'status' => Communication::STATUS_SENDING,
+            'sent_at' => now(),
+            'audience_summary' => $this->audienceLabels($actor, $input),
+        ]);
+
+        $conversation = $this->ensureConversation($communication, $actor);
+
+        foreach ($teachers as $teacher) {
+            $this->addParticipant($conversation, $teacher);
+            $this->addTeacherRecipient($communication, $teacher);
+        }
+
+        $communication->update(['recipient_count' => $communication->recipients()->count()]);
+        $this->refreshConversation($conversation);
+
+        DeliverCommunicationJob::dispatch($communication->id);
+
+        return $communication->fresh(['targets', 'conversation', 'recipients.teacher.faculty', 'recipients.teacher.department'])
             ?? $communication;
     }
 
@@ -239,13 +304,27 @@ class CommunicationService
             return;
         }
 
-        $communication->loadMissing('recipients.teacher');
+        $communication->loadMissing(['recipients.teacher', 'recipients.user', 'conversation']);
 
         $delivered = 0;
         $failed = 0;
+        $threadUrl = $communication->conversation_id
+            ? route('teacher.communication.thread', $communication->conversation_id, false)
+            : route('teacher.communication.show', $communication, false);
 
         foreach ($communication->recipients as $recipient) {
             if (in_array($recipient->status, [CommunicationRecipient::STATUS_DELIVERED, CommunicationRecipient::STATUS_READ], true)) {
+                $delivered++;
+
+                continue;
+            }
+
+            if ($recipient->user_id && ! $recipient->teacher_id) {
+                $recipient->update([
+                    'status' => CommunicationRecipient::STATUS_DELIVERED,
+                    'delivered_at' => now(),
+                    'error_message' => null,
+                ]);
                 $delivered++;
 
                 continue;
@@ -270,9 +349,10 @@ class CommunicationService
                     priority: LecturerNotificationPayload::PRIORITY_MEDIUM,
                     title: $communication->subject,
                     message: $this->excerpt($communication->body),
-                    url: route('teacher.communication.show', $communication, false),
+                    url: $threadUrl,
                     meta: [
                         'communication_id' => $communication->id,
+                        'conversation_id' => $communication->conversation_id,
                         'sender_type' => class_basename($communication->sender_type),
                     ],
                 ));
@@ -304,6 +384,10 @@ class CommunicationService
             'delivered_count' => $delivered,
             'recipient_count' => $communication->recipients()->count(),
         ]);
+
+        if ($communication->conversation) {
+            $this->refreshConversation($communication->conversation);
+        }
     }
 
     /**
@@ -382,19 +466,23 @@ class CommunicationService
         $communication->load([
             'targets',
             'sender',
+            'conversation',
+            'parent.sender',
             'recipients.teacher.faculty',
             'recipients.teacher.department',
+            'recipients.user',
         ]);
 
-        if ($actor instanceof Teacher) {
-            $this->markRead($actor, $communication);
-            $communication->refresh()->load([
-                'targets',
-                'sender',
-                'recipients.teacher.faculty',
-                'recipients.teacher.department',
-            ]);
-        }
+        $this->markRead($actor, $communication);
+        $communication->refresh()->load([
+            'targets',
+            'sender',
+            'conversation',
+            'parent.sender',
+            'recipients.teacher.faculty',
+            'recipients.teacher.department',
+            'recipients.user',
+        ]);
 
         return $communication;
     }
@@ -405,20 +493,16 @@ class CommunicationService
             return $this->canViewDetails($actor) || $communication->isDraft();
         }
 
-        if ($actor instanceof Teacher) {
-            return $communication->recipients()
-                ->where('teacher_id', $actor->id)
-                ->exists();
+        if ($communication->conversation_id && $this->isParticipant($actor, $communication->conversation ?? $communication->conversation()->first())) {
+            return true;
         }
 
-        return false;
+        return $this->recipientQuery($communication->recipients(), $actor)->exists();
     }
 
-    public function markRead(Teacher $teacher, Communication $communication): void
+    public function markRead(User|Teacher $actor, Communication $communication): void
     {
-        $recipient = $communication->recipients()
-            ->where('teacher_id', $teacher->id)
-            ->first();
+        $recipient = $this->recipientQuery($communication->recipients(), $actor)->first();
 
         if (! $recipient || $recipient->read_at) {
             return;
@@ -526,14 +610,26 @@ class CommunicationService
     public function serialize(Communication $communication, User|Teacher|null $actor = null): array
     {
         $isSender = $actor && $this->isSender($actor, $communication);
-        $recipientRow = $actor instanceof Teacher
-            ? $communication->recipients->firstWhere('teacher_id', $actor->id)
+        $recipientRow = $communication->relationLoaded('recipients')
+            ? $communication->recipients->first(function (CommunicationRecipient $recipient) use ($actor) {
+                if (! $actor) {
+                    return false;
+                }
+
+                return $actor instanceof Teacher
+                    ? (int) $recipient->teacher_id === (int) $actor->id
+                    : (int) $recipient->user_id === (int) $actor->id;
+            })
             : null;
 
         return [
             'id' => $communication->id,
+            'conversation_id' => $communication->conversation_id,
+            'parent_id' => $communication->parent_id,
+            'kind' => $communication->kind ?: Communication::KIND_ORIGINAL,
             'subject' => $communication->subject,
             'body' => $communication->body,
+            'excerpt' => $this->excerpt($communication->body, 140),
             'status' => $communication->status,
             'status_label' => $communication->statusLabel(),
             'recipient_count' => $communication->recipient_count,
@@ -542,17 +638,33 @@ class CommunicationService
             'audience_summary' => $communication->audience_summary ?? [],
             'sent_at' => $communication->sent_at?->toIso8601String(),
             'created_at' => $communication->created_at?->toIso8601String(),
-            'sender' => $this->serializeSender($communication->sender),
-            'targets' => $communication->targets->map(fn (CommunicationTarget $target) => [
-                'type' => $target->target_type,
-                'id' => $target->target_id,
-                'label' => $target->target_label,
-            ])->values()->all(),
+            'sender' => $this->serializeActor($communication->sender),
+            'in_reply_to' => $communication->parent
+                ? [
+                    'id' => $communication->parent->id,
+                    'sender' => $this->serializeActor($communication->parent->sender),
+                    'excerpt' => $this->excerpt((string) $communication->parent->body, 140),
+                ]
+                : null,
+            'to' => $communication->relationLoaded('recipients')
+                ? $communication->recipients->map(fn (CommunicationRecipient $recipient) => [
+                    'name' => $this->recipientName($recipient),
+                    'type' => $recipient->teacher_id ? 'teacher' : 'admin',
+                ])->values()->all()
+                : [],
+            'targets' => $communication->relationLoaded('targets')
+                ? $communication->targets->map(fn (CommunicationTarget $target) => [
+                    'type' => $target->target_type,
+                    'id' => $target->target_id,
+                    'label' => $target->target_label,
+                ])->values()->all()
+                : [],
             'recipients' => $isSender && $communication->relationLoaded('recipients')
                 ? $communication->recipients->map(fn (CommunicationRecipient $recipient) => [
                     'id' => $recipient->id,
                     'teacher_id' => $recipient->teacher_id,
-                    'name' => $recipient->teacher ? $this->teacherLabel($recipient->teacher) : 'Staff',
+                    'user_id' => $recipient->user_id,
+                    'name' => $this->recipientName($recipient),
                     'employee_id' => $recipient->teacher?->employee_id,
                     'faculty' => $recipient->teacher?->faculty?->name,
                     'department' => $recipient->teacher?->department?->name,
@@ -576,6 +688,279 @@ class CommunicationService
         ])));
 
         return $name !== '' ? $name : ($teacher->email ?: 'Staff');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function folderPayload(User|Teacher $actor, string $folder, Request $request): array
+    {
+        $conversations = $this->paginateConversations($actor, $folder, $request);
+        $conversations->getCollection()->transform(
+            fn (CommunicationConversation $conversation) => $this->serializeConversation($conversation, $actor)
+        );
+
+        return [
+            'conversations' => $conversations,
+            'folder' => $folder,
+            'filters' => $request->only(['search', 'from', 'to', 'unread']),
+            'capabilities' => $this->capabilities($actor),
+            'counts' => $this->folderCounts($actor),
+        ];
+    }
+
+    public function paginateConversations(User|Teacher $actor, string $folder, Request $request): LengthAwarePaginator
+    {
+        $query = CommunicationConversation::query()
+            ->whereHas('participants', fn (Builder $builder) => $this->whereParticipantActor($builder, $actor))
+            ->with([
+                'startedBy',
+                'latestMessage.sender',
+                'participants.participant',
+            ])
+            ->withCount([
+                'messages as unread_messages_count' => function (Builder $builder) use ($actor) {
+                    $builder->where('status', '!=', Communication::STATUS_DRAFT)
+                        ->whereHas('recipients', function (Builder $recipients) use ($actor) {
+                            $this->whereRecipientActor($recipients, $actor)->whereNull('read_at');
+                        });
+                },
+            ]);
+
+        match ($folder) {
+            'inbox' => $query->whereHas('messages', function (Builder $builder) use ($actor) {
+                $builder->where('status', '!=', Communication::STATUS_DRAFT)
+                    ->whereHas('recipients', fn (Builder $recipients) => $this->whereRecipientActor($recipients, $actor));
+            }),
+            'sent' => $query->whereHas('messages', function (Builder $builder) use ($actor) {
+                $builder->where('sender_type', $actor::class)
+                    ->where('sender_id', $actor->getKey())
+                    ->where('status', '!=', Communication::STATUS_DRAFT);
+            }),
+            'drafts' => $query->whereHas('messages', function (Builder $builder) use ($actor) {
+                $builder->where('sender_type', $actor::class)
+                    ->where('sender_id', $actor->getKey())
+                    ->where('status', Communication::STATUS_DRAFT);
+            }),
+            default => $query->where(function (Builder $builder) use ($actor) {
+                $builder->whereHas('messages', fn (Builder $messages) => $messages->where('status', '!=', Communication::STATUS_DRAFT))
+                    ->orWhereHas('messages', function (Builder $messages) use ($actor) {
+                        $messages->where('status', Communication::STATUS_DRAFT)
+                            ->where('sender_type', $actor::class)
+                            ->where('sender_id', $actor->getKey());
+                    });
+            }),
+        };
+
+        $this->applyConversationFilters($query, $request, $actor);
+
+        return $query
+            ->orderByDesc('last_message_at')
+            ->orderByDesc('id')
+            ->paginate(20)
+            ->withQueryString();
+    }
+
+    /**
+     * @return array{inbox: int, drafts: int, sent: int, all: int}
+     */
+    public function folderCounts(User|Teacher $actor): array
+    {
+        return [
+            'inbox' => $this->unreadConversationCount($actor),
+            'drafts' => $this->conversationFolderQuery($actor, 'drafts')->count(),
+            'sent' => $this->conversationFolderQuery($actor, 'sent')->count(),
+            'all' => $this->conversationFolderQuery($actor, 'all')->count(),
+        ];
+    }
+
+    public function unreadConversationCount(User|Teacher $actor): int
+    {
+        return CommunicationConversation::query()
+            ->whereHas('participants', fn (Builder $builder) => $this->whereParticipantActor($builder, $actor))
+            ->whereHas('messages', function (Builder $builder) use ($actor) {
+                $builder->where('status', '!=', Communication::STATUS_DRAFT)
+                    ->whereHas('recipients', function (Builder $recipients) use ($actor) {
+                        $this->whereRecipientActor($recipients, $actor)->whereNull('read_at');
+                    });
+            })
+            ->count();
+    }
+
+    public function findConversationForActor(User|Teacher $actor, CommunicationConversation $conversation): CommunicationConversation
+    {
+        if (! $this->canAccessConversation($actor, $conversation)) {
+            abort(403, 'You are not authorized to view this conversation.');
+        }
+
+        $this->loadConversation($conversation);
+        $this->markConversationRead($actor, $conversation);
+        $conversation->refresh();
+        $this->loadConversation($conversation);
+
+        return $conversation;
+    }
+
+    public function canAccessConversation(User|Teacher $actor, CommunicationConversation $conversation): bool
+    {
+        return $this->isParticipant($actor, $conversation);
+    }
+
+    /**
+     * @param  array{parent_id: int, mode: string, body: string}  $input
+     */
+    public function reply(User|Teacher $actor, CommunicationConversation $conversation, array $input): Communication
+    {
+        if (! $this->canAccessConversation($actor, $conversation)) {
+            abort(403, 'You are not authorized to reply to this conversation.');
+        }
+
+        $parent = Communication::query()
+            ->where('conversation_id', $conversation->id)
+            ->where('id', $input['parent_id'])
+            ->first();
+
+        if (! $parent instanceof Communication || $parent->isDraft()) {
+            abort(404, 'The message you are replying to was not found in this conversation.');
+        }
+
+        if (! $this->canView($actor, $parent)) {
+            abort(403, 'You are not authorized to reply to this message.');
+        }
+
+        $mode = $input['mode'] === 'reply_all' ? 'reply_all' : 'reply';
+        [$teachers, $users] = $this->resolveReplyRecipients($actor, $conversation, $parent, $mode);
+
+        if ($teachers->isEmpty() && $users->isEmpty()) {
+            throw ValidationException::withMessages([
+                'body' => 'There is no recipient available for this reply.',
+            ]);
+        }
+
+        $labels = $mode === 'reply_all' ? ['Reply all'] : ['Reply'];
+        $communication = Communication::create([
+            'conversation_id' => $conversation->id,
+            'parent_id' => $parent->id,
+            'kind' => $mode === 'reply_all' ? Communication::KIND_REPLY_ALL : Communication::KIND_REPLY,
+            'sender_type' => $actor::class,
+            'sender_id' => $actor->getKey(),
+            'subject' => $conversation->subject,
+            'body' => $input['body'],
+            'status' => Communication::STATUS_SENDING,
+            'recipient_count' => $teachers->count() + $users->count(),
+            'delivered_count' => 0,
+            'read_count' => 0,
+            'audience_summary' => $labels,
+            'sent_at' => now(),
+        ]);
+
+        $this->addParticipant($conversation, $actor, markRead: true);
+
+        foreach ($teachers as $teacher) {
+            $this->addParticipant($conversation, $teacher);
+            $this->addTeacherRecipient($communication, $teacher);
+            $communication->targets()->create([
+                'target_type' => CommunicationTarget::STAFF,
+                'target_id' => $teacher->id,
+                'target_label' => $this->teacherLabel($teacher),
+            ]);
+        }
+
+        foreach ($users as $user) {
+            $this->addParticipant($conversation, $user);
+            $this->addUserRecipient($communication, $user);
+        }
+
+        $communication->update(['recipient_count' => $communication->recipients()->count()]);
+        $this->refreshConversation($conversation);
+
+        DeliverCommunicationJob::dispatch($communication->id);
+
+        return $communication->fresh(['conversation', 'recipients.teacher', 'recipients.user']) ?? $communication;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function serializeConversation(CommunicationConversation $conversation, User|Teacher $actor): array
+    {
+        $conversation->loadMissing(['startedBy', 'latestMessage.sender', 'participants.participant']);
+
+        $latest = $conversation->latestMessage;
+        $unread = isset($conversation->unread_messages_count)
+            ? (int) $conversation->unread_messages_count > 0
+            : $conversation->messages()
+                ->where('status', '!=', Communication::STATUS_DRAFT)
+                ->whereHas('recipients', function (Builder $recipients) use ($actor) {
+                    $this->whereRecipientActor($recipients, $actor)->whereNull('read_at');
+                })
+                ->exists();
+
+        $participants = $conversation->participants
+            ->map(fn (CommunicationConversationParticipant $row) => $this->serializeActor($row->participant))
+            ->filter()
+            ->values()
+            ->all();
+
+        $from = $latest ? $this->serializeActor($latest->sender) : $this->serializeActor($conversation->startedBy);
+
+        return [
+            'id' => $conversation->id,
+            'subject' => $conversation->subject,
+            'preview' => $conversation->last_message_preview ?: ($latest ? $this->excerpt((string) $latest->body) : null),
+            'last_message_at' => $conversation->last_message_at?->toIso8601String()
+                ?? $latest?->sent_at?->toIso8601String()
+                ?? $conversation->updated_at?->toIso8601String(),
+            'message_count' => (int) $conversation->message_count,
+            'unread' => (bool) $unread,
+            'is_important' => $conversation->started_by_type === User::class,
+            'has_draft' => $latest?->status === Communication::STATUS_DRAFT,
+            'participants' => $participants,
+            'from' => $from,
+            'participant_label' => $this->participantLabel($participants, $actor, $from),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function serializeThread(CommunicationConversation $conversation, User|Teacher $actor): array
+    {
+        $this->loadConversation($conversation);
+
+        $messages = $conversation->messages
+            ->sortBy('id')
+            ->values()
+            ->map(fn (Communication $message) => $this->serialize($message, $actor))
+            ->all();
+
+        $participants = $conversation->participants
+            ->map(fn (CommunicationConversationParticipant $row) => $this->serializeActor($row->participant))
+            ->filter()
+            ->values()
+            ->all();
+
+        $draft = $conversation->messages->first(
+            fn (Communication $message) => $message->isDraft() && $this->isSender($actor, $message)
+        );
+
+        $canReply = $conversation->messages->contains(
+            fn (Communication $message) => $message->status !== Communication::STATUS_DRAFT
+        );
+
+        return [
+            'id' => $conversation->id,
+            'subject' => $conversation->subject,
+            'message_count' => (int) $conversation->message_count,
+            'last_message_at' => $conversation->last_message_at?->toIso8601String(),
+            'participants' => $participants,
+            'can_reply' => $canReply,
+            'can_reply_all' => $canReply && count($participants) > 2,
+            'can_send_draft' => $draft instanceof Communication && $this->canSend($actor),
+            'draft_id' => $draft?->id,
+            'viewer' => $this->serializeActor($actor),
+            'messages' => $messages,
+        ];
     }
 
     /**
@@ -779,6 +1164,37 @@ class CommunicationService
     }
 
     /**
+     * @return array<string, mixed>
+     */
+    private function inputFromTargets(Communication $communication): array
+    {
+        $communication->loadMissing('targets');
+
+        $input = [
+            'all_faculties' => false,
+            'all_departments' => false,
+            'all_staff' => false,
+            'faculty_ids' => [],
+            'department_ids' => [],
+            'staff_ids' => [],
+        ];
+
+        foreach ($communication->targets as $target) {
+            match ($target->target_type) {
+                CommunicationTarget::ALL_FACULTIES => $input['all_faculties'] = true,
+                CommunicationTarget::ALL_DEPARTMENTS => $input['all_departments'] = true,
+                CommunicationTarget::ALL_STAFF => $input['all_staff'] = true,
+                CommunicationTarget::FACULTY => $input['faculty_ids'][] = (int) $target->target_id,
+                CommunicationTarget::DEPARTMENT => $input['department_ids'][] = (int) $target->target_id,
+                CommunicationTarget::STAFF => $input['staff_ids'][] = (int) $target->target_id,
+                default => null,
+            };
+        }
+
+        return $input;
+    }
+
+    /**
      * @param  array<string, mixed>  $input
      */
     private function hasAnyTarget(array $input): bool
@@ -792,7 +1208,6 @@ class CommunicationService
     }
 
     /**
-     * @param  mixed  $value
      * @return list<int>
      */
     private function intIds(mixed $value): array
@@ -889,5 +1304,387 @@ class CommunicationService
         }
 
         return rtrim(substr($plain, 0, $limit - 1)).'…';
+    }
+
+    private function conversationFolderQuery(User|Teacher $actor, string $folder): Builder
+    {
+        $query = CommunicationConversation::query()
+            ->whereHas('participants', fn (Builder $builder) => $this->whereParticipantActor($builder, $actor));
+
+        return match ($folder) {
+            'inbox' => $query->whereHas('messages', function (Builder $builder) use ($actor) {
+                $builder->where('status', '!=', Communication::STATUS_DRAFT)
+                    ->whereHas('recipients', fn (Builder $recipients) => $this->whereRecipientActor($recipients, $actor));
+            }),
+            'sent' => $query->whereHas('messages', function (Builder $builder) use ($actor) {
+                $builder->where('sender_type', $actor::class)
+                    ->where('sender_id', $actor->getKey())
+                    ->where('status', '!=', Communication::STATUS_DRAFT);
+            }),
+            'drafts' => $query->whereHas('messages', function (Builder $builder) use ($actor) {
+                $builder->where('sender_type', $actor::class)
+                    ->where('sender_id', $actor->getKey())
+                    ->where('status', Communication::STATUS_DRAFT);
+            }),
+            default => $query->where(function (Builder $builder) use ($actor) {
+                $builder->whereHas('messages', fn (Builder $messages) => $messages->where('status', '!=', Communication::STATUS_DRAFT))
+                    ->orWhereHas('messages', function (Builder $messages) use ($actor) {
+                        $messages->where('status', Communication::STATUS_DRAFT)
+                            ->where('sender_type', $actor::class)
+                            ->where('sender_id', $actor->getKey());
+                    });
+            }),
+        };
+    }
+
+    private function applyConversationFilters(Builder $query, Request $request, User|Teacher $actor): void
+    {
+        $search = trim((string) $request->input('search', ''));
+        if ($search !== '') {
+            $query->where(function (Builder $builder) use ($search) {
+                $builder->where('subject', 'like', '%'.$search.'%')
+                    ->orWhere('last_message_preview', 'like', '%'.$search.'%')
+                    ->orWhereHas('messages', function (Builder $messages) use ($search) {
+                        $messages->where('subject', 'like', '%'.$search.'%')
+                            ->orWhere('body', 'like', '%'.$search.'%');
+                    })
+                    ->orWhereHas('participants', function (Builder $participants) use ($search) {
+                        $teacherIds = Teacher::query()
+                            ->where(function (Builder $inner) use ($search) {
+                                $inner->where('first_name', 'like', '%'.$search.'%')
+                                    ->orWhere('last_name', 'like', '%'.$search.'%')
+                                    ->orWhere('email', 'like', '%'.$search.'%');
+                            })
+                            ->pluck('id');
+                        $userIds = User::query()
+                            ->where(function (Builder $inner) use ($search) {
+                                $inner->where('name', 'like', '%'.$search.'%')
+                                    ->orWhere('email', 'like', '%'.$search.'%');
+                            })
+                            ->pluck('id');
+
+                        $participants->where(function (Builder $inner) use ($teacherIds, $userIds) {
+                            $inner->where(function (Builder $teacherQuery) use ($teacherIds) {
+                                $teacherQuery->where('participant_type', Teacher::class)
+                                    ->whereIn('participant_id', $teacherIds);
+                            })->orWhere(function (Builder $userQuery) use ($userIds) {
+                                $userQuery->where('participant_type', User::class)
+                                    ->whereIn('participant_id', $userIds);
+                            });
+                        });
+                    });
+            });
+        }
+
+        $from = $request->input('from');
+        if (is_string($from) && $from !== '') {
+            $query->whereDate('last_message_at', '>=', $from);
+        }
+
+        $to = $request->input('to');
+        if (is_string($to) && $to !== '') {
+            $query->whereDate('last_message_at', '<=', $to);
+        }
+
+        if ($request->boolean('unread')) {
+            $query->whereHas('messages', function (Builder $builder) use ($actor) {
+                $builder->where('status', '!=', Communication::STATUS_DRAFT)
+                    ->whereHas('recipients', function (Builder $recipients) use ($actor) {
+                        $this->whereRecipientActor($recipients, $actor)->whereNull('read_at');
+                    });
+            });
+        }
+    }
+
+    /**
+     * @return array{0: Collection<int, Teacher>, 1: Collection<int, User>}
+     */
+    private function resolveReplyRecipients(
+        User|Teacher $actor,
+        CommunicationConversation $conversation,
+        Communication $parent,
+        string $mode,
+    ): array {
+        $conversation->loadMissing(['participants.participant', 'startedBy']);
+        $parent->loadMissing(['sender', 'recipients.teacher', 'recipients.user']);
+
+        $teachers = collect();
+        $users = collect();
+
+        $add = function (mixed $model) use ($actor, &$teachers, &$users): void {
+            if ($model instanceof Teacher && (int) $model->id !== ($actor instanceof Teacher ? (int) $actor->id : 0)) {
+                $teachers->put($model->id, $model);
+            }
+
+            if ($model instanceof User && (int) $model->id !== ($actor instanceof User ? (int) $actor->id : 0)) {
+                $users->put($model->id, $model);
+            }
+        };
+
+        if ($mode === 'reply') {
+            if ($parent->sender && ! $this->isSender($actor, $parent)) {
+                $add($parent->sender);
+            } elseif ($conversation->startedBy && ! $this->sameActor($actor, $conversation->started_by_type, (int) $conversation->started_by_id)) {
+                $add($conversation->startedBy);
+            } else {
+                foreach ($parent->recipients as $recipient) {
+                    $add($recipient->teacher ?? $recipient->user);
+                }
+            }
+        } else {
+            foreach ($conversation->participants as $row) {
+                $add($row->participant);
+            }
+
+            $add($parent->sender);
+            foreach ($parent->recipients as $recipient) {
+                $add($recipient->teacher ?? $recipient->user);
+            }
+        }
+
+        return [$teachers->values(), $users->values()];
+    }
+
+    private function markConversationRead(User|Teacher $actor, CommunicationConversation $conversation): void
+    {
+        foreach ($conversation->messages as $message) {
+            if ($message->isDraft()) {
+                continue;
+            }
+
+            $this->markRead($actor, $message);
+        }
+
+        $conversation->participants()
+            ->where('participant_type', $actor::class)
+            ->where('participant_id', $actor->getKey())
+            ->update(['last_read_at' => now()]);
+    }
+
+    private function loadConversation(CommunicationConversation $conversation): void
+    {
+        $conversation->load([
+            'startedBy',
+            'participants.participant',
+            'messages' => fn ($query) => $query->orderBy('id')->with([
+                'sender',
+                'parent.sender',
+                'targets',
+                'recipients.teacher.faculty',
+                'recipients.teacher.department',
+                'recipients.user',
+            ]),
+        ]);
+    }
+
+    private function ensureConversation(Communication $communication, User|Teacher $actor): CommunicationConversation
+    {
+        if ($communication->conversation instanceof CommunicationConversation) {
+            $this->addParticipant($communication->conversation, $actor, markRead: true);
+
+            return $communication->conversation;
+        }
+
+        if ($communication->conversation_id) {
+            $conversation = CommunicationConversation::query()->find($communication->conversation_id);
+            if ($conversation instanceof CommunicationConversation) {
+                $this->addParticipant($conversation, $actor, markRead: true);
+
+                return $conversation;
+            }
+        }
+
+        $conversation = CommunicationConversation::create([
+            'subject' => $communication->subject,
+            'started_by_type' => $communication->sender_type,
+            'started_by_id' => $communication->sender_id,
+            'message_count' => 0,
+            'last_message_preview' => $this->excerpt((string) $communication->body),
+            'last_message_at' => now(),
+        ]);
+
+        $communication->update(['conversation_id' => $conversation->id]);
+        $this->addParticipant($conversation, $actor, markRead: true);
+
+        return $conversation;
+    }
+
+    private function refreshConversation(CommunicationConversation $conversation): void
+    {
+        $last = $conversation->messages()
+            ->where('status', '!=', Communication::STATUS_DRAFT)
+            ->latest('id')
+            ->first()
+            ?? $conversation->messages()->latest('id')->first();
+
+        $conversation->update([
+            'message_count' => $conversation->messages()
+                ->where('status', '!=', Communication::STATUS_DRAFT)
+                ->count(),
+            'last_message_preview' => $last ? $this->excerpt((string) $last->body) : $conversation->last_message_preview,
+            'last_message_at' => $last?->sent_at ?? $last?->created_at ?? $conversation->last_message_at,
+        ]);
+    }
+
+    private function addParticipant(CommunicationConversation $conversation, User|Teacher $actor, bool $markRead = false): void
+    {
+        $participant = CommunicationConversationParticipant::query()->firstOrCreate(
+            [
+                'conversation_id' => $conversation->id,
+                'participant_type' => $actor::class,
+                'participant_id' => $actor->getKey(),
+            ],
+            [
+                'last_read_at' => $markRead ? now() : null,
+            ],
+        );
+
+        if ($markRead) {
+            $participant->update(['last_read_at' => now()]);
+        }
+    }
+
+    private function addTeacherRecipient(Communication $communication, Teacher $teacher): void
+    {
+        CommunicationRecipient::query()->firstOrCreate(
+            [
+                'communication_id' => $communication->id,
+                'teacher_id' => $teacher->id,
+            ],
+            [
+                'user_id' => null,
+                'status' => CommunicationRecipient::STATUS_PENDING,
+            ],
+        );
+    }
+
+    private function addUserRecipient(Communication $communication, User $user): void
+    {
+        CommunicationRecipient::query()->firstOrCreate(
+            [
+                'communication_id' => $communication->id,
+                'user_id' => $user->id,
+            ],
+            [
+                'teacher_id' => null,
+                'status' => CommunicationRecipient::STATUS_PENDING,
+            ],
+        );
+    }
+
+    private function isParticipant(User|Teacher $actor, ?CommunicationConversation $conversation): bool
+    {
+        if (! $conversation instanceof CommunicationConversation) {
+            return false;
+        }
+
+        return $conversation->participants()
+            ->where('participant_type', $actor::class)
+            ->where('participant_id', $actor->getKey())
+            ->exists();
+    }
+
+    private function whereParticipantActor(Builder $query, User|Teacher $actor): Builder
+    {
+        return $query->where('participant_type', $actor::class)
+            ->where('participant_id', $actor->getKey());
+    }
+
+    private function whereRecipientActor(mixed $query, User|Teacher $actor): mixed
+    {
+        if ($actor instanceof Teacher) {
+            return $query->where('teacher_id', $actor->id);
+        }
+
+        return $query->where('user_id', $actor->id);
+    }
+
+    private function recipientQuery(mixed $query, User|Teacher $actor): mixed
+    {
+        return $this->whereRecipientActor($query, $actor);
+    }
+
+    private function sameActor(User|Teacher $actor, ?string $type, int $id): bool
+    {
+        return $type === $actor::class && $id === (int) $actor->getKey();
+    }
+
+    private function recipientName(CommunicationRecipient $recipient): string
+    {
+        if ($recipient->teacher) {
+            return $this->teacherLabel($recipient->teacher);
+        }
+
+        if ($recipient->user) {
+            return $recipient->user->name ?: $recipient->user->email;
+        }
+
+        return 'Staff';
+    }
+
+    /**
+     * @param  list<array{type: string, id: int, name: string, initials: string}|null>  $participants
+     * @param  array{type: string, id: int, name: string, initials: string}|null  $from
+     */
+    private function participantLabel(array $participants, User|Teacher $actor, ?array $from): string
+    {
+        $names = collect($participants)
+            ->filter()
+            ->reject(fn (array $row) => $row['type'] === ($actor instanceof Teacher ? 'teacher' : 'admin')
+                && (int) $row['id'] === (int) $actor->getKey())
+            ->pluck('name')
+            ->filter()
+            ->values();
+
+        if ($names->isEmpty()) {
+            return $from['name'] ?? 'Conversation';
+        }
+
+        if ($names->count() <= 2) {
+            return $names->implode(', ');
+        }
+
+        return $names->take(2)->implode(', ').' +'.($names->count() - 2);
+    }
+
+    /**
+     * @return array{type: string, id: int, name: string, initials: string}|null
+     */
+    private function serializeActor(mixed $actor): ?array
+    {
+        if ($actor instanceof Teacher) {
+            $name = $this->teacherLabel($actor);
+
+            return [
+                'type' => 'teacher',
+                'id' => $actor->id,
+                'name' => $name,
+                'initials' => $this->initials($name),
+            ];
+        }
+
+        if ($actor instanceof User) {
+            $name = $actor->name ?: $actor->email;
+
+            return [
+                'type' => 'admin',
+                'id' => $actor->id,
+                'name' => $name,
+                'initials' => $this->initials((string) $name),
+            ];
+        }
+
+        return null;
+    }
+
+    private function initials(string $name): string
+    {
+        $parts = preg_split('/\s+/', trim($name)) ?: [];
+        $letters = collect($parts)
+            ->filter()
+            ->take(2)
+            ->map(fn (string $part) => mb_strtoupper(mb_substr($part, 0, 1)));
+
+        return $letters->implode('') ?: '?';
     }
 }

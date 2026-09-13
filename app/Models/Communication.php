@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
@@ -34,7 +35,16 @@ class Communication extends Model
         self::STATUS_FAILED => 'Failed',
     ];
 
+    public const KIND_ORIGINAL = 'original';
+
+    public const KIND_REPLY = 'reply';
+
+    public const KIND_REPLY_ALL = 'reply_all';
+
     protected $fillable = [
+        'conversation_id',
+        'parent_id',
+        'kind',
         'sender_type',
         'sender_id',
         'subject',
@@ -58,6 +68,21 @@ class Communication extends Model
     public function sender(): MorphTo
     {
         return $this->morphTo();
+    }
+
+    public function conversation(): BelongsTo
+    {
+        return $this->belongsTo(CommunicationConversation::class, 'conversation_id');
+    }
+
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'parent_id');
+    }
+
+    public function replies(): HasMany
+    {
+        return $this->hasMany(self::class, 'parent_id');
     }
 
     public function targets(): HasMany

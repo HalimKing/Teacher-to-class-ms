@@ -16,7 +16,7 @@ import { useInitials } from '@/hooks/use-initials';
 import { cn } from '@/lib/utils';
 import { type BreadcrumbItem, type NavItem, type SharedData } from '@/types';
 import { Link, router, usePage } from '@inertiajs/react';
-import { LayoutGrid, Menu, ChevronDown, ChevronRight, Users, Book, Settings, LogOut, BookOpen, UserCheck, ClipboardList, BarChart, Folder, Bell, ScrollText, MapPin, LifeBuoy, GraduationCap, CalendarDays, Mail } from 'lucide-react';
+import { LayoutGrid, Menu, ChevronDown, ChevronRight, Users, Book, Settings, LogOut, BookOpen, UserCheck, ClipboardList, BarChart, Folder, Bell, ScrollText, MapPin, LifeBuoy, GraduationCap, CalendarDays, Mail, Inbox, FileText } from 'lucide-react';
 import { useState, useMemo, useEffect } from 'react';
 import AppLogo from './app-logo';
 import AppLogoIcon from './app-logo-icon';
@@ -78,6 +78,21 @@ const teacherNavItems: NavItem[] = [
             {
                 title: 'Inbox',
                 href: '/teacher/communication/inbox',
+                icon: Inbox,
+            },
+            {
+                title: 'Sent',
+                href: '/teacher/communication/sent',
+                icon: ClipboardList,
+            },
+            {
+                title: 'Drafts',
+                href: '/teacher/communication/drafts',
+                icon: FileText,
+            },
+            {
+                title: 'All Mail',
+                href: '/teacher/communication/all',
                 icon: Mail,
             },
             {
@@ -90,12 +105,6 @@ const teacherNavItems: NavItem[] = [
                 title: 'Compose',
                 href: '/teacher/communication/compose',
                 icon: ScrollText,
-                requiresLeadership: true,
-            },
-            {
-                title: 'Sent Messages',
-                href: '/teacher/communication/sent',
-                icon: ClipboardList,
                 requiresLeadership: true,
             },
         ],
@@ -302,10 +311,30 @@ const mainNavItems: NavItem[] = [
     },
     {
         title: 'Communication',
-        href: '/admin/communication',
+        href: '/admin/communication/inbox',
         icon: Mail,
         permission: 'admin.communication.view',
         subItems: [
+            {
+                title: 'Inbox',
+                href: '/admin/communication/inbox',
+                permission: 'admin.communication.view',
+            },
+            {
+                title: 'Sent',
+                href: '/admin/communication/sent',
+                permission: 'admin.communication.view-sent',
+            },
+            {
+                title: 'Drafts',
+                href: '/admin/communication/drafts',
+                permission: 'admin.communication.view',
+            },
+            {
+                title: 'All Mail',
+                href: '/admin/communication/all',
+                permission: 'admin.communication.view',
+            },
             {
                 title: 'Dashboard',
                 href: '/admin/communication',
@@ -315,11 +344,6 @@ const mainNavItems: NavItem[] = [
                 title: 'Compose',
                 href: '/admin/communication/compose',
                 permission: 'admin.communication.compose',
-            },
-            {
-                title: 'Sent Messages',
-                href: '/admin/communication/sent',
-                permission: 'admin.communication.view-sent',
             },
         ],
     },
@@ -445,6 +469,8 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
     const can = useCan();
     const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
     const [navItems, setNavItems] = useState<NavItem[]>(auth.user && auth.guard === 'teacher' ? teacherNavItems : mainNavItems);
+
+    const unreadConversationsCount = Number(page.props.unreadConversationsCount ?? 0);
 
     const isTeacher = auth.user && auth.guard === 'teacher';
     const homeHref =
@@ -627,6 +653,11 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                                                             >
                                                                 {item.icon && <Icon iconNode={item.icon} className="h-5 w-5 flex-shrink-0" />}
                                                                 <span className="text-base flex-1">{item.title}</span>
+                                                                {item.title === 'Communication' && unreadConversationsCount > 0 && (
+                                                                    <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
+                                                                        {unreadConversationsCount > 99 ? '99+' : unreadConversationsCount}
+                                                                    </span>
+                                                                )}
                                                                 <ChevronRight className={cn(
                                                                     'h-4 w-4 transition-transform',
                                                                     expandedItems[item.title] && 'rotate-90'
@@ -649,7 +680,14 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                                                                                 isActive && 'bg-neutral-100 text-slate-900 dark:bg-neutral-800 dark:text-slate-100'
                                                                             )}
                                                                         >
-                                                                            {subItem.title}
+                                                                            <span className="flex items-center justify-between gap-2">
+                                                                                {subItem.title}
+                                                                                {subItem.title === 'Inbox' && unreadConversationsCount > 0 && (
+                                                                                    <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
+                                                                                        {unreadConversationsCount > 99 ? '99+' : unreadConversationsCount}
+                                                                                    </span>
+                                                                                )}
+                                                                            </span>
                                                                         </Link>
                                                                         );
                                                                     })}
@@ -699,6 +737,11 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                                                 >
                                                     {item.icon && <Icon iconNode={item.icon} className="mr-2 h-4 w-4" />}
                                                     {item.title}
+                                                    {item.title === 'Communication' && unreadConversationsCount > 0 && (
+                                                        <span className="ml-2 inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
+                                                            {unreadConversationsCount > 99 ? '99+' : unreadConversationsCount}
+                                                        </span>
+                                                    )}
                                                     <ChevronDown className="ml-2 h-4 w-4 transition-transform duration-200 group-data-[state=open]:rotate-180" />
                                                 </Button>
                                             </DropdownMenuTrigger>
@@ -742,7 +785,14 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                                                                         isActive && 'bg-neutral-100 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-50'
                                                                     )}
                                                                 >
-                                                                    {subItem.title}
+                                                                    <span className="flex w-full items-center justify-between gap-2">
+                                                                        {subItem.title}
+                                                                        {subItem.title === 'Inbox' && unreadConversationsCount > 0 && (
+                                                                            <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
+                                                                                {unreadConversationsCount > 99 ? '99+' : unreadConversationsCount}
+                                                                            </span>
+                                                                        )}
+                                                                    </span>
                                                                 </Link>
                                                             </DropdownMenuItem>
                                                             );

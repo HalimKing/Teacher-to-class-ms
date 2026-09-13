@@ -25,6 +25,7 @@ class CommunicationRecipient extends Model
     protected $fillable = [
         'communication_id',
         'teacher_id',
+        'user_id',
         'status',
         'delivered_at',
         'read_at',
@@ -47,6 +48,11 @@ class CommunicationRecipient extends Model
     public function teacher(): BelongsTo
     {
         return $this->belongsTo(Teacher::class);
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
     }
 
     public function statusLabel(): string

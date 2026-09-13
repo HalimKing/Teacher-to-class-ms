@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Communication;
+use App\Models\CommunicationConversation;
 use App\Models\CommunicationRecipient;
 use App\Models\Department;
 use App\Models\Faculty;
@@ -136,6 +137,18 @@ it('blocks ordinary lecturers from composing while still allowing their inbox', 
             'all_staff' => true,
         ])
         ->assertForbidden();
+
+    $this->actingAs($this->lecturerA1, 'teacher')
+        ->get(route('teacher.communication.sent'))
+        ->assertOk();
+
+    $this->actingAs($this->lecturerA1, 'teacher')
+        ->get(route('teacher.communication.drafts'))
+        ->assertOk();
+
+    $this->actingAs($this->lecturerA1, 'teacher')
+        ->get(route('teacher.communication.all'))
+        ->assertOk();
 
     $this->actingAs($this->lecturerA1, 'teacher')
         ->get(route('teacher.attendance'))
@@ -279,10 +292,15 @@ it('lets a higher-level administrator send combined faculty, department, and sta
 
     $this->actingAs($this->lecturerA1, 'teacher')
         ->get(route('teacher.communication.show', $message))
+        ->assertRedirect(route('teacher.communication.thread', $message->conversation_id));
+
+    $this->actingAs($this->lecturerA1, 'teacher')
+        ->get(route('teacher.communication.thread', $message->conversation_id))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            ->where('message.subject', 'Institution notice')
-            ->where('message.recipients', [])
+            ->component('teacher/communication/thread')
+            ->where('conversation.subject', 'Institution notice')
+            ->where('conversation.messages.0.recipients', [])
         );
 
     expect(
@@ -396,10 +414,343 @@ it('saves drafts without delivering notifications', function () {
             'save_as_draft' => true,
             'all_staff' => true,
         ])
-        ->assertRedirect(route('admin.communication.sent'));
+        ->assertRedirect(route('admin.communication.drafts'));
 
     $message = Communication::query()->latest('id')->first();
     expect($message->status)->toBe(Communication::STATUS_DRAFT)
         ->and($message->recipients()->count())->toBe(0)
         ->and($this->lecturerA1->notifications()->count())->toBe(0);
+});
+
+it('lets a unit leader send a saved draft from the message page', function () {
+    $this->actingAs($this->dean, 'teacher')
+        ->post(route('teacher.communication.store'), [
+            'subject' => 'Faculty draft',
+            'body' => 'This will go out later.',
+            'save_as_draft' => true,
+            'all_staff' => true,
+        ])
+        ->assertRedirect(route('teacher.communication.drafts'));
+
+    $message = Communication::query()->latest('id')->first();
+    expect($message->status)->toBe(Communication::STATUS_DRAFT)
+        ->and($message->conversation_id)->not->toBeNull();
+
+    $this->actingAs($this->dean, 'teacher')
+        ->get(route('teacher.communication.show', $message))
+        ->assertRedirect(route('teacher.communication.thread', $message->conversation_id));
+
+    $this->actingAs($this->dean, 'teacher')
+        ->get(route('teacher.communication.thread', $message->conversation_id))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('conversation.messages.0.status', Communication::STATUS_DRAFT));
+
+    $this->actingAs($this->dean, 'teacher')
+        ->post(route('teacher.communication.send', $message))
+        ->assertRedirect(route('teacher.communication.thread', $message->conversation_id));
+
+    $message->refresh();
+    expect($message->status)->toBe(Communication::STATUS_SENT)
+        ->and($message->recipients()->count())->toBeGreaterThan(0)
+        ->and($this->lecturerA1->notifications()->count())->toBeGreaterThan(0);
+});
+
+it('groups replies into the same conversation and lets ordinary lecturers reply', function () {
+    $admin = makeCommunicationAdmin();
+
+    $this->actingAs($admin, 'web')
+        ->post(route('admin.communication.store'), [
+            'subject' => 'Staff Meeting – September 2026',
+            'body' => 'Please confirm your availability.',
+            'staff_ids' => [$this->lecturerA1->id, $this->hod->id],
+        ])
+        ->assertRedirect();
+
+    $original = Communication::query()->latest('id')->first();
+    $conversationId = $original->conversation_id;
+
+    expect($conversationId)->not->toBeNull()
+        ->and(CommunicationConversation::query()->count())->toBe(1);
+
+    $this->actingAs($this->lecturerA1, 'teacher')
+        ->get(route('teacher.communication.inbox'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('teacher/communication/mailbox')
+            ->where('folder', 'inbox')
+            ->has('conversations.data', 1)
+            ->where('conversations.data.0.subject', 'Staff Meeting – September 2026')
+            ->where('conversations.data.0.unread', true)
+        );
+
+    $this->actingAs($this->lecturerA1, 'teacher')
+        ->post(route('teacher.communication.reply', $conversationId), [
+            'parent_id' => $original->id,
+            'mode' => 'reply',
+            'body' => 'I will attend the meeting.',
+        ])
+        ->assertRedirect(route('teacher.communication.thread', $conversationId));
+
+    expect(Communication::query()->where('conversation_id', $conversationId)->count())->toBe(2)
+        ->and(CommunicationConversation::query()->count())->toBe(1);
+
+    $reply = Communication::query()->where('conversation_id', $conversationId)->where('kind', Communication::KIND_REPLY)->first();
+    expect($reply)->not->toBeNull()
+        ->and($reply->subject)->toBe('Staff Meeting – September 2026')
+        ->and($reply->recipients()->where('user_id', $admin->id)->exists())->toBeTrue();
+
+    $this->actingAs($admin, 'web')
+        ->get(route('admin.communication.inbox'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('admin/communication/mailbox')
+            ->has('conversations.data', 1)
+            ->where('conversations.data.0.unread', true)
+        );
+
+    $this->actingAs($admin, 'web')
+        ->get(route('admin.communication.thread', $conversationId))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('conversation.subject', 'Staff Meeting – September 2026')
+            ->has('conversation.messages', 2)
+        );
+});
+
+it('keeps new messages with the same subject in separate conversations', function () {
+    $this->actingAs($this->dean, 'teacher')
+        ->post(route('teacher.communication.store'), [
+            'subject' => 'Staff Meeting',
+            'body' => 'First notice',
+            'staff_ids' => [$this->lecturerA1->id],
+        ])
+        ->assertRedirect();
+
+    $this->actingAs($this->dean, 'teacher')
+        ->post(route('teacher.communication.store'), [
+            'subject' => 'Staff Meeting',
+            'body' => 'Second unrelated notice',
+            'staff_ids' => [$this->lecturerA2->id],
+        ])
+        ->assertRedirect();
+
+    expect(CommunicationConversation::query()->where('subject', 'Staff Meeting')->count())->toBe(2)
+        ->and(Communication::query()->where('subject', 'Staff Meeting')->count())->toBe(2);
+});
+
+it('sends a reply-all to every conversation participant except the sender', function () {
+    $this->actingAs($this->dean, 'teacher')
+        ->post(route('teacher.communication.store'), [
+            'subject' => 'Faculty briefing',
+            'body' => 'Please review the agenda.',
+            'staff_ids' => [$this->lecturerA1->id, $this->hod->id],
+        ])
+        ->assertRedirect();
+
+    $original = Communication::query()->latest('id')->first();
+
+    $this->actingAs($this->lecturerA1, 'teacher')
+        ->post(route('teacher.communication.reply', $original->conversation_id), [
+            'parent_id' => $original->id,
+            'mode' => 'reply_all',
+            'body' => 'Agenda received. Copying the rest of the thread.',
+        ])
+        ->assertRedirect();
+
+    $reply = Communication::query()->where('kind', Communication::KIND_REPLY_ALL)->latest('id')->first();
+    $recipientTeacherIds = $reply->recipients()->whereNotNull('teacher_id')->pluck('teacher_id')->all();
+
+    expect($recipientTeacherIds)->toContain($this->dean->id, $this->hod->id)
+        ->and($recipientTeacherIds)->not->toContain($this->lecturerA1->id)
+        ->and($reply->conversation_id)->toBe($original->conversation_id);
+});
+
+it('blocks unauthorized users from opening or replying to a conversation by id', function () {
+    $admin = makeCommunicationAdmin();
+
+    $this->actingAs($admin, 'web')
+        ->post(route('admin.communication.store'), [
+            'subject' => 'Private to A1',
+            'body' => 'Confidential',
+            'staff_ids' => [$this->lecturerA1->id],
+        ])
+        ->assertRedirect();
+
+    $conversationId = Communication::query()->latest('id')->value('conversation_id');
+
+    $this->actingAs($this->lecturerB1, 'teacher')
+        ->get(route('teacher.communication.thread', $conversationId))
+        ->assertForbidden();
+
+    $this->actingAs($this->dean, 'teacher')
+        ->get(route('teacher.communication.thread', $conversationId))
+        ->assertForbidden();
+
+    $this->actingAs($this->lecturerB1, 'teacher')
+        ->post(route('teacher.communication.reply', $conversationId), [
+            'parent_id' => Communication::query()->latest('id')->value('id'),
+            'mode' => 'reply',
+            'body' => 'Should not work',
+        ])
+        ->assertForbidden();
+
+    $otherAdmin = makeCommunicationAdmin();
+
+    $this->actingAs($otherAdmin, 'web')
+        ->get(route('admin.communication.thread', $conversationId))
+        ->assertForbidden();
+});
+
+it('supports a full compose receive reply continue conversation flow', function () {
+    $admin = makeCommunicationAdmin();
+
+    $this->actingAs($admin, 'web')
+        ->post(route('admin.communication.store'), [
+            'subject' => 'Attendance follow-up',
+            'body' => 'Please submit missing records.',
+            'staff_ids' => [$this->lecturerA1->id],
+        ])
+        ->assertRedirect();
+
+    $original = Communication::query()->latest('id')->first();
+    $conversationId = $original->conversation_id;
+
+    $this->actingAs($this->lecturerA1, 'teacher')
+        ->get(route('teacher.communication.thread', $conversationId))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('conversation.can_reply', true)
+            ->has('conversation.messages', 1)
+        );
+
+    expect(
+        CommunicationRecipient::query()
+            ->where('communication_id', $original->id)
+            ->where('teacher_id', $this->lecturerA1->id)
+            ->value('status')
+    )->toBe(CommunicationRecipient::STATUS_READ);
+
+    $this->actingAs($this->lecturerA1, 'teacher')
+        ->get(route('teacher.communication.inbox'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('conversations.data.0.unread', false));
+
+    $this->actingAs($this->lecturerA1, 'teacher')
+        ->post(route('teacher.communication.reply', $conversationId), [
+            'parent_id' => $original->id,
+            'mode' => 'reply',
+            'body' => 'Records will be submitted tomorrow.',
+        ])
+        ->assertRedirect(route('teacher.communication.thread', $conversationId));
+
+    $lecturerReply = Communication::query()->where('kind', Communication::KIND_REPLY)->latest('id')->first();
+
+    $this->actingAs($admin, 'web')
+        ->post(route('admin.communication.reply', $conversationId), [
+            'parent_id' => $lecturerReply->id,
+            'mode' => 'reply',
+            'body' => 'Thank you. Please use the new template.',
+        ])
+        ->assertRedirect(route('admin.communication.thread', $conversationId));
+
+    expect(Communication::query()->where('conversation_id', $conversationId)->count())->toBe(3)
+        ->and(CommunicationConversation::query()->count())->toBe(1);
+
+    $this->actingAs($this->lecturerA1, 'teacher')
+        ->get(route('teacher.communication.inbox', ['search' => 'Attendance follow-up']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->has('conversations.data', 1)
+            ->where('conversations.data.0.subject', 'Attendance follow-up')
+            ->where('conversations.data.0.message_count', 3)
+        );
+
+    $this->actingAs($this->lecturerA1, 'teacher')
+        ->get(route('teacher.communication.inbox', ['search' => 'new template']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->has('conversations.data', 1));
+
+    $this->actingAs($admin, 'web')
+        ->get(route('admin.communication.sent'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('admin/communication/mailbox')
+            ->where('folder', 'sent')
+            ->has('conversations.data', 1)
+        );
+
+    $this->actingAs($this->lecturerA1, 'teacher')
+        ->get(route('teacher.communication.sent'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->has('conversations.data', 1));
+});
+
+it('rejects empty replies and replies that point at another conversation', function () {
+    $this->actingAs($this->dean, 'teacher')
+        ->post(route('teacher.communication.store'), [
+            'subject' => 'Valid thread',
+            'body' => 'Please reply here.',
+            'staff_ids' => [$this->lecturerA1->id],
+        ])
+        ->assertRedirect();
+
+    $first = Communication::query()->latest('id')->first();
+
+    $this->actingAs($this->dean, 'teacher')
+        ->post(route('teacher.communication.store'), [
+            'subject' => 'Other thread',
+            'body' => 'Unrelated',
+            'staff_ids' => [$this->lecturerA2->id],
+        ])
+        ->assertRedirect();
+
+    $other = Communication::query()->latest('id')->first();
+
+    $this->actingAs($this->lecturerA1, 'teacher')
+        ->post(route('teacher.communication.reply', $first->conversation_id), [
+            'parent_id' => $first->id,
+            'mode' => 'reply',
+            'body' => '',
+        ])
+        ->assertSessionHasErrors('body');
+
+    $this->actingAs($this->lecturerA1, 'teacher')
+        ->post(route('teacher.communication.reply', $first->conversation_id), [
+            'parent_id' => $other->id,
+            'mode' => 'reply',
+            'body' => 'Trying to attach this to the wrong thread.',
+        ])
+        ->assertNotFound();
+
+    expect(Communication::query()->where('conversation_id', $first->conversation_id)->count())->toBe(1);
+});
+
+it('lets a sender reply on their own sent conversation and keeps the same thread', function () {
+    $this->actingAs($this->dean, 'teacher')
+        ->post(route('teacher.communication.store'), [
+            'subject' => 'Unit reminder',
+            'body' => 'First notice from the dean.',
+            'staff_ids' => [$this->lecturerA1->id],
+        ])
+        ->assertRedirect();
+
+    $original = Communication::query()->latest('id')->first();
+
+    $this->actingAs($this->dean, 'teacher')
+        ->get(route('teacher.communication.thread', $original->conversation_id))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('conversation.can_reply', true));
+
+    $this->actingAs($this->dean, 'teacher')
+        ->post(route('teacher.communication.reply', $original->conversation_id), [
+            'parent_id' => $original->id,
+            'mode' => 'reply',
+            'body' => 'Adding a follow-up on the same thread.',
+        ])
+        ->assertRedirect(route('teacher.communication.thread', $original->conversation_id));
+
+    $followUp = Communication::query()->where('kind', Communication::KIND_REPLY)->latest('id')->first();
+
+    expect($followUp->conversation_id)->toBe($original->conversation_id)
+        ->and($followUp->recipients()->pluck('teacher_id')->all())->toContain($this->lecturerA1->id);
 });

@@ -30,8 +30,11 @@ export default function AdminCommunicationDashboard({ stats, recent, capabilitie
                         <p className="mt-1 text-sm text-slate-500">Send targeted or institution-wide messages to staff.</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
+                        <Link href={route('admin.communication.inbox')} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700">
+                            Inbox
+                        </Link>
                         <Link href={route('admin.communication.sent')} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700">
-                            Sent messages
+                            Sent
                         </Link>
                         {capabilities.can_compose && (
                             <Link href={route('admin.communication.compose')} className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
@@ -74,7 +77,7 @@ export default function AdminCommunicationDashboard({ stats, recent, capabilitie
                     ) : (
                         <div className="divide-y divide-slate-100">
                             {recent.map((message) => (
-                                <Link key={message.id} href={route('admin.communication.show', message.id)} className="flex items-center justify-between gap-4 px-4 py-3 hover:bg-slate-50">
+                                <Link key={message.id} href={message.conversation_id ? route('admin.communication.thread', message.conversation_id) : route('admin.communication.show', message.id)} className="flex items-center justify-between gap-4 px-4 py-3 hover:bg-slate-50">
                                     <div className="min-w-0">
                                         <p className="truncate font-medium text-slate-900">{message.subject}</p>
                                         <p className="truncate text-xs text-slate-500">{(message.audience_summary ?? []).join(' · ')}</p>

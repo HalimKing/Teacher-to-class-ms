@@ -34,7 +34,7 @@ export default function TeacherCommunicationDashboard({ stats, recent, capabilit
                             Inbox
                         </Link>
                         <Link href={route('teacher.communication.sent')} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700">
-                            Sent messages
+                            Sent
                         </Link>
                         {capabilities.can_compose && (
                             <Link href={route('teacher.communication.compose')} className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
@@ -72,7 +72,7 @@ export default function TeacherCommunicationDashboard({ stats, recent, capabilit
                     ) : (
                         <div className="divide-y divide-slate-100">
                             {recent.map((message) => (
-                                <Link key={message.id} href={route('teacher.communication.show', message.id)} className="flex items-center justify-between gap-4 px-4 py-3 hover:bg-slate-50">
+                                <Link key={message.id} href={message.conversation_id ? route('teacher.communication.thread', message.conversation_id) : route('teacher.communication.show', message.id)} className="flex items-center justify-between gap-4 px-4 py-3 hover:bg-slate-50">
                                     <div className="min-w-0">
                                         <p className="truncate font-medium text-slate-900">{message.subject}</p>
                                         <p className="truncate text-xs text-slate-500">{(message.audience_summary ?? []).join(' · ')}</p>
