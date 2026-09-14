@@ -2,20 +2,21 @@ import AttendanceRangeMap from '@/components/attendance/AttendanceRangeMap';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ensureFreshCsrfToken } from '@/lib/csrf';
-import { getApiErrorMessage } from '@/lib/http';
 import {
     assessVideoFrame,
     captureDescriptorFromImage,
     captureDescriptorFromVideo,
     DEFAULT_NO_FACE_TIPS,
     isFaceCaptureError,
+    isFaceEnrollmentRequiredMessage,
     isFaceMismatchMessage,
     type FaceCaptureResult,
     type FaceDetectionIssue,
 } from '@/lib/face-recognition';
 import { distanceInMeters, formatOutOfRangeAttendanceMessage } from '@/lib/geo';
+import { getApiErrorMessage } from '@/lib/http';
 import { Camera, ImageUp, Loader2, MapPin, RefreshCw } from 'lucide-react';
-import { type ChangeEvent, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import FaceVerificationStatus, { type FaceStatus } from './FaceVerificationStatus';
 
 /** Consecutive “ok” coaching ticks required before auto-verification starts. */
@@ -105,10 +106,13 @@ export default function FaceCaptureModal({
     const processingRef = useRef(false);
     const locationBlockedRef = useRef(false);
     const successRef = useRef(false);
-    const keepFailureBannerRef = useRef(false);
     const goodFrameStreakRef = useRef(0);
     const handleCaptureRef = useRef<() => Promise<void>>(async () => undefined);
     const locationGateRef = useRef<VenueGate | null>(null);
+    /** Set once a verification attempt fails so nothing re-verifies until the user retries. */
+    const haltedRef = useRef(false);
+    const cameraStartingRef = useRef(false);
+    const retryingRef = useRef(false);
     const [status, setStatus] = useState<FaceStatus>('idle');
     const [statusTitle, setStatusTitle] = useState<string | undefined>();
     const [statusMessage, setStatusMessage] = useState<string | undefined>();
@@ -116,6 +120,7 @@ export default function FaceCaptureModal({
     const [liveGuidance, setLiveGuidance] = useState('Center your face in the oval guide.');
     const [guidanceTone, setGuidanceTone] = useState<'neutral' | 'good' | 'warn'>('neutral');
     const [processing, setProcessing] = useState(false);
+    const [halted, setHalted] = useState(false);
     const [locationPhase, setLocationPhase] = useState<LocationPhase>(requireLocation ? 'checking' : 'skipped');
     const [locationBlock, setLocationBlock] = useState<LocationBlock | null>(null);
     const [devicePosition, setDevicePosition] = useState<{ lat: number; lng: number } | null>(null);
@@ -177,14 +182,26 @@ export default function FaceCaptureModal({
         setGuidanceTone('neutral');
         setProcessing(false);
         processingRef.current = false;
-        keepFailureBannerRef.current = false;
         goodFrameStreakRef.current = 0;
         successRef.current = false;
+        haltedRef.current = false;
+        setHalted(false);
     };
 
     const setProcessingState = (value: boolean) => {
         processingRef.current = value;
         setProcessing(value);
+    };
+
+    /**
+     * Stops the detection loop after a failed attempt. The camera stream stays open so
+     * the user can reposition and restart verification from the Try Again button.
+     */
+    const haltVerification = () => {
+        haltedRef.current = true;
+        setHalted(true);
+        stopCoaching();
+        setProcessingState(false);
     };
 
     const blockLocation = (block: LocationBlock) => {
@@ -319,10 +336,16 @@ export default function FaceCaptureModal({
     };
 
     const startCamera = async () => {
-        if (locationBlockedRef.current) {
+        if (locationBlockedRef.current || cameraStartingRef.current) {
             return;
         }
 
+        if (streamRef.current) {
+            // A live stream already exists; never open a second camera session.
+            return;
+        }
+
+        cameraStartingRef.current = true;
         setStatus('camera_initializing');
         setStatusTitle(undefined);
         setStatusMessage('Please allow camera access if prompted.');
@@ -363,6 +386,9 @@ export default function FaceCaptureModal({
                 'Close other apps that may be using the camera.',
                 'Reconnect your camera and try again.',
             ]);
+            haltVerification();
+        } finally {
+            cameraStartingRef.current = false;
         }
     };
 
@@ -378,13 +404,13 @@ export default function FaceCaptureModal({
         stopCoaching();
 
         const tick = async () => {
-            if (!videoRef.current || processingRef.current || locationBlockedRef.current) {
+            if (!videoRef.current || processingRef.current || locationBlockedRef.current || haltedRef.current) {
                 return;
             }
 
             try {
                 const assessment = await assessVideoFrame(videoRef.current);
-                if (processingRef.current || locationBlockedRef.current) {
+                if (processingRef.current || locationBlockedRef.current || haltedRef.current) {
                     return;
                 }
 
@@ -392,20 +418,11 @@ export default function FaceCaptureModal({
 
                 if (assessment.issue !== 'ok') {
                     goodFrameStreakRef.current = 0;
-
-                    if (keepFailureBannerRef.current) {
-                        return;
-                    }
-
                     setStatus('coaching');
                     setStatusTitle(undefined);
                     setStatusMessage(assessment.guidance);
                     setStatusTips(undefined);
                     return;
-                }
-
-                if (keepFailureBannerRef.current) {
-                    keepFailureBannerRef.current = false;
                 }
 
                 goodFrameStreakRef.current += 1;
@@ -462,16 +479,21 @@ export default function FaceCaptureModal({
             return;
         }
 
+        // A halted attempt must be restarted from Try Again, never by the detection loop.
+        if (haltedRef.current || successRef.current) {
+            return;
+        }
+
         if (!videoRef.current || processingRef.current) {
             if (!videoRef.current) {
                 setStatus('failed');
                 setStatusMessage('Camera is not ready.');
+                haltVerification();
             }
             return;
         }
 
         setProcessingState(true);
-        keepFailureBannerRef.current = false;
         goodFrameStreakRef.current = 0;
         stopCoaching();
         setStatus('capturing');
@@ -513,7 +535,7 @@ export default function FaceCaptureModal({
                 return;
             }
             applyCaptureFailure(error);
-            startCoaching();
+            haltVerification();
         } finally {
             if (!locationBlockedRef.current) {
                 setProcessingState(false);
@@ -525,12 +547,13 @@ export default function FaceCaptureModal({
 
     const handleUpload = async (event: ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
-        if (!file || locationBlockedRef.current) {
+        if (!file || locationBlockedRef.current || processingRef.current) {
             return;
         }
 
+        haltedRef.current = false;
+        setHalted(false);
         setProcessingState(true);
-        keepFailureBannerRef.current = false;
         stopCoaching();
         setStatus('capturing');
         setStatusMessage('Validating uploaded image…');
@@ -557,7 +580,7 @@ export default function FaceCaptureModal({
                 return;
             }
             applyCaptureFailure(error);
-            startCoaching();
+            haltVerification();
         } finally {
             if (!locationBlockedRef.current) {
                 setProcessingState(false);
@@ -567,23 +590,18 @@ export default function FaceCaptureModal({
     };
 
     const applyCaptureFailure = (error: unknown) => {
-        keepFailureBannerRef.current = true;
         goodFrameStreakRef.current = 0;
 
         if (isFaceCaptureError(error)) {
             const isNoFace = error.code === 'no_face' || error.code === 'low_confidence';
-            const isCoachingIssue =
-                error.code === 'too_small' ||
-                error.code === 'too_large' ||
-                error.code === 'off_center' ||
-                error.code === 'unstable' ||
-                error.code === 'multiple_faces';
 
-            setStatus(isNoFace ? 'no_face' : isCoachingIssue ? 'coaching' : 'failed');
-            setStatusTitle(error.title);
-            setStatusMessage(error.message);
+            setStatus(isNoFace ? 'no_face' : 'failed');
+            setStatusTitle(isNoFace ? 'Face Not Recognized' : error.title);
+            setStatusMessage(
+                isNoFace ? 'Face not recognized. Please position your face clearly in front of the camera and try again.' : error.message,
+            );
             setStatusTips(error.tips);
-            setLiveGuidance(error.message);
+            setLiveGuidance('Verification stopped. Tap Try Again when you are ready.');
             setGuidanceTone('warn');
             return;
         }
@@ -598,18 +616,32 @@ export default function FaceCaptureModal({
             return;
         }
 
+        if (isFaceEnrollmentRequiredMessage(message)) {
+            setStatus('failed');
+            setStatusTitle('Face Not Enrolled');
+            setStatusMessage(
+                'Your face is not registered on this account, so attendance cannot be verified. Please complete face enrollment or contact an administrator.',
+            );
+            setStatusTips([
+                'Ask an administrator to enroll or re-enroll your face.',
+                'Confirm you are signed in with the correct staff account.',
+                'Retrying will not work until your face is enrolled.',
+            ]);
+            setLiveGuidance('Face enrollment is required before attendance can be verified.');
+            setGuidanceTone('warn');
+            return;
+        }
+
         if (isFaceMismatchMessage(message)) {
             setStatus('mismatch');
-            setStatusTitle('Face Could Not Be Verified');
-            setStatusMessage(
-                'We could not verify your face because it does not match the enrolled profile for this account. Please try again.',
-            );
+            setStatusTitle('Face Not Recognized');
+            setStatusMessage('Face not recognized. Please position your face clearly in front of the camera and try again.');
             setStatusTips([
                 'Make sure you are verifying with the correct staff account.',
                 'Improve lighting and look directly at the camera.',
                 'If you recently changed your appearance significantly, ask an administrator to re-enroll your face.',
             ]);
-            setLiveGuidance('Face detected, but it does not match the enrolled profile.');
+            setLiveGuidance('Verification stopped. Tap Try Again when you are ready.');
             setGuidanceTone('warn');
             return;
         }
@@ -618,7 +650,7 @@ export default function FaceCaptureModal({
         setStatusTitle('Face Could Not Be Verified');
         setStatusMessage(message);
         setStatusTips(['Look directly at the camera, improve the lighting, and tap Try Again.']);
-        setLiveGuidance(message);
+        setLiveGuidance('Verification stopped. Tap Try Again when you are ready.');
         setGuidanceTone('warn');
     };
 
@@ -638,18 +670,40 @@ export default function FaceCaptureModal({
         startWatch();
     };
 
+    /** True while the existing stream can still be reused for another attempt. */
+    const hasLiveCameraStream = () => Boolean(streamRef.current?.getVideoTracks().some((track) => track.readyState === 'live'));
+
     const handleFaceRetry = async () => {
-        if (locationPhase === 'blocked' || locationPhase === 'checking') {
-            await handleLocationRetry();
+        if (retryingRef.current || processingRef.current) {
             return;
         }
 
-        resetStatus();
-        if (!streamRef.current) {
-            await startCamera();
-            return;
+        retryingRef.current = true;
+
+        try {
+            if (locationPhase === 'blocked' || locationPhase === 'checking') {
+                await handleLocationRetry();
+                return;
+            }
+
+            stopCoaching();
+            resetStatus();
+
+            if (!hasLiveCameraStream()) {
+                // The previous stream ended (permission revoked, device released), so reinitialize it.
+                stopCamera();
+                await startCamera();
+                return;
+            }
+
+            if (videoRef.current && videoRef.current.paused) {
+                await videoRef.current.play().catch(() => undefined);
+            }
+
+            startCoaching();
+        } finally {
+            retryingRef.current = false;
         }
-        startCoaching();
     };
 
     const guidanceClass =
@@ -662,7 +716,7 @@ export default function FaceCaptureModal({
     const showRangeMap = locationPhase === 'blocked' && venueGate !== null && devicePosition !== null;
     const showCamera = locationPhase === 'skipped' || locationPhase === 'allowed';
     const showLocationRetry = locationPhase === 'blocked' || locationPhase === 'checking';
-    const showFaceRetry = showCamera && (status === 'failed' || status === 'mismatch' || status === 'no_face');
+    const showFaceRetry = showCamera && halted;
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -678,7 +732,7 @@ export default function FaceCaptureModal({
                             <div className="flex items-start gap-2.5">
                                 <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
                                 <div>
-                                    <p className="font-semibold leading-tight">Checking Location</p>
+                                    <p className="leading-tight font-semibold">Checking Location</p>
                                     <p className="mt-1 leading-snug opacity-90">
                                         Confirming you are within the permitted attendance range before face verification starts.
                                     </p>
@@ -692,7 +746,7 @@ export default function FaceCaptureModal({
                             <div className="flex items-start gap-2.5">
                                 <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
                                 <div className="min-w-0 flex-1 space-y-1.5">
-                                    <p className="font-semibold leading-tight">{locationBlock.title}</p>
+                                    <p className="leading-tight font-semibold">{locationBlock.title}</p>
                                     <p className="leading-snug">{locationBlock.message}</p>
                                     {locationBlock.tips?.length ? (
                                         <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-relaxed">
@@ -717,39 +771,46 @@ export default function FaceCaptureModal({
                         </div>
                     ) : null}
 
-                    {showCamera ? (
-                        <FaceVerificationStatus
-                            status={status}
-                            title={statusTitle}
-                            message={statusMessage}
-                            tips={statusTips}
-                        />
+                    {showCamera ? <FaceVerificationStatus status={status} title={statusTitle} message={statusMessage} tips={statusTips} /> : null}
+
+                    {showFaceRetry ? (
+                        <div className="flex flex-col gap-2.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between dark:border-slate-700 dark:bg-slate-800/60">
+                            <p className="text-xs text-muted-foreground sm:text-sm">
+                                Verification has stopped. Reposition your face, then start a new attempt.
+                            </p>
+                            <Button type="button" onClick={() => void handleFaceRetry()} disabled={processing} className="min-h-11 w-full sm:w-auto">
+                                <RefreshCw className="mr-2 h-4 w-4" />
+                                Try Again
+                            </Button>
+                        </div>
                     ) : null}
 
                     <div className={showCamera ? 'relative -mx-0.5 overflow-hidden rounded-xl border bg-black sm:mx-0' : 'hidden'}>
-                            {/*
+                        {/*
                               Mirror preview only (selfie-style). face-api reads raw video frames,
                               so CSS scaleX does not affect detection or descriptor quality.
                             */}
-                            <video
-                                ref={videoRef}
-                                className="h-[min(64dvh,34rem)] w-full -scale-x-100 object-cover sm:h-auto sm:aspect-video"
-                                muted
-                                playsInline
+                        <video
+                            ref={videoRef}
+                            className="h-[min(64dvh,34rem)] w-full -scale-x-100 object-cover sm:aspect-video sm:h-auto"
+                            muted
+                            playsInline
+                        />
+                        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                            <div
+                                className={`aspect-[3/4] h-[74%] w-auto max-w-[92%] rounded-[50%] border-2 sm:h-[84%] ${
+                                    guidanceTone === 'good'
+                                        ? 'border-emerald-400 shadow-[0_0_0_9999px_rgba(0,0,0,0.28)]'
+                                        : 'border-white/70 shadow-[0_0_0_9999px_rgba(0,0,0,0.28)]'
+                                }`}
                             />
-                            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                                <div
-                                    className={`h-[82%] w-[86%] rounded-[50%] border-2 sm:h-[64%] sm:w-[48%] ${
-                                        guidanceTone === 'good'
-                                            ? 'border-emerald-400 shadow-[0_0_0_9999px_rgba(0,0,0,0.28)]'
-                                            : 'border-white/70 shadow-[0_0_0_9999px_rgba(0,0,0,0.28)]'
-                                    }`}
-                                />
-                            </div>
-                            <div className={`absolute inset-x-2 bottom-2 rounded-lg border px-2.5 py-1.5 text-center text-xs font-medium backdrop-blur-sm sm:inset-x-3 sm:bottom-3 sm:px-3 sm:py-2 sm:text-sm ${guidanceClass}`}>
-                                {liveGuidance}
-                            </div>
                         </div>
+                        <div
+                            className={`absolute inset-x-2 bottom-2 rounded-lg border px-2.5 py-1.5 text-center text-xs font-medium backdrop-blur-sm sm:inset-x-3 sm:bottom-3 sm:px-3 sm:py-2 sm:text-sm ${guidanceClass}`}
+                        >
+                            {liveGuidance}
+                        </div>
+                    </div>
 
                     {status === 'no_face' && showCamera && !statusTips?.length ? (
                         <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-900 dark:border-orange-900 dark:bg-orange-950/30 dark:text-orange-100">
@@ -764,13 +825,16 @@ export default function FaceCaptureModal({
 
                     {showCamera ? (
                         <p className="text-xs text-muted-foreground">
-                            {autoCapture
-                                ? 'Keep only one face in frame. Verification starts automatically when your face is centered, clearly lit, and steady. You can also verify manually if needed.'
-                                : 'Keep only one face in frame. Use good lighting, look straight at the camera, and hold still during capture.'}
+                            {halted
+                                ? 'Automatic verification is paused so the same attempt is not repeated. Tap Try Again to start a new attempt.'
+                                : autoCapture
+                                  ? 'Keep only one face in frame. Verification starts automatically when your face is centered, clearly lit, and steady. You can also verify manually if needed.'
+                                  : 'Keep only one face in frame. Use good lighting, look straight at the camera, and hold still during capture.'}
                         </p>
                     ) : (
                         <p className="text-xs text-muted-foreground">
-                            Face verification will start only after your location is within the permitted range. You can try again as many times as you need.
+                            Face verification will start only after your location is within the permitted range. You can try again as many times as
+                            you need.
                         </p>
                     )}
                 </div>
@@ -788,27 +852,28 @@ export default function FaceCaptureModal({
                     ) : (
                         <>
                             {allowUpload && (
-                                <label className="inline-flex cursor-pointer items-center justify-center rounded-md border px-4 py-2 text-sm font-medium hover:bg-accent">
+                                <label className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-md border px-4 py-2 text-sm font-medium hover:bg-accent">
                                     <ImageUp className="mr-2 h-4 w-4" />
                                     Upload Image
                                     <input type="file" accept="image/*" className="hidden" onChange={handleUpload} disabled={processing} />
                                 </label>
                             )}
                             {showFaceRetry ? (
-                                <Button type="button" variant="outline" onClick={() => void handleFaceRetry()} disabled={processing}>
-                                    <RefreshCw className="mr-2 h-4 w-4" />
-                                    Try Again
+                                <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="min-h-11 w-full sm:w-auto">
+                                    Close
                                 </Button>
-                            ) : null}
-                            <Button
-                                type="button"
-                                variant={autoCapture ? 'outline' : 'default'}
-                                onClick={() => void handleCapture()}
-                                disabled={processing || status === 'success'}
-                            >
-                                {processing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Camera className="mr-2 h-4 w-4" />}
-                                {processing ? 'Verifying…' : captureLabel}
-                            </Button>
+                            ) : (
+                                <Button
+                                    type="button"
+                                    variant={autoCapture ? 'outline' : 'default'}
+                                    onClick={() => void handleCapture()}
+                                    disabled={processing || status === 'success'}
+                                    className="min-h-11 w-full sm:w-auto"
+                                >
+                                    {processing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Camera className="mr-2 h-4 w-4" />}
+                                    {processing ? 'Verifying…' : captureLabel}
+                                </Button>
+                            )}
                         </>
                     )}
                 </DialogFooter>

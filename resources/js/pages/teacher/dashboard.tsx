@@ -1,34 +1,40 @@
 import RecentNotificationsWidget from '@/components/notifications/RecentNotificationsWidget';
 import { type TeacherNotificationItem } from '@/components/notifications/types';
 import AppLayout from '@/layouts/app-layout';
+import { cn } from '@/lib/utils';
 import { SharedData, type BreadcrumbItem } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react';
-import { AlertCircle, Bell, BookOpen as BookIcon, Calendar, CheckCircle, Clock, Clock as ClockIcon, Users } from 'lucide-react';
+import {
+    AlertCircle,
+    ArrowRight,
+    Bell,
+    BookOpen,
+    CalendarDays,
+    CheckCircle,
+    ClipboardList,
+    Clock,
+    Inbox,
+    MapPin,
+    Sparkles,
+    UserCheck,
+    Users,
+} from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
-// Import Chart.js components
-import { ArcElement, BarElement, CategoryScale, Chart as ChartJS, Legend, LinearScale, LineElement, PointElement, Title, Tooltip } from 'chart.js';
+import { CategoryScale, Chart as ChartJS, Filler, Legend, LinearScale, LineElement, PointElement, Title, Tooltip } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Title, Tooltip, Legend);
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Title, Tooltip, Legend);
 
-const breadcrumbs: BreadcrumbItem[] = [
-    {
-        title: 'Dashboard',
-        href: '/dashboard',
-    },
-];
-
-// Teacher profile data will come from props
+const breadcrumbs: BreadcrumbItem[] = [{ title: 'Dashboard', href: '/teacher/dashboard' }];
 
 const timeFilters = [
     { id: 'today', label: 'Today' },
-    { id: 'week', label: 'This Week' },
-    { id: 'month', label: 'This Month' },
-    { id: 'semester', label: 'This Semester' },
+    { id: 'week', label: 'This week' },
+    { id: 'month', label: 'This month' },
+    { id: 'semester', label: 'This semester' },
 ];
 
-// Mock attendance data for fallback
 const generateAttendanceData = (timeRange: string) => {
     switch (timeRange) {
         case 'today':
@@ -54,8 +60,25 @@ const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-        legend: {
-            position: 'top' as const,
+        legend: { display: false },
+        tooltip: {
+            backgroundColor: '#0f172a',
+            padding: 12,
+            displayColors: false,
+        },
+    },
+    scales: {
+        x: {
+            grid: { display: false },
+            ticks: { color: '#64748b', font: { size: 11 } },
+            border: { display: false },
+        },
+        y: {
+            min: 0,
+            max: 100,
+            grid: { color: 'rgba(148, 163, 184, 0.18)' },
+            ticks: { color: '#64748b', font: { size: 11 }, callback: (value: string | number) => `${value}%` },
+            border: { display: false },
         },
     },
 };
@@ -114,7 +137,40 @@ interface UpcomingReminder {
     session: string | null;
 }
 
-interface DashboardNotification extends TeacherNotificationItem {}
+type DashboardNotification = TeacherNotificationItem;
+
+function to12Hour(time24?: string | null) {
+    if (!time24) return '—';
+
+    const [hours, minutes] = time24.split(':').map(Number);
+    if (Number.isNaN(hours) || Number.isNaN(minutes)) return time24;
+
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    const hour12 = hours % 12 || 12;
+
+    return `${hour12}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+}
+
+function greetingForNow() {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+}
+
+function lectureStatus(status: string) {
+    if (status === 'finished') {
+        return { label: 'Finished', className: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200' };
+    }
+    if (status === 'ongoing') {
+        return { label: 'In session', className: 'bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200' };
+    }
+    if (status === 'pending') {
+        return { label: 'Pending', className: 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200' };
+    }
+
+    return { label: 'Upcoming', className: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200' };
+}
 
 export default function TeacherDashboard({
     upcomingClasses,
@@ -126,7 +182,7 @@ export default function TeacherDashboard({
     staffType,
     pendingVenueChangeApprovals = 0,
 }: {
-    upcomingClasses: any[];
+    upcomingClasses: TodayLectures[];
     todayLectures: TodayLectures[];
     attendanceData: AttendanceData;
     metricsData: MetricsData;
@@ -136,19 +192,22 @@ export default function TeacherDashboard({
     pendingVenueChangeApprovals?: number;
 }) {
     const [timeFilter, setTimeFilter] = useState('week');
-    const [activeTab, setActiveTab] = useState('overview');
     const [chartData, setChartData] = useState<AttendanceData>(attendanceData);
     const [isLoading, setIsLoading] = useState(false);
     const page = usePage<SharedData>();
 
     const { auth } = page.props;
-    const unreadNotifications =
-        (page.props as { unreadNotifications?: DashboardNotification[] }).unreadNotifications ?? [];
+    const unreadNotifications = (page.props as { unreadNotifications?: DashboardNotification[] }).unreadNotifications ?? [];
     const isLecturer = (staffType || String(auth.user.staff_type || 'lecturer')) === 'lecturer';
+    const lectures = todayLectures.length > 0 ? todayLectures : upcomingClasses;
+    const initials = `${(auth.user.first_name ?? '')[0] ?? ''}${(auth.user.last_name ?? '')[0] ?? ''}`.toUpperCase() || 'ST';
+    const todayLabel = new Date().toLocaleDateString(undefined, {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+    });
+    const nextClass = lectures.find((lecture) => lecture.status === 'ongoing' || lecture.status === 'upcoming');
 
-    console.log("today's lectures: ", todayLectures);
-
-    // Fetch attendance data when time filter changes
     useEffect(() => {
         const fetchAttendanceData = async () => {
             if (!isLecturer) {
@@ -163,11 +222,9 @@ export default function TeacherDashboard({
                     const data = await response.json();
                     setChartData(data);
                 } else {
-                    console.warn('Failed to fetch attendance data, using local data');
                     setChartData(generateAttendanceData(timeFilter));
                 }
-            } catch (error) {
-                console.error('Error fetching attendance data:', error);
+            } catch {
                 setChartData(generateAttendanceData(timeFilter));
             } finally {
                 setIsLoading(false);
@@ -177,391 +234,469 @@ export default function TeacherDashboard({
         fetchAttendanceData();
     }, [timeFilter, isLecturer]);
 
-    // Generate chart data based on state
-    const attendanceChartData = useMemo(() => {
-        console.log('Chart Data: ', chartData);
-
-        return {
+    const attendanceChartData = useMemo(
+        () => ({
             labels: chartData.labels,
             datasets: [
                 {
-                    label: 'Attendance Rate (%)',
+                    label: 'Attendance rate (%)',
                     data: chartData.attendance,
-                    borderColor: 'rgb(16, 185, 129)',
-                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    borderColor: 'rgb(79, 70, 229)',
+                    backgroundColor: 'rgba(79, 70, 229, 0.12)',
                     fill: true,
                     tension: 0.4,
+                    pointRadius: 3,
+                    pointBackgroundColor: 'rgb(79, 70, 229)',
                 },
             ],
-        };
-    }, [chartData]);
+        }),
+        [chartData],
+    );
 
-    // Generate dynamic metrics grid from real data
-    const dynamicMetricsGrid = useMemo(() => {
-        return [
-            {
-                title: 'Total Classes Assigned',
-                value: metricsData.totalClasses.toString().padStart(2, '0'),
-                subtitle: '',
-                icon: Calendar,
-                iconColor: 'text-blue-500',
-                iconBg: 'bg-blue-50 dark:bg-blue-900/20',
-                badge: metricsData.totalClasses > 0 ? `+${metricsData.totalClasses} courses` : '0 courses',
-                badgeColor: 'text-green-600 bg-green-50 dark:bg-green-900/20',
-            },
-            {
-                title: 'Attendance Taken Today',
-                value: metricsData.attendanceTodayCount.toString(),
-                subtitle: `/${metricsData.attendanceTodayTarget}`,
-                icon: CheckCircle,
-                iconColor: 'text-green-500',
-                iconBg: 'bg-green-50 dark:bg-green-900/20',
-                badge: `Target ${metricsData.attendanceTodayTarget}/${metricsData.attendanceTodayTarget}`,
-                badgeColor: 'text-gray-600 bg-gray-100 dark:bg-gray-800',
-            },
-            {
-                title: 'Pending Attendance',
-                value: metricsData.pendingAttendance.toString().padStart(2, '0'),
-                subtitle: '',
-                icon: AlertCircle,
-                iconColor: 'text-orange-500',
-                iconBg: 'bg-orange-50 dark:bg-orange-900/20',
-                badge: metricsData.pendingAttendance > 0 ? 'Attention' : 'Completed',
-                badgeColor:
-                    metricsData.pendingAttendance > 0
-                        ? 'text-orange-600 bg-orange-50 dark:bg-orange-900/20'
-                        : 'text-green-600 bg-green-50 dark:bg-green-900/20',
-            },
-            {
-                title: 'Total Records',
-                value: metricsData.totalRecords.toLocaleString(),
-                subtitle: '',
-                icon: BookIcon,
-                iconColor: 'text-purple-500',
-                iconBg: 'bg-purple-50 dark:bg-purple-900/20',
-                badge: 'Lifetime',
-                badgeColor: 'text-purple-600 bg-purple-50 dark:bg-purple-900/20',
-            },
-        ];
-    }, [metricsData]);
+    const heroStats = isLecturer
+        ? [
+              { label: 'Today', value: `${lectures.length} class${lectures.length === 1 ? '' : 'es'}` },
+              { label: 'Pending', value: `${metricsData.pendingAttendance} to mark` },
+              { label: 'Students', value: `${profileData.totalStudents}` },
+          ]
+        : [
+              { label: 'Role', value: profileData.leadership_role_label || 'Administrative staff' },
+              { label: 'Unit', value: profileData.leadership_unit || profileData.department || '—' },
+              { label: 'Approvals', value: `${pendingVenueChangeApprovals} waiting` },
+          ];
 
-    function to12Hour(time24: string) {
-        let [hours, minutes] = time24.split(':').map(Number);
-        const ampm = hours >= 12 ? 'PM' : 'AM';
-        hours = hours % 12 || 12;
-        return `${hours}:${minutes.toString().padStart(2, '0')} ${ampm}`;
-    }
+    const lecturerActions = [
+        { href: '/teacher/attendance', label: 'Take attendance', icon: UserCheck },
+        { href: '/teacher/timetable', label: 'My schedules', icon: CalendarDays },
+        { href: '/teacher/my-courses', label: 'My courses', icon: BookOpen },
+        { href: '/teacher/reminders', label: 'Reminders', icon: Bell },
+        { href: '/teacher/communication/inbox', label: 'Inbox', icon: Inbox },
+        { href: '/teacher/attendance-explanations', label: 'Explanations', icon: ClipboardList },
+    ];
+
+    const adminActions = [
+        { href: '/teacher/staff-attendance', label: 'Take attendance', icon: UserCheck },
+        { href: '/teacher/staff-reports', label: 'Attendance report', icon: ClipboardList },
+        { href: '/teacher/attendance-explanations', label: 'Explanations', icon: AlertCircle },
+        { href: '/teacher/venue-change-requests', label: 'Venue changes', icon: MapPin },
+        { href: '/teacher/communication/inbox', label: 'Inbox', icon: Inbox },
+    ];
+
+    const metrics = [
+        {
+            title: 'Classes assigned',
+            value: metricsData.totalClasses.toString().padStart(2, '0'),
+            hint: 'This academic year',
+            href: '/teacher/my-courses',
+            icon: CalendarDays,
+            iconClass: 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-200',
+        },
+        {
+            title: 'Attendance today',
+            value: `${metricsData.attendanceTodayCount}`,
+            hint: `of ${metricsData.attendanceTodayTarget} sessions`,
+            href: '/teacher/attendance',
+            icon: CheckCircle,
+            iconClass: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200',
+        },
+        {
+            title: 'Pending attendance',
+            value: metricsData.pendingAttendance.toString().padStart(2, '0'),
+            hint: metricsData.pendingAttendance > 0 ? 'Needs attention' : 'All caught up',
+            href: '/teacher/attendance',
+            icon: AlertCircle,
+            iconClass:
+                metricsData.pendingAttendance > 0
+                    ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-200'
+                    : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200',
+        },
+        {
+            title: 'Total records',
+            value: metricsData.totalRecords.toLocaleString(),
+            hint: 'Lifetime',
+            href: '/teacher/reports',
+            icon: BookOpen,
+            iconClass: 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-200',
+        },
+    ];
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Teacher Dashboard" />
-            <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto rounded-xl p-4 md:p-6">
-                {/* Welcome Header */}
-                <div className="rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-700 p-6 text-white shadow-lg">
-                    <div className="flex flex-col items-start justify-between gap-4 lg:flex-row">
-                        <div className="flex items-center gap-4">
-                            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-r from-purple-500 to-indigo-600 text-2xl font-bold text-white shadow-md lg:h-20 lg:w-20">
-                                {(auth.user.first_name ?? '')[0]}
-                                {(auth.user.last_name ?? '')[0]}
-                            </div>
-                            <div>
-                                <h1 className="text-xl font-bold lg:text-2xl">
-                                    Welcome back, {auth.user.title} {auth.user.first_name} {auth.user.last_name}
-                                </h1>
-                                <p className="mt-1 text-purple-100">
-                                    {profileData.subject} • {profileData.department}
-                                    {profileData.leadership_role_label
-                                        ? ` • ${profileData.leadership_role_label}${profileData.leadership_unit ? ` (${profileData.leadership_unit})` : ''}`
-                                        : ''}
-                                </p>
-                                {isLecturer ? (
-                                    <div className="mt-3 flex flex-wrap items-center gap-3 lg:gap-4">
-                                        <div className="flex items-center gap-2">
-                                            <ClockIcon className="h-4 w-4" />
-                                            <span className="text-sm">Next: {profileData.nextClass}</span>
+
+            <div className="min-h-full bg-gradient-to-b from-indigo-50/80 via-slate-50 to-slate-50 dark:from-indigo-950/20 dark:via-background dark:to-background">
+                <div className="mx-auto flex w-full max-w-6xl min-w-0 flex-col gap-5 p-3 pb-10 sm:p-4 md:p-6 lg:p-8">
+                    <section className="overflow-hidden rounded-3xl border border-indigo-100 bg-white shadow-sm shadow-indigo-100/70 dark:border-indigo-900/40 dark:bg-card dark:shadow-none">
+                        <div className="bg-gradient-to-r from-indigo-600 via-violet-600 to-slate-800 px-4 py-5 text-white sm:px-8 sm:py-6">
+                            <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+                                <div className="min-w-0">
+                                    <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold tracking-wide uppercase ring-1 ring-white/20">
+                                        <Sparkles className="size-3.5" />
+                                        {isLecturer ? 'Lecturer home' : 'Staff home'}
+                                    </span>
+                                    <div className="mt-4 flex items-start gap-4">
+                                        <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-white/15 text-lg font-semibold ring-1 ring-white/20 sm:size-16 sm:text-xl">
+                                            {initials}
                                         </div>
-                                        <div className="flex items-center gap-2">
-                                            <Users className="h-4 w-4" />
-                                            <span className="text-sm">{profileData.totalStudents} Students</span>
+                                        <div className="min-w-0">
+                                            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+                                                {greetingForNow()}, {auth.user.title} {auth.user.first_name}
+                                            </h1>
+                                            <p className="mt-2 max-w-2xl text-sm text-white/90">
+                                                {profileData.subject} · {profileData.department}
+                                                {profileData.leadership_role_label
+                                                    ? ` · ${profileData.leadership_role_label}${profileData.leadership_unit ? ` (${profileData.leadership_unit})` : ''}`
+                                                    : ''}
+                                            </p>
+                                            <p className="mt-2 text-xs text-white/70">
+                                                {todayLabel}
+                                                {isLecturer
+                                                    ? ` · Next: ${nextClass ? `${nextClass.course} at ${to12Hour(nextClass.start_time)}` : profileData.nextClass}`
+                                                    : ''}
+                                            </p>
                                         </div>
                                     </div>
-                                ) : (
-                                    <div className="mt-3 inline-flex rounded-full bg-white/20 px-3 py-1 text-sm font-medium">Administrative Staff</div>
-                                )}
-                            </div>
-                        </div>
-                        {isLecturer && (
-                            <div className="flex w-full items-center gap-2 lg:w-auto lg:gap-3">
-                            <Link
-                                href="/teacher/reminders"
-                                className="flex-1 rounded-lg bg-white/20 px-3 py-2 text-sm font-medium transition-colors hover:bg-white/30 lg:flex-none lg:px-4 inline-flex items-center justify-center gap-2"
-                            >
-                                <Bell className="h-4 w-4" />
-                                Reminders
-                            </Link>
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                {pendingVenueChangeApprovals > 0 && (
-                    <Link
-                        href="/teacher/unit/venue-change-requests?status=pending"
-                        className="flex flex-col gap-1 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-950 transition-colors hover:bg-amber-100 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100 dark:hover:bg-amber-950/50 sm:flex-row sm:items-center sm:justify-between"
-                    >
-                        <span className="text-sm font-medium">
-                            {pendingVenueChangeApprovals} venue change {pendingVenueChangeApprovals === 1 ? 'request' : 'requests'} awaiting your approval
-                        </span>
-                        <span className="text-sm font-semibold">Review requests</span>
-                    </Link>
-                )}
-
-                {isLecturer && <RecentNotificationsWidget notifications={unreadNotifications} />}
-
-                {!isLecturer ? (
-                    <div className="rounded-xl border border-sidebar-border/70 bg-white p-6 shadow-sm dark:border-sidebar-border dark:bg-sidebar-accent">
-                        <h2 className="text-xl font-semibold text-sidebar-foreground dark:text-sidebar-foreground">Take Attendance</h2>
-                        <p className="mt-2 max-w-2xl text-sm text-sidebar-foreground/70 dark:text-sidebar-foreground/70">
-                            Your account is configured as administrative staff. Lecturer class/course attendance tools are hidden for this staff type.
-                        </p>
-                        <div className="mt-5 flex flex-wrap gap-3">
-                            <Link
-                                href="/teacher/staff-attendance"
-                                className="inline-flex rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-700"
-                            >
-                                Open Take Attendance
-                            </Link>
-                            <Link
-                                href="/teacher/staff-reports"
-                                className="inline-flex rounded-lg border border-purple-200 bg-white px-4 py-2 text-sm font-medium text-purple-700 transition-colors hover:bg-purple-50 dark:border-purple-900 dark:bg-sidebar-accent dark:text-purple-300"
-                            >
-                                View Attendance Report
-                            </Link>
-                        </div>
-                    </div>
-                ) : (
-                    <>
-                {/* Metrics Grid */}
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    {dynamicMetricsGrid.map((stat, index) => {
-                        const Icon = stat.icon;
-                        return (
-                            <div
-                                key={index}
-                                className="relative overflow-hidden rounded-xl border border-sidebar-border/70 bg-white p-5 shadow-sm transition-shadow hover:shadow-md dark:border-sidebar-border dark:bg-sidebar-accent"
-                            >
-                                {/* Badge in top-right corner */}
-                                <div className="absolute top-3 right-3">
-                                    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${stat.badgeColor}`}>{stat.badge}</span>
                                 </div>
-
-                                {/* Icon */}
-                                <div className={`h-10 w-10 rounded-lg ${stat.iconBg} mb-4 flex items-center justify-center`}>
-                                    <Icon className={`h-5 w-5 ${stat.iconColor}`} />
-                                </div>
-
-                                {/* Title */}
-                                <p className="mb-2 text-sm font-medium text-sidebar-foreground/60 dark:text-sidebar-foreground/60">{stat.title}</p>
-
-                                {/* Value with optional subtitle */}
-                                <div className="flex items-baseline gap-1">
-                                    <p className="text-3xl font-bold text-sidebar-foreground dark:text-sidebar-foreground">{stat.value}</p>
-                                    {stat.subtitle && (
-                                        <p className="text-xl font-semibold text-sidebar-foreground/40 dark:text-sidebar-foreground/40">
-                                            {stat.subtitle}
-                                        </p>
-                                    )}
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-
-                {/* Main Content Area */}
-                <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-                    {/* Left Column - Upcoming Classes & Performance Analytics */}
-                    <div className="space-y-6 lg:col-span-2">
-                        {/* Performance Analytics Section */}
-                        <div className="rounded-xl border border-sidebar-border/70 bg-white p-6 shadow-sm dark:border-sidebar-border dark:bg-sidebar-accent">
-                            {/* Today's Classes Table */}
-                            <div>
-                                <div className="mb-4 flex items-center justify-between">
-                                    <h4 className="font-medium text-sidebar-foreground dark:text-sidebar-foreground">Today's Classes</h4>
-                                </div>
-                                <div className="overflow-x-auto">
-                                    <table className="table-responsive w-full overflow-auto">
-                                        <thead>
-                                            <tr className="border-b border-sidebar-border/30">
-                                                <th className="px-3 py-3 text-left text-xs font-semibold tracking-wider text-sidebar-foreground/60 uppercase">
-                                                    Programme
-                                                </th>
-                                                <th className="px-3 py-3 text-left text-xs font-semibold tracking-wider text-sidebar-foreground/60 uppercase">
-                                                    Course
-                                                </th>
-                                                <th className="px-3 py-3 text-left text-xs font-semibold tracking-wider text-sidebar-foreground/60 uppercase">
-                                                    Level
-                                                </th>
-                                                <th className="w-32 px-3 py-3 text-left text-xs font-semibold tracking-wider text-sidebar-foreground/60 uppercase">
-                                                    Time
-                                                </th>
-                                                <th className="px-3 py-3 text-left text-xs font-semibold tracking-wider text-sidebar-foreground/60 uppercase">
-                                                    Venue
-                                                </th>
-                                                <th className="px-3 py-3 text-right text-xs font-semibold tracking-wider text-sidebar-foreground/60 uppercase">
-                                                    Status
-                                                </th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {todayLectures.map((lecture, index) => (
-                                                <tr
-                                                    key={lecture.id || index}
-                                                    className="border-b border-sidebar-border/20 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-800/50"
-                                                >
-                                                    <td className="px-3 py-4">
-                                                        <span className="text-sidebar-foreground/80 dark:text-sidebar-foreground/80">
-                                                            {lecture.program || 'Advanced Mathematics'}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-3 py-4">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-900/20">
-                                                                <span className="text-sm font-bold text-blue-600 dark:text-blue-400">
-                                                                    {lecture.code || '10A'}
-                                                                </span>
-                                                            </div>
-                                                            <div>
-                                                                <div className="font-semibold text-sidebar-foreground dark:text-sidebar-foreground">
-                                                                    {lecture.course || 'Grade 10 Section A'}
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-3 py-4">
-                                                        <span className="text-sidebar-foreground/80 dark:text-sidebar-foreground/80">
-                                                            {lecture.level || 'Advanced Mathematics'}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-3 py-4">
-                                                        <div className="flex items-center gap-2">
-                                                            <Clock className="h-4 w-4 text-sidebar-foreground/50" />
-                                                            <span className="text-sm text-sidebar-foreground/80">
-                                                                {to12Hour(lecture.start_time) || '09:00 AM'} -{' '}
-                                                                {to12Hour(lecture.end_time) || '10:00 AM'}
-                                                            </span>
-                                                        </div>
-                                                    </td>
-
-                                                    <td className="px-3 py-4">
-                                                        <span className="text-sidebar-foreground/80 dark:text-sidebar-foreground/80">
-                                                            {lecture.room || 'Room 101'}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-3 py-4">
-                                                        {lecture.status === 'finished' && (
-                                                            <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                                                                ✓ FINISHED
-                                                            </span>
-                                                        )}
-                                                        {lecture.status === 'pending' && (
-                                                            <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-3 py-1 text-xs font-semibold text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
-                                                                ⏱ PENDING
-                                                            </span>
-                                                        )}
-                                                        {lecture.status === 'upcoming' && (
-                                                            <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">
-                                                                UPCOMING
-                                                            </span>
-                                                        )}
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                                <div className="grid gap-3 sm:grid-cols-3 lg:min-w-[28rem]">
+                                    {heroStats.map((stat) => (
+                                        <HeroStat key={stat.label} label={stat.label} value={stat.value} />
+                                    ))}
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    </section>
 
-                    {/* Right Column - Recent Activities & Student Engagement */}
-                    <div className="space-y-6">
-                        <div className="">
-                            <div>
-                                <h2 className="text-xl font-semibold text-sidebar-foreground dark:text-sidebar-foreground">Performance Analytics</h2>
-                                <p className="mt-1 text-sm text-sidebar-foreground/60 dark:text-sidebar-foreground/60">
-                                    Track your class performance and student engagement
-                                </p>
-                            </div>
-                            <div className="mt-4 flex flex-wrap gap-2">
-                                {timeFilters.map((filter) => (
-                                    <button
-                                        key={filter.id}
-                                        onClick={() => setTimeFilter(filter.id)}
-                                        className={`rounded-lg px-3 py-1.5 text-sm transition-colors ${
-                                            timeFilter === filter.id
-                                                ? 'bg-blue-600 text-white shadow-sm'
-                                                : 'bg-gray-100 text-sidebar-foreground hover:bg-gray-200 dark:bg-gray-800 dark:text-sidebar-foreground dark:hover:bg-gray-700'
-                                        }`}
-                                    >
-                                        {filter.label}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Upcoming Reminders */}
-                        {upcomingReminders.length > 0 && (
-                            <div className="mb-6 rounded-xl border border-sidebar-border/70 bg-white p-4 shadow-sm dark:border-sidebar-border dark:bg-sidebar-accent">
-                                <div className="mb-3 flex items-center justify-between">
-                                    <h4 className="font-medium text-sidebar-foreground dark:text-sidebar-foreground">Upcoming Reminders</h4>
-                                    <Link
-                                        href="/teacher/reminders"
-                                        className="text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400"
-                                    >
-                                        View all
-                                    </Link>
+                    {pendingVenueChangeApprovals > 0 && (
+                        <Link
+                            href="/teacher/unit/venue-change-requests?status=pending"
+                            className="flex flex-col gap-3 rounded-3xl border border-amber-200 bg-amber-50 px-4 py-4 text-amber-950 transition-colors hover:bg-amber-100 sm:flex-row sm:items-center sm:justify-between dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100 dark:hover:bg-amber-950/50"
+                        >
+                            <div className="flex items-start gap-3">
+                                <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-200">
+                                    <MapPin className="size-5" />
+                                </span>
+                                <div>
+                                    <p className="font-semibold">
+                                        {pendingVenueChangeApprovals} venue change {pendingVenueChangeApprovals === 1 ? 'request' : 'requests'}{' '}
+                                        awaiting your approval
+                                    </p>
+                                    <p className="mt-1 text-sm text-amber-800/80 dark:text-amber-200/80">
+                                        Review and approve or reject each request.
+                                    </p>
                                 </div>
-                                <ul className="space-y-2">
-                                    {upcomingReminders.map((r) => (
-                                        <li
-                                            key={r.id}
-                                            className="flex items-start gap-2 rounded-lg border border-sidebar-border/30 p-2 dark:border-sidebar-border/50"
+                            </div>
+                            <span className="inline-flex min-h-11 items-center justify-center gap-1 rounded-2xl bg-amber-600 px-4 text-sm font-semibold text-white hover:bg-amber-700">
+                                Review requests
+                                <ArrowRight className="size-4" />
+                            </span>
+                        </Link>
+                    )}
+
+                    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                        {(isLecturer ? lecturerActions : adminActions).map((action) => {
+                            const Icon = action.icon;
+                            return (
+                                <Link
+                                    key={action.href}
+                                    href={action.href}
+                                    className="group flex min-h-14 items-center justify-between gap-3 rounded-3xl border border-slate-200/80 bg-white px-4 py-3 shadow-sm transition-colors hover:border-indigo-200 hover:bg-indigo-50/50 dark:border-sidebar-border dark:bg-card dark:hover:border-indigo-800 dark:hover:bg-indigo-950/20"
+                                >
+                                    <span className="flex items-center gap-3">
+                                        <span className="flex size-10 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-200">
+                                            <Icon className="size-5" />
+                                        </span>
+                                        <span className="font-medium text-slate-900 dark:text-sidebar-foreground">{action.label}</span>
+                                    </span>
+                                    <ArrowRight className="size-4 text-slate-400 transition-transform group-hover:translate-x-0.5 group-hover:text-indigo-600" />
+                                </Link>
+                            );
+                        })}
+                    </section>
+
+                    {isLecturer && (
+                        <RecentNotificationsWidget
+                            notifications={unreadNotifications}
+                            className="rounded-3xl border-indigo-200 bg-indigo-50/70 dark:border-indigo-900/40 dark:bg-indigo-950/20"
+                        />
+                    )}
+
+                    {!isLecturer ? (
+                        <section className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6 dark:border-sidebar-border dark:bg-card">
+                            <div className="flex items-start gap-3">
+                                <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-200">
+                                    <UserCheck className="size-5" />
+                                </span>
+                                <div>
+                                    <h2 className="text-lg font-semibold text-slate-900 dark:text-sidebar-foreground">Staff attendance</h2>
+                                    <p className="mt-1 max-w-2xl text-sm text-slate-500 dark:text-sidebar-foreground/70">
+                                        Your account is administrative staff. Lecturer class tools are hidden. Use Take Attendance to check in or
+                                        check out for your shift.
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="mt-5 flex flex-wrap gap-3">
+                                <Link
+                                    href="/teacher/staff-attendance"
+                                    className="inline-flex min-h-11 items-center justify-center rounded-2xl bg-violet-600 px-4 text-sm font-semibold text-white hover:bg-violet-700"
+                                >
+                                    Open Take Attendance
+                                </Link>
+                                <Link
+                                    href="/teacher/staff-reports"
+                                    className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-slate-200 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-sidebar-border dark:text-sidebar-foreground dark:hover:bg-sidebar-accent"
+                                >
+                                    View attendance report
+                                </Link>
+                            </div>
+                        </section>
+                    ) : (
+                        <>
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                                {metrics.map((stat) => {
+                                    const Icon = stat.icon;
+                                    return (
+                                        <Link
+                                            key={stat.title}
+                                            href={stat.href}
+                                            className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm transition-colors hover:border-indigo-200 hover:bg-indigo-50/40 dark:border-sidebar-border dark:bg-card dark:hover:border-indigo-800"
                                         >
-                                            <Bell className="mt-0.5 h-4 w-4 flex-shrink-0 text-sidebar-foreground/60" />
-                                            <div className="min-w-0 flex-1">
-                                                <p className="truncate text-sm font-medium text-sidebar-foreground">{r.title}</p>
-                                                <p className="text-xs text-sidebar-foreground/60">
-                                                    {new Date(r.reminder_at).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
-                                                    {r.session && ` · ${r.session}`}
+                                            <span className={cn('mb-4 flex size-10 items-center justify-center rounded-2xl', stat.iconClass)}>
+                                                <Icon className="size-5" />
+                                            </span>
+                                            <p className="text-sm font-medium text-slate-500 dark:text-sidebar-foreground/60">{stat.title}</p>
+                                            <p className="mt-1 text-3xl font-semibold tracking-tight text-slate-900 dark:text-sidebar-foreground">
+                                                {stat.value}
+                                            </p>
+                                            <p className="mt-1 text-xs text-slate-500 dark:text-sidebar-foreground/55">{stat.hint}</p>
+                                        </Link>
+                                    );
+                                })}
+                            </div>
+
+                            <div className="grid gap-6 xl:grid-cols-12">
+                                <section className="rounded-3xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-6 xl:col-span-7 dark:border-sidebar-border dark:bg-card">
+                                    <div className="mb-4 flex items-center justify-between gap-3">
+                                        <div className="flex items-center gap-3">
+                                            <span className="flex size-10 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-200">
+                                                <CalendarDays className="size-5" />
+                                            </span>
+                                            <div>
+                                                <h2 className="text-lg font-semibold text-slate-900 dark:text-sidebar-foreground">
+                                                    Today&apos;s classes
+                                                </h2>
+                                                <p className="text-sm text-slate-500 dark:text-sidebar-foreground/60">
+                                                    {lectures.length > 0
+                                                        ? `${lectures.length} session${lectures.length === 1 ? '' : 's'} on your timetable`
+                                                        : 'Nothing scheduled for today'}
                                                 </p>
                                             </div>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        )}
-
-                        {/* Attendance Chart */}
-                        <div className="mb-6 rounded-xl bg-gray-50 p-4 dark:bg-gray-800">
-                            <div className="mb-4 flex items-center justify-between">
-                                <h4 className="font-medium text-sidebar-foreground dark:text-sidebar-foreground">Attendance Rate</h4>
-                                <Users className="h-5 w-5 text-sidebar-foreground/60" />
-                            </div>
-                            <div className="h-64">
-                                {isLoading ? (
-                                    <div className="flex h-full items-center justify-center">
-                                        <p className="text-sidebar-foreground/60">Loading attendance data...</p>
+                                        </div>
+                                        <Link
+                                            href="/teacher/timetable"
+                                            className="hidden text-sm font-medium text-indigo-600 hover:text-indigo-700 sm:inline dark:text-indigo-300"
+                                        >
+                                            View timetable
+                                        </Link>
                                     </div>
-                                ) : (
-                                    <Line data={attendanceChartData} options={chartOptions} />
-                                )}
+
+                                    {lectures.length === 0 ? (
+                                        <p className="rounded-2xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500 dark:border-sidebar-border dark:text-sidebar-foreground/60">
+                                            No classes are scheduled for you today.
+                                        </p>
+                                    ) : (
+                                        <>
+                                            <div className="space-y-3 md:hidden">
+                                                {lectures.map((lecture, index) => {
+                                                    const status = lectureStatus(lecture.status);
+                                                    return (
+                                                        <article
+                                                            key={lecture.id || index}
+                                                            className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-sidebar-border dark:bg-sidebar-accent/40"
+                                                        >
+                                                            <div className="flex items-start justify-between gap-3">
+                                                                <div className="min-w-0">
+                                                                    <p className="font-semibold text-slate-900 dark:text-sidebar-foreground">
+                                                                        {lecture.course}
+                                                                    </p>
+                                                                    <p className="mt-1 text-sm text-slate-500 dark:text-sidebar-foreground/60">
+                                                                        {lecture.code} · {lecture.program}
+                                                                    </p>
+                                                                </div>
+                                                                <span
+                                                                    className={cn(
+                                                                        'shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold',
+                                                                        status.className,
+                                                                    )}
+                                                                >
+                                                                    {status.label}
+                                                                </span>
+                                                            </div>
+                                                            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600 dark:text-sidebar-foreground/70">
+                                                                <span className="inline-flex items-center gap-1.5">
+                                                                    <Clock className="size-3.5" />
+                                                                    {to12Hour(lecture.start_time)} – {to12Hour(lecture.end_time)}
+                                                                </span>
+                                                                <span>{lecture.room || 'Venue not set'}</span>
+                                                                <span>{lecture.level}</span>
+                                                            </div>
+                                                        </article>
+                                                    );
+                                                })}
+                                            </div>
+
+                                            <div className="hidden overflow-x-auto md:block">
+                                                <table className="w-full min-w-[640px] text-left">
+                                                    <thead>
+                                                        <tr className="border-b border-slate-200 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:border-sidebar-border dark:text-sidebar-foreground/50">
+                                                            <th className="px-3 py-3">Course</th>
+                                                            <th className="px-3 py-3">Programme</th>
+                                                            <th className="px-3 py-3">Time</th>
+                                                            <th className="px-3 py-3">Venue</th>
+                                                            <th className="px-3 py-3 text-right">Status</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {lectures.map((lecture, index) => {
+                                                            const status = lectureStatus(lecture.status);
+                                                            return (
+                                                                <tr
+                                                                    key={lecture.id || index}
+                                                                    className="border-b border-slate-100 last:border-b-0 dark:border-sidebar-border/50"
+                                                                >
+                                                                    <td className="px-3 py-4">
+                                                                        <div className="flex items-center gap-3">
+                                                                            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-xs font-bold text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-200">
+                                                                                {lecture.code || '—'}
+                                                                            </span>
+                                                                            <div className="min-w-0">
+                                                                                <p className="font-semibold text-slate-900 dark:text-sidebar-foreground">
+                                                                                    {lecture.course}
+                                                                                </p>
+                                                                                <p className="text-xs text-slate-500 dark:text-sidebar-foreground/55">
+                                                                                    {lecture.level}
+                                                                                </p>
+                                                                            </div>
+                                                                        </div>
+                                                                    </td>
+                                                                    <td className="px-3 py-4 text-sm text-slate-600 dark:text-sidebar-foreground/70">
+                                                                        {lecture.program}
+                                                                    </td>
+                                                                    <td className="px-3 py-4 text-sm text-slate-600 dark:text-sidebar-foreground/70">
+                                                                        <span className="inline-flex items-center gap-1.5">
+                                                                            <Clock className="size-3.5" />
+                                                                            {to12Hour(lecture.start_time)} – {to12Hour(lecture.end_time)}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td className="px-3 py-4 text-sm text-slate-600 dark:text-sidebar-foreground/70">
+                                                                        {lecture.room || 'Venue not set'}
+                                                                    </td>
+                                                                    <td className="px-3 py-4 text-right">
+                                                                        <span
+                                                                            className={cn(
+                                                                                'inline-flex rounded-full px-2.5 py-1 text-xs font-semibold',
+                                                                                status.className,
+                                                                            )}
+                                                                        >
+                                                                            {status.label}
+                                                                        </span>
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </>
+                                    )}
+                                </section>
+
+                                <aside className="space-y-5 xl:col-span-5">
+                                    {upcomingReminders.length > 0 && (
+                                        <section className="rounded-3xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5 dark:border-sidebar-border dark:bg-card">
+                                            <div className="mb-3 flex items-center justify-between">
+                                                <h2 className="font-semibold text-slate-900 dark:text-sidebar-foreground">Upcoming reminders</h2>
+                                                <Link
+                                                    href="/teacher/reminders"
+                                                    className="text-sm font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-300"
+                                                >
+                                                    View all
+                                                </Link>
+                                            </div>
+                                            <ul className="space-y-2">
+                                                {upcomingReminders.map((reminder) => (
+                                                    <li
+                                                        key={reminder.id}
+                                                        className="flex items-start gap-2 rounded-2xl border border-slate-200/80 p-3 dark:border-sidebar-border"
+                                                    >
+                                                        <Bell className="mt-0.5 size-4 shrink-0 text-indigo-600" />
+                                                        <div className="min-w-0 flex-1">
+                                                            <p className="truncate text-sm font-medium text-slate-900 dark:text-sidebar-foreground">
+                                                                {reminder.title}
+                                                            </p>
+                                                            <p className="text-xs text-slate-500 dark:text-sidebar-foreground/60">
+                                                                {new Date(reminder.reminder_at).toLocaleString(undefined, {
+                                                                    dateStyle: 'short',
+                                                                    timeStyle: 'short',
+                                                                })}
+                                                                {reminder.session && ` · ${reminder.session}`}
+                                                            </p>
+                                                        </div>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </section>
+                                    )}
+
+                                    <section className="rounded-3xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5 dark:border-sidebar-border dark:bg-card">
+                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                            <div>
+                                                <h2 className="font-semibold text-slate-900 dark:text-sidebar-foreground">Attendance rate</h2>
+                                                <p className="mt-1 text-sm text-slate-500 dark:text-sidebar-foreground/60">
+                                                    Class attendance over the selected period
+                                                </p>
+                                            </div>
+                                            <Users className="hidden size-5 text-slate-400 sm:block" />
+                                        </div>
+                                        <div className="mt-4 flex flex-wrap gap-2">
+                                            {timeFilters.map((filter) => (
+                                                <button
+                                                    key={filter.id}
+                                                    type="button"
+                                                    onClick={() => setTimeFilter(filter.id)}
+                                                    className={cn(
+                                                        'rounded-full px-3 py-1.5 text-sm font-medium transition-colors',
+                                                        timeFilter === filter.id
+                                                            ? 'bg-indigo-600 text-white shadow-sm'
+                                                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-sidebar-accent dark:text-sidebar-foreground dark:hover:bg-sidebar-accent/80',
+                                                    )}
+                                                >
+                                                    {filter.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <div className="mt-4 h-64">
+                                            {isLoading ? (
+                                                <div className="flex h-full items-center justify-center text-sm text-slate-500">Loading chart…</div>
+                                            ) : (
+                                                <Line data={attendanceChartData} options={chartOptions} />
+                                            )}
+                                        </div>
+                                    </section>
+                                </aside>
                             </div>
-                        </div>
-                    </div>
+                        </>
+                    )}
                 </div>
-                    </>
-                )}
             </div>
         </AppLayout>
+    );
+}
+
+function HeroStat({ label, value }: { label: string; value: string }) {
+    return (
+        <div className="rounded-2xl bg-white/10 px-4 py-3 ring-1 ring-white/15">
+            <p className="text-[11px] font-medium tracking-wide text-white/70 uppercase">{label}</p>
+            <p className="mt-1 truncate text-sm font-semibold text-white">{value}</p>
+        </div>
     );
 }

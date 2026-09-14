@@ -20,7 +20,7 @@ export default function Appearance() {
             <Head title="Appearance settings" />
 
             <SettingsLayout>
-                <div className="space-y-6">
+                <div className="space-y-6 rounded-3xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-6 dark:border-sidebar-border dark:bg-card">
                     <HeadingSmall title="Appearance settings" description="Update your account's appearance settings" />
                     <AppearanceTabs />
                 </div>

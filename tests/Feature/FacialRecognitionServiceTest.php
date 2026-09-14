@@ -66,6 +66,16 @@ it('requires a valid enrolled descriptor before matching', function () {
     expect($mismatch['matched'])->toBeFalse();
 });
 
+it('reports a not_enrolled reason when no face descriptor is registered', function () {
+    $teacher = new Teacher;
+
+    $match = app(FacialRecognitionService::class)->verifyLiveCapture($teacher, makeDescriptor([0 => 0.25]));
+
+    expect($match['matched'])->toBeFalse();
+    expect($match['reason'])->toBe('not_enrolled');
+    expect($match['score'])->toBeNull();
+});
+
 it('rejects check-in when token and live face do not match enrollment', function () {
     $teacher = new Teacher([
         'id' => 99,

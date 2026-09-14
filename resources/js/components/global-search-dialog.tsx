@@ -1,11 +1,5 @@
 import { Button } from '@/components/ui/button';
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogHeader,
-    DialogTitle,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { apiJsonRequest, getApiErrorMessage } from '@/lib/http';
 import { cn } from '@/lib/utils';
@@ -15,6 +9,7 @@ import {
     Building2,
     CalendarDays,
     ClipboardCheck,
+    Clock,
     GraduationCap,
     Landmark,
     LayoutGrid,
@@ -24,7 +19,6 @@ import {
     Search,
     UserCog,
     Users,
-    Clock,
     X,
     type LucideIcon,
 } from 'lucide-react';
@@ -135,7 +129,7 @@ function highlightText(text: string, query: string) {
     );
 }
 
-export function GlobalSearchDialog() {
+export function GlobalSearchDialog({ variant = 'icon' }: { variant?: 'icon' | 'header' }) {
     const listId = useId();
     const inputRef = useRef<HTMLInputElement>(null);
     const [open, setOpen] = useState(false);
@@ -221,11 +215,7 @@ export function GlobalSearchDialog() {
                     setGroups(payload.data.groups ?? []);
                     setActiveIndex(0);
                 }
-                setCategories(
-                    payload.data.categories?.length
-                        ? payload.data.categories
-                        : [{ value: 'all', label: 'All' }],
-                );
+                setCategories(payload.data.categories?.length ? payload.data.categories : [{ value: 'all', label: 'All' }]);
             })
             .catch((err) => {
                 if (controller.signal.aborted) {
@@ -267,14 +257,17 @@ export function GlobalSearchDialog() {
             return;
         }
 
-        const list = flatResults.length > 0 ? flatResults : recent.map((entry) => ({
-            ...entry,
-            subtitle: entry.subtitle ?? null,
-            meta: null,
-            groupKey: 'recent',
-            groupLabel: 'Recent',
-            icon: 'layout',
-        }));
+        const list =
+            flatResults.length > 0
+                ? flatResults
+                : recent.map((entry) => ({
+                      ...entry,
+                      subtitle: entry.subtitle ?? null,
+                      meta: null,
+                      groupKey: 'recent',
+                      groupLabel: 'Recent',
+                      icon: 'layout',
+                  }));
 
         if (list.length === 0) {
             return;
@@ -307,16 +300,42 @@ export function GlobalSearchDialog() {
 
     return (
         <>
-            <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="group size-11 cursor-pointer"
-                onClick={() => setOpen(true)}
-                aria-label="Open global search"
-            >
-                <Search className="!size-5 opacity-80 group-hover:opacity-100" />
-            </Button>
+            {variant === 'header' ? (
+                <>
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="group size-11 cursor-pointer lg:hidden"
+                        onClick={() => setOpen(true)}
+                        aria-label="Open global search"
+                    >
+                        <Search className="!size-5 opacity-80 group-hover:opacity-100" />
+                    </Button>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        className="hidden h-9 max-w-56 min-w-0 cursor-pointer items-center gap-2 rounded-lg px-3 text-sm font-normal text-muted-foreground lg:inline-flex"
+                        onClick={() => setOpen(true)}
+                        aria-label="Open global search"
+                    >
+                        <Search className="size-4 shrink-0 opacity-80" />
+                        <span className="min-w-0 flex-1 truncate text-left">Search</span>
+                        <kbd className="hidden rounded border bg-muted px-1.5 py-0.5 text-[10px] font-medium xl:inline-block">Ctrl K</kbd>
+                    </Button>
+                </>
+            ) : (
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="group size-11 cursor-pointer"
+                    onClick={() => setOpen(true)}
+                    aria-label="Open global search"
+                >
+                    <Search className="!size-5 opacity-80 group-hover:opacity-100" />
+                </Button>
+            )}
 
             <Dialog
                 open={open}
@@ -381,15 +400,13 @@ export function GlobalSearchDialog() {
                     </div>
 
                     <div id={listId} role="listbox" className="max-h-[min(60vh,28rem)] overflow-y-auto p-2">
-                        {error ? (
-                            <p className="px-3 py-8 text-center text-sm text-destructive">{error}</p>
-                        ) : null}
+                        {error ? <p className="px-3 py-8 text-center text-sm text-destructive">{error}</p> : null}
 
                         {showRecent ? (
                             recent.length > 0 ? (
                                 <div className="space-y-1">
                                     <div className="flex items-center justify-between px-2 py-1">
-                                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Recent</p>
+                                        <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Recent</p>
                                         <button
                                             type="button"
                                             className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
@@ -441,9 +458,7 @@ export function GlobalSearchDialog() {
                                   const Icon = getIcon(group.icon);
                                   return (
                                       <div key={group.key} className="mb-2">
-                                          <p className="px-2 py-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                                              {group.label}
-                                          </p>
+                                          <p className="px-2 py-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">{group.label}</p>
                                           <div className="space-y-0.5">
                                               {group.items.map((item) => {
                                                   const flatIndex = flatResults.findIndex((entry) => entry.id === item.id);
@@ -477,7 +492,7 @@ export function GlobalSearchDialog() {
                                                                   </span>
                                                               ) : null}
                                                           </span>
-                                                          <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
+                                                          <span className="shrink-0 text-[10px] tracking-wide text-muted-foreground uppercase">
                                                               {group.label}
                                                           </span>
                                                       </button>
@@ -490,9 +505,7 @@ export function GlobalSearchDialog() {
                             : null}
 
                         {showEmpty ? (
-                            <p className="px-3 py-8 text-center text-sm text-muted-foreground">
-                                No results found for “{debouncedQuery}”.
-                            </p>
+                            <p className="px-3 py-8 text-center text-sm text-muted-foreground">No results found for “{debouncedQuery}”.</p>
                         ) : null}
 
                         {loading && debouncedQuery !== '' && !hasResults ? (

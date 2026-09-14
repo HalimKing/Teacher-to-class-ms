@@ -31,9 +31,9 @@ export default function Password({ mustChangePassword = false }: PasswordPagePro
             <Head title="Password settings" />
 
             <SettingsLayout>
-                <div className="space-y-6">
+                <div className="space-y-6 rounded-3xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-6 dark:border-sidebar-border dark:bg-card">
                     {mustChangePassword && (
-                        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
                             Your administrator requires you to set a new password before you can continue using the admin portal.
                         </div>
                     )}
@@ -53,7 +53,9 @@ export default function Password({ mustChangePassword = false }: PasswordPagePro
                         options={{
                             preserveScroll: true,
                         }}
-                        resetOnError={mustChangePassword ? ['password', 'password_confirmation'] : ['password', 'password_confirmation', 'current_password']}
+                        resetOnError={
+                            mustChangePassword ? ['password', 'password_confirmation'] : ['password', 'password_confirmation', 'current_password']
+                        }
                         resetOnSuccess
                         onError={(errors) => {
                             if (errors.password) {

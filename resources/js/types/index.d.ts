@@ -35,6 +35,8 @@ export interface NavItem {
     permission?: string;
     staffTypes?: string[];
     requiresLeadership?: boolean;
+    exact?: boolean;
+    badge?: 'unread';
 }
 
 export interface SharedData {
@@ -63,7 +65,6 @@ export interface User {
     [key: string]: unknown; // This allows for additional properties...
 }
 
-
 interface FlashProps {
     success?: string;
     error?: string;
@@ -77,12 +78,12 @@ export interface PagePropsWithFlash {
 export type AttendanceStatus = 'COMPLETED' | 'PENDING' | 'UPCOMING';
 
 export interface SchoolClass {
-  id: string;
-  shortName: string;
-  fullName: string;
-  subject: string;
-  startTime: string;
-  endTime: string;
-  status: AttendanceStatus;
-  colorClass: string;
+    id: string;
+    shortName: string;
+    fullName: string;
+    subject: string;
+    startTime: string;
+    endTime: string;
+    status: AttendanceStatus;
+    colorClass: string;
 }

@@ -102,10 +102,7 @@ export async function assessVideoFrame(video: HTMLVideoElement): Promise<FaceFra
     }
 
     const faceapi = await loadFaceApiModels();
-    const detections = await faceapi.detectAllFaces(
-        video,
-        new faceapi.SsdMobilenetv1Options({ minConfidence: DETECT_MIN_CONFIDENCE }),
-    );
+    const detections = await faceapi.detectAllFaces(video, new faceapi.SsdMobilenetv1Options({ minConfidence: DETECT_MIN_CONFIDENCE }));
 
     if (detections.length === 0) {
         return {
@@ -145,10 +142,7 @@ export async function assessVideoFrame(video: HTMLVideoElement): Promise<FaceFra
     };
 }
 
-export async function captureDescriptorFromVideo(
-    video: HTMLVideoElement,
-    onProgress?: (message: string) => void,
-): Promise<FaceCaptureResult> {
+export async function captureDescriptorFromVideo(video: HTMLVideoElement, onProgress?: (message: string) => void): Promise<FaceCaptureResult> {
     const faceapi = await loadFaceApiModels();
     const captures: Array<{ descriptor: number[]; confidence: number; width: number; height: number }> = [];
     let stableStreak = 0;
@@ -289,6 +283,26 @@ export function isFaceMismatchMessage(message: string | null | undefined): boole
     );
 }
 
+/**
+ * Detects the backend responses raised when the account has no usable face descriptor,
+ * so the UI can point the user at enrollment instead of asking them to retry blindly.
+ */
+export function isFaceEnrollmentRequiredMessage(message: string | null | undefined): boolean {
+    if (!message) {
+        return false;
+    }
+
+    const normalized = message.toLowerCase();
+
+    return (
+        normalized.includes('face enrollment is required') ||
+        normalized.includes('enrollment is required') ||
+        normalized.includes('not enrolled') ||
+        normalized.includes('no enrolled face') ||
+        normalized.includes('face is not registered')
+    );
+}
+
 function classifyFaceBox(
     box: { x: number; y: number; width: number; height: number },
     confidence: number,
@@ -305,9 +319,7 @@ function classifyFaceBox(
     }
 
     const minDim = Math.min(frameWidth, frameHeight);
-    const maxFace = frameWidth > 0 && frameHeight > 0
-        ? Math.max(MAX_FACE_SIZE, minDim * 0.88)
-        : MAX_FACE_SIZE;
+    const maxFace = frameWidth > 0 && frameHeight > 0 ? Math.max(MAX_FACE_SIZE, minDim * 0.88) : MAX_FACE_SIZE;
 
     if (box.width > maxFace || box.height > maxFace) {
         return 'too_large';
@@ -366,38 +378,23 @@ function faceErrorForIssue(issue: FaceDetectionIssue, overrideMessage?: string):
                 ],
             );
         case 'too_small':
-            return new FaceCaptureError(
-                overrideMessage || 'Your face appears too small in the frame.',
-                'too_small',
-                'Move Closer',
-                [
-                    'Move slightly closer to the camera.',
-                    'Ensure your entire face fills more of the oval guide.',
-                    'Hold the device steady and try again.',
-                ],
-            );
+            return new FaceCaptureError(overrideMessage || 'Your face appears too small in the frame.', 'too_small', 'Move Closer', [
+                'Move slightly closer to the camera.',
+                'Ensure your entire face fills more of the oval guide.',
+                'Hold the device steady and try again.',
+            ]);
         case 'too_large':
-            return new FaceCaptureError(
-                overrideMessage || 'Your face is too close to the camera.',
-                'too_large',
-                'Move Back a Little',
-                [
-                    'Move slightly farther from the camera.',
-                    'Keep your full face visible inside the frame.',
-                    'Hold steady and try again.',
-                ],
-            );
+            return new FaceCaptureError(overrideMessage || 'Your face is too close to the camera.', 'too_large', 'Move Back a Little', [
+                'Move slightly farther from the camera.',
+                'Keep your full face visible inside the frame.',
+                'Hold steady and try again.',
+            ]);
         case 'off_center':
-            return new FaceCaptureError(
-                overrideMessage || 'Please center your face in the camera frame.',
-                'off_center',
-                'Center Your Face',
-                [
-                    'Align your face with the oval guide.',
-                    'Look directly at the camera.',
-                    'Keep your head level and try again.',
-                ],
-            );
+            return new FaceCaptureError(overrideMessage || 'Please center your face in the camera frame.', 'off_center', 'Center Your Face', [
+                'Align your face with the oval guide.',
+                'Look directly at the camera.',
+                'Keep your head level and try again.',
+            ]);
         case 'low_confidence':
             return new FaceCaptureError(
                 overrideMessage || 'We couldn’t clearly see your face.',
@@ -410,17 +407,12 @@ function faceErrorForIssue(issue: FaceDetectionIssue, overrideMessage?: string):
                 overrideMessage || 'Face capture was inconsistent. Please keep your head steady and try again.',
                 'unstable',
                 'Hold Still',
-                [
-                    'Hold the device steady.',
-                    'Avoid moving your head during capture.',
-                    'Use steady lighting and try again.',
-                ],
+                ['Hold the device steady.', 'Avoid moving your head during capture.', 'Use steady lighting and try again.'],
             );
         case 'no_face':
         default:
             return new FaceCaptureError(
-                overrideMessage ||
-                    'We couldn’t clearly detect your face. Please follow the tips below and try again.',
+                overrideMessage || 'We couldn’t clearly detect your face. Please follow the tips below and try again.',
                 'no_face',
                 'Face Not Detected',
                 DEFAULT_NO_FACE_TIPS,
@@ -428,9 +420,7 @@ function faceErrorForIssue(issue: FaceDetectionIssue, overrideMessage?: string):
     }
 }
 
-function buildCaptureResult(
-    captures: Array<{ descriptor: number[]; confidence: number; width: number; height: number }>,
-): FaceCaptureResult {
+function buildCaptureResult(captures: Array<{ descriptor: number[]; confidence: number; width: number; height: number }>): FaceCaptureResult {
     const descriptor = averageDescriptors(captures.map((capture) => capture.descriptor));
     const variance = descriptorVariance(captures.map((capture) => capture.descriptor));
 

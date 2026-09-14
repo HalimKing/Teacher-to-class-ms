@@ -1,10 +1,24 @@
-// resources/js/pages/Admin/SchoolManagement/TimeTables/Create.tsx
 import ComboBox from '@/components/combobox';
 import AppLayout from '@/layouts/app-layout';
-import { PagePropsWithFlash } from '@/types';
+import { cn } from '@/lib/utils';
+import { PagePropsWithFlash, type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
-import { AlertCircle, ArrowLeft, Save } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import {
+    AlertTriangle,
+    ArrowLeft,
+    BookOpen,
+    Building2,
+    CalendarDays,
+    Check,
+    Clock3,
+    Loader2,
+    MapPin,
+    Plus,
+    Save,
+    Sparkles,
+    UserRound,
+} from 'lucide-react';
+import { FormEvent, MouseEvent, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ToastContainer, toast } from 'react-toastify';
 
 interface AcademicYear {
@@ -14,23 +28,11 @@ interface AcademicYear {
     end_year: number;
 }
 
-interface Course {
-    id: number;
-    name: string;
-    course_code: string;
-}
-
-interface ClassRoom {
-    id: number;
-    name: string;
-    capacity: number;
-}
-
-interface Teacher {
-    id: number;
-    name: string;
-    email: string;
+interface Option {
+    label: string;
+    value: string;
     employee_id?: string;
+    staff_type?: string;
 }
 
 interface CreateTimeTablePageProps {
@@ -40,13 +42,6 @@ interface CreateTimeTablePageProps {
     teachers: Array<Option & { staff_type?: string; employee_id?: string }>;
     staffTypeOptions: Option[];
     days: string[];
-}
-
-interface Option {
-    label: string;
-    value: string;
-    employee_id?: string;
-    staff_type?: string;
 }
 
 interface CreateTimeTableForm {
@@ -72,10 +67,53 @@ const daysOptions: Option[] = [
     { label: 'Sunday', value: 'Sunday' },
 ];
 
-const CreateTimeTablePage = ({ academicYear, courses, classRooms, teachers, staffTypeOptions, days }: CreateTimeTablePageProps) => {
+const breadcrumbs: BreadcrumbItem[] = [
+    { title: 'Dashboard', href: '/admin/dashboard' },
+    { title: 'Assigned Schedules', href: '/admin/academics/time-tables' },
+    { title: 'Create Schedule', href: '/admin/academics/time-tables/create' },
+];
+
+const fieldClass =
+    'h-12 w-full min-w-0 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 md:text-sm dark:border-sidebar-border dark:bg-background dark:text-sidebar-foreground dark:focus:ring-indigo-950';
+
+function formatTime(time?: string | null) {
+    if (!time) return '—';
+    const normalized = time.length === 5 ? `${time}:00` : time;
+
+    try {
+        return new Date(`2000-01-01T${normalized}`).toLocaleTimeString('en-US', {
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true,
+        });
+    } catch {
+        return time;
+    }
+}
+
+function durationLabel(startTime: string, endTime: string) {
+    const start = new Date(`2000-01-01T${startTime}`);
+    const end = new Date(`2000-01-01T${endTime}`);
+    const diffMs = end.getTime() - start.getTime();
+
+    if (Number.isNaN(diffMs) || diffMs <= 0) {
+        return 'Check times';
+    }
+
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+
+    if (diffHours === 0) return `${diffMinutes} min`;
+    if (diffMinutes === 0) return `${diffHours} hr${diffHours > 1 ? 's' : ''}`;
+
+    return `${diffHours}h ${diffMinutes}m`;
+}
+
+export default function CreateTimeTablePage({ academicYear, courses, classRooms, teachers, staffTypeOptions }: CreateTimeTablePageProps) {
     const [checkingConflict, setCheckingConflict] = useState(false);
     const [hasConflict, setHasConflict] = useState(false);
     const [conflictMessage, setConflictMessage] = useState('');
+    const [formKey, setFormKey] = useState(0);
     const { flash } = usePage().props as PagePropsWithFlash;
 
     const { data, setData, post, processing, errors, transform } = useForm<CreateTimeTableForm>({
@@ -91,40 +129,64 @@ const CreateTimeTablePage = ({ academicYear, courses, classRooms, teachers, staf
         create_another: false,
     });
 
-    const handleValueChange = (name: keyof typeof data) => (value: string | number | undefined) => {
-        setData(name, value as string);
+    const isAdministrator = data.staff_type === 'administrator';
+    const selectedDays = isAdministrator ? data.days : data.day ? [data.day] : [];
+    const staffOptions = useMemo(
+        () => teachers.filter((teacher) => !teacher.staff_type || teacher.staff_type === data.staff_type),
+        [teachers, data.staff_type],
+    );
+    const selectedStaff = staffOptions.find((teacher) => teacher.value === data.teacher_id) ?? null;
+    const selectedCourse = courses.find((course) => course.value === data.course_id) ?? null;
+    const selectedVenue = classRooms.find((room) => room.value === data.class_room_id) ?? null;
+    const timeRange = data.start_time && data.end_time ? `${formatTime(data.start_time)} – ${formatTime(data.end_time)}` : 'Set times';
+    const readyToSave =
+        Boolean(data.teacher_id && data.class_room_id && data.start_time && data.end_time && selectedDays.length > 0) &&
+        (isAdministrator || Boolean(data.course_id)) &&
+        !hasConflict;
+
+    const handleValueChange = (name: keyof CreateTimeTableForm) => (value: string | number | undefined) => {
+        setData(name, String(value ?? ''));
     };
 
     const showFormErrorToast = (formErrors: Record<string, string>) => {
         const firstError = Object.values(formErrors)[0];
-        toast.error(firstError || 'Failed to save time slot. Please check the form.', {
+        toast.error(firstError || 'Failed to save the schedule. Please check the form.', {
             position: 'top-right',
             theme: 'dark',
         });
     };
 
-    const selectedDays = data.staff_type === 'administrator' ? data.days : data.day ? [data.day] : [];
-
-    const handleAdministratorDayToggle = (day: string) => {
-        setData(
-            'days',
-            data.days.includes(day)
-                ? data.days.filter((selectedDay) => selectedDay !== day)
-                : [...data.days, day],
-        );
+    const resetSlotFields = () => {
+        setData({
+            academic_year_id: academicYear.id,
+            staff_type: data.staff_type,
+            teacher_id: '',
+            course_id: '',
+            class_room_id: '',
+            day: '',
+            days: [],
+            start_time: '',
+            end_time: '',
+            create_another: false,
+        });
+        setHasConflict(false);
+        setConflictMessage('');
+        setFormKey((value) => value + 1);
     };
 
-    // Check for time conflicts whenever relevant fields change
+    const handleAdministratorDayToggle = (day: string) => {
+        setData('days', data.days.includes(day) ? data.days.filter((selectedDay) => selectedDay !== day) : [...data.days, day]);
+    };
+
     useEffect(() => {
         const checkConflict = async () => {
-            if (data.staff_type === 'administrator') {
+            if (isAdministrator) {
                 setHasConflict(false);
                 setConflictMessage('');
                 setCheckingConflict(false);
                 return;
             }
 
-            // Check both classroom and teacher conflicts
             if (data.academic_year_id && data.teacher_id && selectedDays.length > 0 && data.start_time && data.end_time) {
                 setCheckingConflict(true);
                 try {
@@ -180,10 +242,19 @@ const CreateTimeTablePage = ({ academicYear, courses, classRooms, teachers, staf
             }
         };
 
-        // Debounce the conflict check
         const timeoutId = setTimeout(checkConflict, 500);
         return () => clearTimeout(timeoutId);
-    }, [data.academic_year_id, data.staff_type, data.teacher_id, data.course_id, data.class_room_id, data.day, data.days, data.start_time, data.end_time]);
+    }, [
+        data.academic_year_id,
+        data.staff_type,
+        data.teacher_id,
+        data.course_id,
+        data.class_room_id,
+        data.day,
+        data.days,
+        data.start_time,
+        data.end_time,
+    ]);
 
     useEffect(() => {
         if (flash?.success) {
@@ -201,8 +272,8 @@ const CreateTimeTablePage = ({ academicYear, courses, classRooms, teachers, staf
         }
     }, [flash?.success, flash?.error]);
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleSubmit = (event: FormEvent) => {
+        event.preventDefault();
 
         if (hasConflict) {
             toast.error('Please resolve the time conflict before saving.', {
@@ -222,8 +293,8 @@ const CreateTimeTablePage = ({ academicYear, courses, classRooms, teachers, staf
         });
     };
 
-    const handleSaveAndAddAnother = (e: React.MouseEvent<HTMLButtonElement>) => {
-        e.preventDefault();
+    const handleSaveAndAddAnother = (event: MouseEvent<HTMLButtonElement>) => {
+        event.preventDefault();
 
         if (hasConflict) {
             toast.error('Please resolve the time conflict before saving.', {
@@ -239,374 +310,389 @@ const CreateTimeTablePage = ({ academicYear, courses, classRooms, teachers, staf
         }));
 
         post(route('admin.academics.time-tables.store'), {
-            onSuccess: () => {
-                // Only reset form if the server indicates success
-                // Reset form fields while keeping academic year
-                setData({
-                    academic_year_id: academicYear.id,
-                    staff_type: data.staff_type,
-                    teacher_id: '',
-                    course_id: '',
-                    class_room_id: '',
-                    day: '',
-                    days: [],
-                    start_time: '',
-                    end_time: '',
-                    create_another: false, // Reset for next use
-                });
-                setHasConflict(false);
-                setConflictMessage('');
-
-                toast.success('Time slot saved successfully! Ready for the next slot.', {
-                    position: 'top-right',
-                    theme: 'dark',
-                });
-            },
+            onSuccess: resetSlotFields,
             onError: showFormErrorToast,
         });
     };
 
-    // Breadcrumbs
-    const breadcrumbs = [
-        {
-            title: 'Dashboard',
-            href: '/admin/dashboard',
-        },
-        {
-            title: 'Assigned Schedules',
-            href: '/admin/academics/time-tables',
-        },
-        {
-            title: 'Create Schedule',
-            href: '/admin/academics/time-tables/create',
-        },
-    ];
-
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Create Schedule" />
-            <div className="min-h-screen min-w-0 bg-slate-50 py-4 dark:bg-background sm:py-8">
-                <div className="mx-auto max-w-4xl min-w-0 px-3 sm:px-6 lg:px-8">
-                    <div className="mb-5 sm:mb-8">
-                        <Link
-                            href={route('admin.academics.time-tables.index')}
-                            className="mb-3 inline-flex min-h-10 items-center text-sm text-slate-600 hover:text-slate-900 dark:text-sidebar-foreground/70 dark:hover:text-sidebar-foreground"
-                        >
-                            <ArrowLeft className="mr-2 h-5 w-5" />
-                            Back to schedules
-                        </Link>
-                        <h1 className="text-2xl font-extrabold text-slate-900 sm:text-3xl dark:text-sidebar-foreground">Create Schedule</h1>
-                        <p className="mt-2 text-sm text-slate-600 sm:text-base dark:text-sidebar-foreground/65">Add a new schedule assignment</p>
-                    </div>
 
-                    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg dark:border-sidebar-border dark:bg-card">
-                        <div className="border-b border-slate-200 bg-gradient-to-r from-indigo-50 to-purple-50 p-4 sm:p-6 dark:border-sidebar-border dark:from-indigo-950/30 dark:to-purple-950/20">
-                            <h2 className="text-lg font-bold text-slate-900 sm:text-xl dark:text-sidebar-foreground">Time Slot Details</h2>
-                            <p className="mt-1 text-sm text-slate-600 dark:text-sidebar-foreground/65">Fill in the details for the new time slot</p>
-                        </div>
+            <form
+                onSubmit={handleSubmit}
+                className="min-h-full bg-gradient-to-b from-indigo-50/80 via-slate-50 to-slate-50 dark:from-indigo-950/20 dark:via-background dark:to-background"
+            >
+                <div className="mx-auto flex w-full max-w-6xl min-w-0 flex-col gap-5 p-3 pb-10 sm:p-4 md:p-6 lg:p-8">
+                    <Link
+                        href={route('admin.academics.time-tables.index')}
+                        className="inline-flex min-h-11 w-fit items-center gap-2 text-sm font-medium text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+                    >
+                        <ArrowLeft className="size-4" />
+                        Back to schedules
+                    </Link>
 
-                        <form onSubmit={handleSubmit} className="min-w-0 space-y-5 p-4 sm:space-y-6 sm:p-6">
-                            {/* Academic Year */}
-                            <div>
-                                <label className="mb-2 block text-sm font-medium text-slate-700">Academic Year *</label>
-                                <span className="inline-flex max-w-full break-words rounded-2xl bg-purple-700 px-3 py-2 text-sm text-white">
-                                    {academicYear.name}
-                                </span>
-                            </div>
-
-                            {/* Course */}
-                            <div className="grid min-w-0 grid-cols-1 gap-5 md:grid-cols-2 md:gap-6">
+                    <section className="overflow-hidden rounded-3xl border border-indigo-100 bg-white shadow-sm shadow-indigo-100/70 dark:border-indigo-900/40 dark:bg-card dark:shadow-none">
+                        <div className="bg-gradient-to-r from-indigo-600 via-violet-600 to-slate-800 px-4 py-5 text-white sm:px-8 sm:py-6">
+                            <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
                                 <div className="min-w-0">
-                                    <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-sidebar-foreground">Staff Type *</label>
-                                    <ComboBox
-                                        options={staffTypeOptions}
-                                        label="Select Staff Type"
-                                        externalValue={(value) => {
-                                            setData('staff_type', value as string);
-                                            setData('teacher_id', '');
-                                            if (value === 'administrator') {
-                                                setData('course_id', '');
-                                                setData('day', '');
-                                            } else {
-                                                setData('days', []);
-                                            }
-                                        }}
-                                        defaultValue={staffTypeOptions.find((option) => option.value === data.staff_type) || staffTypeOptions[0]}
-                                    />
-                                    {errors.staff_type && (
-                                        <p className="mt-2 flex items-center text-sm text-red-500">
-                                            <AlertCircle className="mr-1 h-4 w-4" />
-                                            {errors.staff_type}
-                                        </p>
-                                    )}
-                                </div>
-
-                                <div className="min-w-0">
-                                    <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-sidebar-foreground">Assigned Staff *</label>
-                                    <ComboBox
-                                        options={teachers.filter((teacher) => !teacher.staff_type || teacher.staff_type === data.staff_type)}
-                                        label="Assign Staff"
-                                        externalValue={handleValueChange('teacher_id')}
-                                        defaultValue={null}
-                                    />
-                                    {errors.teacher_id && (
-                                        <p className="mt-2 flex items-center text-sm text-red-500">
-                                            <AlertCircle className="mr-1 h-4 w-4" />
-                                            {errors.teacher_id}
-                                        </p>
-                                    )}
-                                </div>
-                            </div>
-
-                            {data.staff_type === 'lecturer' && (
-                                <div className="min-w-0">
-                                    <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-sidebar-foreground">Course *</label>
-                                    <ComboBox
-                                        options={courses}
-                                        label="Select Course"
-                                        externalValue={handleValueChange('course_id')}
-                                        defaultValue={null}
-                                    />
-                                    {errors.course_id && (
-                                        <p className="mt-2 flex items-center text-sm text-red-500">
-                                            <AlertCircle className="mr-1 h-4 w-4" />
-                                            {errors.course_id}
-                                        </p>
-                                    )}
-                                </div>
-                            )}
-
-                            {/* Venue */}
-                            <div className="min-w-0">
-                                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-sidebar-foreground">Venue *</label>
-                                <div>
-                                    <ComboBox
-                                        options={classRooms}
-                                        label="Select Venue"
-                                        externalValue={handleValueChange('class_room_id')}
-                                        defaultValue={null}
-                                    />
-                                    {errors.class_room_id && (
-                                        <p className="mt-2 flex items-center text-sm text-red-500">
-                                            <AlertCircle className="mr-1 h-4 w-4" />
-                                            {errors.class_room_id}
-                                        </p>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Day */}
-                            {data.staff_type === 'administrator' ? (
-                                <div>
-                                    <label className="mb-2 block text-sm font-medium text-slate-700">Days *</label>
-                                    <div className="grid grid-cols-2 gap-2 rounded-xl border border-slate-200 p-3 sm:grid-cols-3 sm:gap-3 sm:p-4 dark:border-sidebar-border">
-                                        {daysOptions.map((day) => (
-                                            <label key={day.value} className="flex min-h-11 items-center gap-2 rounded-lg px-2 text-sm text-slate-700 dark:text-sidebar-foreground">
-                                                <input
-                                                    type="checkbox"
-                                                    value={day.value}
-                                                    checked={data.days.includes(day.value)}
-                                                    onChange={() => handleAdministratorDayToggle(day.value)}
-                                                    className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                                                />
-                                                <span>{day.label}</span>
-                                            </label>
-                                        ))}
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold tracking-wide uppercase ring-1 ring-white/20">
+                                            <Sparkles className="size-3.5" />
+                                            New schedule
+                                        </span>
+                                        <span className="inline-flex max-w-full rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold tracking-wide text-indigo-700 uppercase">
+                                            {academicYear.name}
+                                        </span>
                                     </div>
-                                    {(errors.days || errors['days.0']) && (
-                                        <p className="mt-2 flex items-center text-sm text-red-500">
-                                            <AlertCircle className="mr-1 h-4 w-4" />
-                                            {errors.days || errors['days.0']}
-                                        </p>
-                                    )}
-                                    <p className="mt-2 text-xs text-slate-500">One schedule will be created for each selected day.</p>
+                                    <h1 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">Assign staff to a venue and time</h1>
+                                    <p className="mt-2 max-w-2xl text-sm text-indigo-50/90">
+                                        Create a single session for a lecturer, or repeat a staff schedule across the days you choose.
+                                    </p>
                                 </div>
-                            ) : (
-                                <div>
-                                    <label className="mb-2 block text-sm font-medium text-slate-700">Day *</label>
-                                    <div>
-                                        <ComboBox options={daysOptions} label="Select Day" externalValue={handleValueChange('day')} defaultValue={null} />
-                                        {errors.day && (
-                                            <p className="mt-2 flex items-center text-sm text-red-500">
-                                                <AlertCircle className="mr-1 h-4 w-4" />
-                                                {errors.day}
-                                            </p>
+                                <div className="grid gap-3 sm:grid-cols-3 lg:min-w-[28rem]">
+                                    <HeroStat label="Staff" value={selectedStaff?.label || 'Pick staff'} />
+                                    <HeroStat label="Venue" value={selectedVenue?.label || 'Pick venue'} />
+                                    <HeroStat
+                                        label="When"
+                                        value={selectedDays.length ? `${selectedDays.length} day${selectedDays.length > 1 ? 's' : ''}` : 'Pick day'}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <div className="grid gap-6 xl:grid-cols-12">
+                        <div className="space-y-6 xl:col-span-8">
+                            <Section
+                                step="01"
+                                title="Who is assigned"
+                                subtitle="Pick the staff type, then choose the person. Lecturers also need a course."
+                            >
+                                <div className="grid gap-4">
+                                    <Field label="Staff type" error={errors.staff_type} required>
+                                        <div className="grid gap-2 sm:grid-cols-2">
+                                            {staffTypeOptions.map((option) => (
+                                                <button
+                                                    key={option.value}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setData('staff_type', option.value);
+                                                        setData('teacher_id', '');
+                                                        setFormKey((value) => value + 1);
+                                                        if (option.value === 'administrator') {
+                                                            setData('course_id', '');
+                                                            setData('day', '');
+                                                        } else {
+                                                            setData('days', []);
+                                                        }
+                                                    }}
+                                                    className={cn(
+                                                        'flex min-h-14 items-center justify-between rounded-2xl border px-4 text-left transition',
+                                                        data.staff_type === option.value
+                                                            ? 'border-indigo-500 bg-indigo-50 text-indigo-900 dark:border-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-100'
+                                                            : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-200 dark:border-sidebar-border dark:bg-card dark:text-sidebar-foreground/70',
+                                                    )}
+                                                >
+                                                    <span className="font-semibold">{option.label}</span>
+                                                    <span
+                                                        className={cn(
+                                                            'flex size-6 items-center justify-center rounded-full border',
+                                                            data.staff_type === option.value
+                                                                ? 'border-indigo-600 bg-indigo-600 text-white'
+                                                                : 'border-slate-300 text-transparent dark:border-sidebar-border',
+                                                        )}
+                                                    >
+                                                        <Check className="size-3.5" />
+                                                    </span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </Field>
+
+                                    <div className="grid gap-4 md:grid-cols-2">
+                                        <Field label="Assigned staff" error={errors.teacher_id} required>
+                                            <ComboBox
+                                                key={`staff-${formKey}-${data.staff_type}`}
+                                                options={staffOptions}
+                                                label="Search staff"
+                                                externalValue={handleValueChange('teacher_id')}
+                                                defaultValue={null}
+                                            />
+                                        </Field>
+                                        {isAdministrator ? (
+                                            <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-5 text-sm text-slate-500 dark:border-sidebar-border dark:text-sidebar-foreground/60">
+                                                Administrative staff schedules do not need a course.
+                                            </div>
+                                        ) : (
+                                            <Field label="Course" error={errors.course_id} required>
+                                                <ComboBox
+                                                    key={`course-${formKey}`}
+                                                    options={courses}
+                                                    label="Search course"
+                                                    externalValue={handleValueChange('course_id')}
+                                                    defaultValue={null}
+                                                />
+                                            </Field>
                                         )}
                                     </div>
                                 </div>
-                            )}
+                            </Section>
 
-                            {/* Time Slot */}
-                            <div className="grid min-w-0 grid-cols-1 gap-5 md:grid-cols-2 md:gap-6">
-                                <div className="min-w-0">
-                                    <label htmlFor="start_time" className="mb-2 block text-sm font-medium text-slate-700 dark:text-sidebar-foreground">
-                                        Start Time *
-                                    </label>
-                                    <input
-                                        id="start_time"
-                                        type="time"
-                                        name="start_time"
-                                        value={data.start_time}
-                                        onChange={(e) => setData('start_time', e.target.value)}
-                                        className="h-12 w-full min-w-0 rounded-xl border border-slate-300 bg-background px-3 text-base text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 md:text-sm dark:border-sidebar-border dark:text-sidebar-foreground"
+                            <Section step="02" title="Where it takes place" subtitle="Choose the venue for this schedule.">
+                                <Field label="Venue" error={errors.class_room_id} required>
+                                    <ComboBox
+                                        key={`venue-${formKey}`}
+                                        options={classRooms}
+                                        label="Search venue"
+                                        externalValue={handleValueChange('class_room_id')}
+                                        defaultValue={null}
                                     />
-                                    {errors.start_time && (
-                                        <p className="mt-2 flex items-center text-sm text-red-500">
-                                            <AlertCircle className="mr-1 h-4 w-4" />
-                                            {errors.start_time}
-                                        </p>
-                                    )}
-                                </div>
+                                </Field>
+                            </Section>
 
-                                <div className="min-w-0">
-                                    <label htmlFor="end_time" className="mb-2 block text-sm font-medium text-slate-700 dark:text-sidebar-foreground">
-                                        End Time *
-                                    </label>
-                                    <input
-                                        id="end_time"
-                                        type="time"
-                                        name="end_time"
-                                        value={data.end_time}
-                                        onChange={(e) => setData('end_time', e.target.value)}
-                                        className="h-12 w-full min-w-0 rounded-xl border border-slate-300 bg-background px-3 text-base text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 md:text-sm dark:border-sidebar-border dark:text-sidebar-foreground"
-                                    />
-                                    {errors.end_time && (
-                                        <p className="mt-2 flex items-center text-sm text-red-500">
-                                            <AlertCircle className="mr-1 h-4 w-4" />
-                                            {errors.end_time}
-                                        </p>
-                                    )}
-                                </div>
-                            </div>
+                            <Section
+                                step="03"
+                                title="When it runs"
+                                subtitle={
+                                    isAdministrator ? 'Select every day this schedule should repeat.' : 'Choose the day and time for this session.'
+                                }
+                            >
+                                <div className="grid gap-4">
+                                    <Field label={isAdministrator ? 'Days' : 'Day'} error={errors.days || errors['days.0'] || errors.day} required>
+                                        {isAdministrator ? (
+                                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                                                {daysOptions.map((day) => {
+                                                    const selected = data.days.includes(day.value);
 
-                            {/* Conflict Warning */}
-                            {checkingConflict ? (
-                                <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-900/40 dark:bg-blue-950/20">
-                                    <div className="flex items-center">
-                                        <div className="mr-3 h-4 w-4 animate-spin rounded-full border-b-2 border-blue-600"></div>
-                                        <span className="text-blue-700">Checking for time conflicts...</span>
-                                    </div>
-                                </div>
-                            ) : (
-                                hasConflict && (
-                                    <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-rose-900/40 dark:bg-rose-950/20">
-                                        <div className="flex items-start">
-                                            <AlertCircle className="mt-0.5 mr-3 h-5 w-5 flex-shrink-0 text-red-600" />
-                                            <div>
-                                                <p className="font-medium text-red-800">Time Conflict Detected!</p>
-                                                <p className="mt-1 text-sm text-red-700">{conflictMessage}</p>
-                                                <p className="mt-2 text-xs text-red-600">
-                                                    Please adjust the time, venue, staff member, or day to resolve the conflict.
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )
-                            )}
-
-                            {/* Duration Preview */}
-                            {data.start_time && data.end_time && !hasConflict && (
-                                <div className="rounded-xl border border-green-200 bg-green-50 p-4 dark:border-emerald-900/40 dark:bg-emerald-950/20">
-                                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                        <div>
-                                            <p className="font-medium text-green-800 dark:text-emerald-200">Time Slot Duration</p>
-                                            <p className="text-sm text-green-700 dark:text-emerald-300">
-                                                {(() => {
-                                                    const start = new Date(`2000-01-01T${data.start_time}`);
-                                                    const end = new Date(`2000-01-01T${data.end_time}`);
-                                                    const diffMs = end.getTime() - start.getTime();
-                                                    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-                                                    const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-
-                                                    if (diffHours === 0) {
-                                                        return `${diffMinutes} minutes`;
-                                                    } else if (diffMinutes === 0) {
-                                                        return `${diffHours} hour${diffHours > 1 ? 's' : ''}`;
-                                                    }
-                                                    return `${diffHours}h ${diffMinutes}m`;
-                                                })()}
-                                            </p>
-                                        </div>
-                                        <div className="text-sm text-green-600 sm:text-right dark:text-emerald-300">
-                                            <div>
-                                                {new Date(`2000-01-01T${data.start_time}`).toLocaleTimeString('en-US', {
-                                                    hour: '2-digit',
-                                                    minute: '2-digit',
-                                                    hour12: true,
-                                                })}{' '}
-                                                -{' '}
-                                                {new Date(`2000-01-01T${data.end_time}`).toLocaleTimeString('en-US', {
-                                                    hour: '2-digit',
-                                                    minute: '2-digit',
-                                                    hour12: true,
+                                                    return (
+                                                        <button
+                                                            key={day.value}
+                                                            type="button"
+                                                            onClick={() => handleAdministratorDayToggle(day.value)}
+                                                            className={cn(
+                                                                'min-h-12 rounded-2xl border px-3 text-sm font-semibold transition',
+                                                                selected
+                                                                    ? 'border-indigo-500 bg-indigo-50 text-indigo-800 dark:border-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-100'
+                                                                    : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-200 dark:border-sidebar-border dark:bg-card dark:text-sidebar-foreground/70',
+                                                            )}
+                                                        >
+                                                            {day.label.slice(0, 3)}
+                                                        </button>
+                                                    );
                                                 })}
                                             </div>
+                                        ) : (
+                                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                                                {daysOptions.map((day) => (
+                                                    <button
+                                                        key={day.value}
+                                                        type="button"
+                                                        onClick={() => setData('day', day.value)}
+                                                        className={cn(
+                                                            'min-h-12 rounded-2xl border px-3 text-sm font-semibold transition',
+                                                            data.day === day.value
+                                                                ? 'border-indigo-500 bg-indigo-50 text-indigo-800 dark:border-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-100'
+                                                                : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-200 dark:border-sidebar-border dark:bg-card dark:text-sidebar-foreground/70',
+                                                        )}
+                                                    >
+                                                        {day.label.slice(0, 3)}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {isAdministrator ? (
+                                            <p className="mt-2 text-xs text-slate-500 dark:text-sidebar-foreground/55">
+                                                One schedule will be created for each selected day.
+                                            </p>
+                                        ) : null}
+                                    </Field>
+
+                                    <div className="grid gap-4 sm:grid-cols-2">
+                                        <Field label="Start time" htmlFor="start_time" error={errors.start_time} required>
+                                            <input
+                                                id="start_time"
+                                                type="time"
+                                                value={data.start_time}
+                                                onChange={(event) => setData('start_time', event.target.value)}
+                                                className={fieldClass}
+                                                required
+                                            />
+                                        </Field>
+                                        <Field label="End time" htmlFor="end_time" error={errors.end_time} required>
+                                            <input
+                                                id="end_time"
+                                                type="time"
+                                                value={data.end_time}
+                                                onChange={(event) => setData('end_time', event.target.value)}
+                                                className={fieldClass}
+                                                required
+                                            />
+                                        </Field>
+                                    </div>
+
+                                    {checkingConflict ? (
+                                        <div className="flex items-center gap-2 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-800 dark:border-indigo-900/40 dark:bg-indigo-950/30 dark:text-indigo-100">
+                                            <Loader2 className="size-4 animate-spin" />
+                                            Checking for time conflicts…
                                         </div>
+                                    ) : hasConflict ? (
+                                        <div className="flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4 text-sm text-rose-800 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-100">
+                                            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                                            <div>
+                                                <p className="font-semibold">Time conflict detected</p>
+                                                <p className="mt-1">{conflictMessage}</p>
+                                                <p className="mt-2 text-xs">Adjust the time, venue, staff member, or day to continue.</p>
+                                            </div>
+                                        </div>
+                                    ) : data.start_time && data.end_time ? (
+                                        <div className="flex flex-col gap-1 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 sm:flex-row sm:items-center sm:justify-between dark:border-emerald-900/40 dark:bg-emerald-950/20">
+                                            <div>
+                                                <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">Ready to save</p>
+                                                <p className="text-sm text-emerald-800 dark:text-emerald-200">
+                                                    {durationLabel(data.start_time, data.end_time)} · {timeRange}
+                                                </p>
+                                            </div>
+                                            <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">No conflicts found</p>
+                                        </div>
+                                    ) : null}
+                                </div>
+                            </Section>
+                        </div>
+
+                        <aside className="xl:col-span-4">
+                            <div className="space-y-4 xl:sticky xl:top-6">
+                                <div className="rounded-3xl border border-indigo-100 bg-indigo-50/80 p-5 shadow-sm dark:border-indigo-900/40 dark:bg-indigo-950/20">
+                                    <p className="text-xs font-semibold tracking-[0.18em] text-indigo-700 uppercase dark:text-indigo-300">
+                                        Live preview
+                                    </p>
+                                    <h2 className="mt-2 text-lg font-semibold text-indigo-950 dark:text-indigo-50">What you’re assigning</h2>
+                                    <div className="mt-5 space-y-4">
+                                        <PreviewRow icon={UserRound} label="Staff" value={selectedStaff?.label || 'Not selected'} />
+                                        <PreviewRow
+                                            icon={BookOpen}
+                                            label="Course"
+                                            value={isAdministrator ? 'Not needed' : selectedCourse?.label || 'Not selected'}
+                                        />
+                                        <PreviewRow icon={MapPin} label="Venue" value={selectedVenue?.label || 'Not selected'} />
+                                        <PreviewRow
+                                            icon={CalendarDays}
+                                            label="Days"
+                                            value={selectedDays.length ? selectedDays.join(', ') : 'Not selected'}
+                                        />
+                                        <PreviewRow icon={Clock3} label="Time" value={timeRange} />
+                                        <PreviewRow icon={Building2} label="Academic year" value={academicYear.name} />
                                     </div>
                                 </div>
-                            )}
 
-                            {/* Form Actions */}
-                            <div className="flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:flex-wrap sm:justify-end dark:border-sidebar-border">
-                                <Link
-                                    href={route('admin.academics.time-tables.index')}
-                                    className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 px-5 py-3 font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-sidebar-border dark:text-sidebar-foreground dark:hover:bg-sidebar-accent"
-                                >
-                                    Cancel
-                                </Link>
-
-                                <button
-                                    type="button"
-                                    onClick={handleSaveAndAddAnother}
-                                    disabled={processing || hasConflict}
-                                    className={`inline-flex min-h-11 items-center justify-center rounded-xl bg-gradient-to-r from-green-600 to-emerald-700 px-5 py-3 font-medium text-white transition-all duration-200 ${
-                                        processing || hasConflict
-                                            ? 'cursor-not-allowed opacity-50'
-                                            : 'shadow-md hover:from-green-700 hover:to-emerald-800 hover:shadow-lg'
-                                    }`}
-                                >
-                                    {processing ? (
-                                        <>
-                                            <div className="mr-2 h-5 w-5 animate-spin rounded-full border-b-2 border-white"></div>
-                                            Saving...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Save className="mr-2 h-5 w-5" />
-                                            Save and Add Another
-                                        </>
-                                    )}
-                                </button>
-
-                                <button
-                                    type="submit"
-                                    disabled={processing || hasConflict}
-                                    className={`inline-flex min-h-11 items-center justify-center rounded-xl bg-gradient-to-r from-indigo-600 to-purple-700 px-5 py-3 font-medium text-white transition-all duration-200 ${
-                                        processing || hasConflict
-                                            ? 'cursor-not-allowed opacity-50'
-                                            : 'shadow-md hover:from-indigo-700 hover:to-purple-800 hover:shadow-lg'
-                                    }`}
-                                >
-                                    {processing ? (
-                                        <>
-                                            <div className="mr-2 h-5 w-5 animate-spin rounded-full border-b-2 border-white"></div>
-                                            Saving...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Save className="mr-2 h-5 w-5" />
-                                            Save Time Slot
-                                        </>
-                                    )}
-                                </button>
+                                <div className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-sidebar-border dark:bg-card">
+                                    <button
+                                        type="submit"
+                                        disabled={processing || !readyToSave}
+                                        className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-4 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                        {processing ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+                                        {processing ? 'Saving…' : 'Save schedule'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleSaveAndAddAnother}
+                                        disabled={processing || !readyToSave}
+                                        className="mt-3 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 text-sm font-semibold text-indigo-800 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-100"
+                                    >
+                                        <Plus className="size-4" />
+                                        Save and add another
+                                    </button>
+                                    <Link
+                                        href={route('admin.academics.time-tables.index')}
+                                        className="mt-3 inline-flex min-h-12 w-full items-center justify-center rounded-2xl border border-slate-200 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-sidebar-border dark:text-sidebar-foreground dark:hover:bg-sidebar-accent"
+                                    >
+                                        Cancel
+                                    </Link>
+                                    {!readyToSave && !hasConflict ? (
+                                        <p className="mt-3 text-center text-xs text-slate-500 dark:text-sidebar-foreground/55">
+                                            Complete staff, venue, day, and time to continue.
+                                        </p>
+                                    ) : null}
+                                </div>
                             </div>
-                        </form>
+                        </aside>
                     </div>
                 </div>
-            </div>
+            </form>
             <ToastContainer />
         </AppLayout>
     );
-};
+}
 
-export default CreateTimeTablePage;
+function Section({ step, title, subtitle, children }: { step: string; title: string; subtitle: string; children: ReactNode }) {
+    return (
+        <section className="rounded-3xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-6 dark:border-sidebar-border dark:bg-card">
+            <div className="flex items-start gap-3">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-indigo-50 text-xs font-bold tracking-wide text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-200">
+                    {step}
+                </span>
+                <div>
+                    <h2 className="text-lg font-semibold text-slate-900 dark:text-sidebar-foreground">{title}</h2>
+                    <p className="mt-1 text-sm text-slate-500 dark:text-sidebar-foreground/60">{subtitle}</p>
+                </div>
+            </div>
+            <div className="mt-5">{children}</div>
+        </section>
+    );
+}
+
+function Field({
+    label,
+    htmlFor,
+    error,
+    required,
+    children,
+}: {
+    label: string;
+    htmlFor?: string;
+    error?: string;
+    required?: boolean;
+    children: ReactNode;
+}) {
+    const Wrapper = htmlFor ? 'label' : 'div';
+
+    return (
+        <Wrapper {...(htmlFor ? { htmlFor } : {})} className="block min-w-0 space-y-2">
+            <span className="text-sm font-medium text-slate-800 dark:text-sidebar-foreground">
+                {label}
+                {required ? <span className="text-rose-500"> *</span> : null}
+            </span>
+            {children}
+            {error ? (
+                <span className="flex items-center gap-1 text-xs text-rose-600">
+                    <AlertTriangle className="size-3.5" />
+                    {error}
+                </span>
+            ) : null}
+        </Wrapper>
+    );
+}
+
+function HeroStat({ label, value }: { label: string; value: string }) {
+    return (
+        <div className="rounded-2xl bg-white/10 px-4 py-3 ring-1 ring-white/15">
+            <p className="text-[11px] font-medium tracking-wide text-indigo-100 uppercase">{label}</p>
+            <p className="mt-1 truncate text-sm font-semibold text-white">{value}</p>
+        </div>
+    );
+}
+
+function PreviewRow({ icon: Icon, label, value }: { icon: typeof CalendarDays; label: string; value: string }) {
+    return (
+        <div className="flex items-start gap-3">
+            <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl bg-white text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-200">
+                <Icon className="size-4" />
+            </div>
+            <div className="min-w-0">
+                <p className="text-xs font-medium text-indigo-800/70 dark:text-indigo-200/70">{label}</p>
+                <p className="mt-0.5 text-sm font-semibold break-words text-indigo-950 dark:text-indigo-50">{value}</p>
+            </div>
+        </div>
+    );
+}
