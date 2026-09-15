@@ -5,12 +5,17 @@ namespace App\Listeners;
 use App\Models\Teacher;
 use App\Models\User;
 use App\Services\ActivityLogService;
+use App\Services\UnifiedAuthenticationService;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
 
 class LogAuthenticationEvents
 {
+    /**
+     * Registered automatically from app/Listeners. Do not also Event::listen()
+     * these methods in a service provider — that writes every login twice.
+     */
     public function __construct(
         private ActivityLogService $activityLogService
     ) {}
@@ -45,16 +50,20 @@ class LogAuthenticationEvents
 
     public function handleFailed(Failed $event): void
     {
-        $this->activityLogService->logAuthentication(
-            eventType: 'failed_login',
-            description: 'Failed login attempt for ' . ($event->credentials['email'] ?? 'unknown email'),
-            status: ActivityLogService::STATUS_FAILED,
-            actor: [
+        $actor = $event->user
+            ? $this->resolveActorFromUser($event->user)
+            : [
                 'type' => null,
                 'id' => null,
                 'name' => $event->credentials['email'] ?? 'Guest',
-                'role' => 'guest',
-            ],
+                'role' => UnifiedAuthenticationService::roleLabel(null),
+            ];
+
+        $this->activityLogService->logAuthentication(
+            eventType: 'failed_login',
+            description: 'Failed login attempt for '.($event->credentials['email'] ?? 'unknown email'),
+            status: ActivityLogService::STATUS_FAILED,
+            actor: $actor,
             metadata: [
                 'guard' => $event->guard,
                 'email' => $event->credentials['email'] ?? null,
@@ -70,7 +79,7 @@ class LogAuthenticationEvents
                 'type' => User::class,
                 'id' => $user->id,
                 'name' => $user->name,
-                'role' => 'admin',
+                'role' => UnifiedAuthenticationService::roleLabel($user),
             ];
         }
 
@@ -79,7 +88,7 @@ class LogAuthenticationEvents
                 'type' => Teacher::class,
                 'id' => $user->id,
                 'name' => trim("{$user->first_name} {$user->last_name}"),
-                'role' => $user->staff_type === Teacher::STAFF_TYPE_ADMINISTRATOR ? 'administrator' : 'teacher',
+                'role' => UnifiedAuthenticationService::roleLabel($user),
             ];
         }
 
@@ -87,7 +96,7 @@ class LogAuthenticationEvents
             'type' => null,
             'id' => null,
             'name' => 'Unknown',
-            'role' => 'guest',
+            'role' => UnifiedAuthenticationService::roleLabel(null),
         ];
     }
 }

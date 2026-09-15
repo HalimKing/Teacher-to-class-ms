@@ -2,13 +2,9 @@
 
 namespace App\Providers;
 
-use App\Listeners\LogAuthenticationEvents;
 use App\Models\Teacher;
 use App\Services\UnifiedPasswordResetService;
 use App\Support\MailBranding;
-use Illuminate\Auth\Events\Failed;
-use Illuminate\Auth\Events\Login;
-use Illuminate\Auth\Events\Logout;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Mail\Events\MessageSending;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -48,10 +44,10 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('send-unit-messages', fn ($user): bool => $user instanceof Teacher && $user->hasLeadershipAssignment());
         Gate::define('view-unit-messages', fn ($user): bool => $user instanceof Teacher && $user->hasLeadershipAssignment());
 
-        Event::listen(Login::class, [LogAuthenticationEvents::class, 'handleLogin']);
-        Event::listen(Logout::class, [LogAuthenticationEvents::class, 'handleLogout']);
-        Event::listen(Failed::class, [LogAuthenticationEvents::class, 'handleFailed']);
         Event::listen(MessageSending::class, [MailBranding::class, 'embedLogo']);
+
+        // Authentication audit listeners live in App\Listeners\LogAuthenticationEvents
+        // and are discovered once. Registering them here as well duplicates every login.
 
         ResetPassword::createUrlUsing(function (object $notifiable, string $token) {
             $accountType = $notifiable instanceof Teacher
