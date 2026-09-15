@@ -28,10 +28,10 @@ class LecturerAlertNotification extends Notification
 
         return (new MailMessage)
             ->subject($data['title'])
-            ->greeting('Hello ' . trim(($notifiable->title ?? '') . ' ' . ($notifiable->first_name ?? '')) . ',')
+            ->greeting('Hello '.trim(($notifiable->title ?? '').' '.($notifiable->first_name ?? '')).',')
             ->line($data['message'])
-            ->action('Open Portal', url($data['url']))
-            ->line('Thank you for using ' . config('app.name') . '!');
+            ->action('Open Attendance Portal', url($data['url']))
+            ->line('Thank you for using '.config('app.name').'.');
     }
 
     /**

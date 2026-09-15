@@ -5,10 +5,12 @@ namespace App\Providers;
 use App\Listeners\LogAuthenticationEvents;
 use App\Models\Teacher;
 use App\Services\UnifiedPasswordResetService;
+use App\Support\MailBranding;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
 use Illuminate\Auth\Notifications\ResetPassword;
+use Illuminate\Mail\Events\MessageSending;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
@@ -49,6 +51,7 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(Login::class, [LogAuthenticationEvents::class, 'handleLogin']);
         Event::listen(Logout::class, [LogAuthenticationEvents::class, 'handleLogout']);
         Event::listen(Failed::class, [LogAuthenticationEvents::class, 'handleFailed']);
+        Event::listen(MessageSending::class, [MailBranding::class, 'embedLogo']);
 
         ResetPassword::createUrlUsing(function (object $notifiable, string $token) {
             $accountType = $notifiable instanceof Teacher

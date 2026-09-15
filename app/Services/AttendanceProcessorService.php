@@ -495,8 +495,8 @@ class AttendanceProcessorService
                 type: 'auto_absence_recorded',
                 category: LecturerNotificationPayload::CATEGORY_ATTENDANCE,
                 priority: LecturerNotificationPayload::PRIORITY_HIGH,
-                title: 'Automatic Absence Recorded',
-                message: "You were marked absent for {$courseName} because attendance was not completed before the attendance window expired.",
+                title: 'Attendance Session Expired',
+                message: "Your attendance session for {$courseName} has expired without a successful check-in. You have been marked absent for this session.",
                 url: '/teacher/attendance',
                 meta: [
                     'timetable_id' => $schedule->id,
@@ -521,8 +521,8 @@ class AttendanceProcessorService
                 type: 'auto_absence_recorded',
                 category: LecturerNotificationPayload::CATEGORY_ATTENDANCE,
                 priority: LecturerNotificationPayload::PRIORITY_HIGH,
-                title: 'Automatic Absence Recorded',
-                message: 'You were marked absent because your attendance session expired without a successful check-in.',
+                title: 'Attendance Session Expired',
+                message: 'Your attendance session has expired without a successful check-in. You have been marked absent for this session.',
                 url: '/teacher/staff-attendance',
                 meta: [
                     'timetable_id' => $schedule->id,
