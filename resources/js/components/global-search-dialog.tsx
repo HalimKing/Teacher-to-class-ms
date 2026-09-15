@@ -354,7 +354,7 @@ export function GlobalSearchDialog({ variant = 'icon' }: { variant?: 'icon' | 'h
                 <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-xl">
                     <DialogHeader className="sr-only">
                         <DialogTitle>Global search</DialogTitle>
-                        <DialogDescription>Search staff, courses, schedules, help desk, and more.</DialogDescription>
+                        <DialogDescription>Search pages, staff, courses, schedules, help desk, and more.</DialogDescription>
                     </DialogHeader>
 
                     <div className="flex items-center gap-2 border-b px-3 py-2">
@@ -364,7 +364,7 @@ export function GlobalSearchDialog({ variant = 'icon' }: { variant?: 'icon' | 'h
                             value={query}
                             onChange={(event) => setQuery(event.target.value)}
                             onKeyDown={onKeyDown}
-                            placeholder="Search staff, courses, venues, tickets…"
+                            placeholder="Search pages, staff, courses, venues…"
                             className="h-10 border-0 shadow-none focus-visible:ring-0"
                             role="combobox"
                             aria-expanded={open}

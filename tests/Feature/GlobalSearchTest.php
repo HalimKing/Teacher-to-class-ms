@@ -5,8 +5,10 @@ use App\Models\Department;
 use App\Models\Faculty;
 use App\Models\HelpDeskTicket;
 use App\Models\Program;
+use App\Models\SystemSetting;
 use App\Models\Teacher;
 use App\Models\User;
+use App\Support\LeadershipAssignment;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 
@@ -60,11 +62,11 @@ beforeEach(function () {
     $this->teacher = Teacher::create([
         'first_name' => 'Ada',
         'last_name' => 'Lovelace',
-        'email' => 'ada.search.' . uniqid() . '@example.com',
+        'email' => 'ada.search.'.uniqid().'@example.com',
         'phone' => '0244111000',
         'faculty_id' => $this->faculty->id,
         'department_id' => $this->department->id,
-        'employee_id' => 'SRCH' . uniqid(),
+        'employee_id' => 'SRCH'.uniqid(),
         'title' => 'Dr.',
         'staff_type' => Teacher::STAFF_TYPE_LECTURER,
     ]);
@@ -72,11 +74,11 @@ beforeEach(function () {
     $this->otherTeacher = Teacher::create([
         'first_name' => 'Grace',
         'last_name' => 'Hopper',
-        'email' => 'grace.search.' . uniqid() . '@example.com',
+        'email' => 'grace.search.'.uniqid().'@example.com',
         'phone' => '0244111001',
         'faculty_id' => $this->faculty->id,
         'department_id' => $this->department->id,
-        'employee_id' => 'OTH' . uniqid(),
+        'employee_id' => 'OTH'.uniqid(),
         'title' => 'Prof.',
         'staff_type' => Teacher::STAFF_TYPE_LECTURER,
     ]);
@@ -185,3 +187,105 @@ it('returns categories without requiring a query', function () {
         ->assertJsonPath('data.groups', [])
         ->assertJsonFragment(['value' => 'staff', 'label' => 'Staff']);
 });
+
+it('surfaces the newer admin modules as page results', function () {
+    $permissions = [
+        'admin.communication.view',
+        'admin.communication.compose',
+        'admin.venue-change-requests.view',
+        'admin.venue-change-authorizations.view',
+    ];
+
+    foreach ($permissions as $permission) {
+        Permission::firstOrCreate(['name' => $permission, 'guard_name' => 'web']);
+    }
+
+    $this->admin->givePermissionTo($permissions);
+
+    expect(pageTitlesFor($this, $this->admin, 'communication'))
+        ->toContain('Inbox', 'Compose Message', 'Communication Dashboard');
+
+    expect(pageTitlesFor($this, $this->admin, 'venue change'))
+        ->toContain('Venue Change Requests', 'Venue Change Authorizations');
+});
+
+it('hides page results for modules the admin cannot access', function () {
+    Permission::firstOrCreate(['name' => 'admin.communication.view', 'guard_name' => 'web']);
+
+    expect(pageTitlesFor($this, $this->limitedAdmin, 'communication'))->toBeEmpty();
+    expect(pageTitlesFor($this, $this->limitedAdmin, 'venue change'))->toBeEmpty();
+});
+
+it('offers communication pages to every staff member', function () {
+    expect(pageTitlesFor($this, $this->teacher, 'mail', 'teacher'))
+        ->toContain('Inbox', 'Sent', 'Drafts', 'All Mail');
+});
+
+it('keeps leadership-only modules out of results for staff without an assignment', function () {
+    $titles = pageTitlesFor($this, $this->teacher, 'unit', 'teacher');
+
+    expect($titles)->not->toContain('Unit Staff');
+    expect($titles)->not->toContain('Unit Attendance');
+    expect(pageTitlesFor($this, $this->teacher, 'compose', 'teacher'))->not->toContain('Compose Message');
+});
+
+it('offers unit modules to leadership staff', function () {
+    $dean = Teacher::create([
+        'first_name' => 'Dean',
+        'last_name' => 'Winters',
+        'email' => 'dean.search.'.uniqid().'@example.com',
+        'phone' => '0244111002',
+        'faculty_id' => $this->faculty->id,
+        'department_id' => $this->department->id,
+        'employee_id' => 'DEAN'.uniqid(),
+        'title' => 'Prof.',
+        'staff_type' => Teacher::STAFF_TYPE_LECTURER,
+        'leadership_role' => LeadershipAssignment::DIRECTOR_DEAN,
+        'leadership_faculty_id' => $this->faculty->id,
+    ]);
+
+    expect(pageTitlesFor($this, $dean, 'unit', 'teacher'))
+        ->toContain('Unit Staff', 'Unit Attendance');
+
+    expect(pageTitlesFor($this, $dean, 'self-reported', 'teacher'))
+        ->toContain('Self-reported Absences');
+
+    expect(pageTitlesFor($this, $dean, 'venue change', 'teacher'))
+        ->toContain('Venue Change Requests', 'Venue Change Authorizations');
+});
+
+it('hides the venue change request page when the feature is disabled', function () {
+    $staff = Teacher::create([
+        'first_name' => 'Ama',
+        'last_name' => 'Mensah',
+        'email' => 'ama.search.'.uniqid().'@example.com',
+        'phone' => '0244111003',
+        'faculty_id' => $this->faculty->id,
+        'department_id' => $this->department->id,
+        'employee_id' => 'ADM'.uniqid(),
+        'title' => 'Mrs.',
+        'staff_type' => Teacher::STAFF_TYPE_ADMINISTRATOR,
+    ]);
+
+    expect(pageTitlesFor($this, $staff, 'venue change', 'teacher'))->toContain('Venue Change Requests');
+
+    SystemSetting::query()->updateOrCreate(
+        ['key' => 'administrator_venue_change_requests_enabled'],
+        ['value' => '0', 'group' => 'attendance', 'type' => 'boolean', 'description' => 'test'],
+    );
+    SystemSetting::clearCache();
+
+    expect(pageTitlesFor($this, $staff, 'venue change', 'teacher'))->not->toContain('Venue Change Requests');
+});
+
+function pageTitlesFor(object $test, object $actor, string $query, string $guard = 'web'): Illuminate\Support\Collection
+{
+    $response = $test->actingAs($actor, $guard)
+        ->getJson(route('search', ['q' => $query, 'category' => 'pages']));
+
+    $response->assertOk();
+
+    $group = collect($response->json('data.groups'))->firstWhere('key', 'pages');
+
+    return collect($group['items'] ?? [])->pluck('title');
+}

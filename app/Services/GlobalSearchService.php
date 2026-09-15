@@ -8,6 +8,7 @@ use App\Models\Department;
 use App\Models\Faculty;
 use App\Models\HelpDeskTicket;
 use App\Models\Program;
+use App\Models\SystemSetting;
 use App\Models\Teacher;
 use App\Models\TeacherAttendance;
 use App\Models\TimeTable;
@@ -20,6 +21,11 @@ use Illuminate\Support\Str;
 class GlobalSearchService
 {
     public const LIMIT_PER_GROUP = 5;
+
+    /**
+     * Navigable pages are cheap to render, so they get a larger cap than record groups.
+     */
+    public const PAGE_LIMIT = 8;
 
     /**
      * @return array{groups: list<array<string, mixed>>, categories: list<array{value: string, label: string}>}
@@ -37,7 +43,7 @@ class GlobalSearchService
             ];
         }
 
-        $like = '%' . Str::lower($query) . '%';
+        $like = '%'.Str::lower($query).'%';
         $providers = $isAdmin
             ? $this->adminProviders()
             : $this->teacherProviders();
@@ -212,7 +218,7 @@ class GlobalSearchService
                 'key' => 'pages',
                 'label' => 'Pages',
                 'icon' => 'layout',
-                'search' => fn (string $q, string $like) => $this->searchTeacherPages($q, $staffType),
+                'search' => fn (string $q, string $like) => $this->searchTeacherPages($q, $teacher),
             ],
         ];
 
@@ -262,7 +268,7 @@ class GlobalSearchService
             ->limit(self::LIMIT_PER_GROUP)
             ->get()
             ->map(fn (Teacher $teacher) => [
-                'id' => 'staff-' . $teacher->id,
+                'id' => 'staff-'.$teacher->id,
                 'title' => trim("{$teacher->title} {$teacher->first_name} {$teacher->last_name}"),
                 'subtitle' => collect([
                     $teacher->employee_id,
@@ -289,7 +295,7 @@ class GlobalSearchService
             ->get()
             ->map(function (Course $course) use ($teacherId) {
                 return [
-                    'id' => 'course-' . $course->id,
+                    'id' => 'course-'.$course->id,
                     'title' => $course->name,
                     'subtitle' => collect([
                         $course->course_code,
@@ -313,7 +319,7 @@ class GlobalSearchService
             ->limit(self::LIMIT_PER_GROUP)
             ->get()
             ->map(fn (ClassRoom $room) => [
-                'id' => 'venue-' . $room->id,
+                'id' => 'venue-'.$room->id,
                 'title' => $room->name,
                 'subtitle' => $room->capacity ? "Capacity: {$room->capacity}" : 'Venue',
                 'url' => route('admin.school-management.class-rooms.edit', $room),
@@ -348,11 +354,11 @@ class GlobalSearchService
                 $title = $timetable->course?->name ?: 'Office Schedule';
 
                 return [
-                    'id' => 'schedule-' . $timetable->id,
+                    'id' => 'schedule-'.$timetable->id,
                     'title' => $title,
                     'subtitle' => collect([
                         $day,
-                        trim(($timetable->start_time ?? '') . '–' . ($timetable->end_time ?? ''), '–'),
+                        trim(($timetable->start_time ?? '').'–'.($timetable->end_time ?? ''), '–'),
                         $timetable->classRoom?->name,
                     ])->filter()->implode(' · '),
                     'url' => $teacherId
@@ -377,7 +383,7 @@ class GlobalSearchService
             ->limit(self::LIMIT_PER_GROUP)
             ->get()
             ->map(fn (Department $department) => [
-                'id' => 'department-' . $department->id,
+                'id' => 'department-'.$department->id,
                 'title' => $department->name,
                 'subtitle' => $department->faculty?->name ?: 'Department',
                 'url' => route('admin.school-management.departments.edit', $department),
@@ -396,7 +402,7 @@ class GlobalSearchService
             ->limit(self::LIMIT_PER_GROUP)
             ->get()
             ->map(fn (Faculty $faculty) => [
-                'id' => 'faculty-' . $faculty->id,
+                'id' => 'faculty-'.$faculty->id,
                 'title' => $faculty->name,
                 'subtitle' => 'Faculty',
                 'url' => route('admin.school-management.faculties.edit', $faculty),
@@ -415,7 +421,7 @@ class GlobalSearchService
             ->limit(self::LIMIT_PER_GROUP)
             ->get()
             ->map(fn (Program $program) => [
-                'id' => 'program-' . $program->id,
+                'id' => 'program-'.$program->id,
                 'title' => $program->name,
                 'subtitle' => collect([
                     $program->department?->name,
@@ -446,7 +452,7 @@ class GlobalSearchService
             ->get()
             ->map(function (HelpDeskTicket $ticket) use ($creatorId) {
                 return [
-                    'id' => 'ticket-' . $ticket->id,
+                    'id' => 'ticket-'.$ticket->id,
                     'title' => $ticket->subject,
                     'subtitle' => collect([
                         $ticket->ticket_number,
@@ -490,7 +496,7 @@ class GlobalSearchService
                     : 'Staff';
 
                 return [
-                    'id' => 'attendance-' . $record->id,
+                    'id' => 'attendance-'.$record->id,
                     'title' => $teacherId
                         ? ($record->course?->name ?: 'Attendance session')
                         : $teacherName,
@@ -519,7 +525,7 @@ class GlobalSearchService
             ->limit(self::LIMIT_PER_GROUP)
             ->get()
             ->map(fn (User $user) => [
-                'id' => 'user-' . $user->id,
+                'id' => 'user-'.$user->id,
                 'title' => $user->name,
                 'subtitle' => collect([$user->staff_id, $user->email])->filter()->implode(' · '),
                 'url' => route('admin.user-management.users.edit', $user),
@@ -530,37 +536,107 @@ class GlobalSearchService
     private function searchAdminPages(string $query): Collection
     {
         $pages = [
-            ['title' => 'Teaching Staff Attendance Reports', 'subtitle' => 'Reports', 'url' => '/admin/attendance', 'permission' => 'admin.attendance.view', 'keywords' => 'attendance report teaching'],
-            ['title' => 'Non-Teaching Staff Attendance Reports', 'subtitle' => 'Reports', 'url' => '/admin/settings-reports/staff-attendance-reports', 'permission' => 'admin.staff-attendance.view', 'keywords' => 'staff attendance report'],
-            ['title' => 'Attendance Explanations', 'subtitle' => 'Reports', 'url' => '/admin/attendance-explanations', 'permission' => 'admin.attendance-explanations.view', 'keywords' => 'explanation absence'],
-            ['title' => 'Help Desk', 'subtitle' => 'Support', 'url' => '/admin/help-desk', 'permission' => 'admin.help-desk.view', 'keywords' => 'help desk tickets support'],
+            ['title' => 'Dashboard', 'subtitle' => 'Overview', 'url' => '/admin/dashboard', 'permission' => 'admin.dashboard.view', 'keywords' => 'home overview'],
+
+            ['title' => 'All Staff', 'subtitle' => 'People', 'url' => '/admin/teachers', 'permission' => 'admin.teachers.view', 'keywords' => 'staff lecturers administrators teachers'],
+            ['title' => 'Add Staff', 'subtitle' => 'People', 'url' => '/admin/teachers/create', 'permission' => 'admin.teachers.create', 'keywords' => 'new staff lecturer administrator'],
+            ['title' => 'Password Management', 'subtitle' => 'People', 'url' => '/admin/teachers/password-management', 'permission' => 'admin.teachers.password-management', 'keywords' => 'reset staff passwords'],
+            ['title' => 'Users', 'subtitle' => 'People', 'url' => '/admin/user-management/users', 'permission' => 'admin.user-management.users.view', 'keywords' => 'accounts user management'],
+            ['title' => 'Add User', 'subtitle' => 'People', 'url' => '/admin/user-management/users/create', 'permission' => 'admin.user-management.users.create', 'keywords' => 'new user account'],
+            ['title' => 'User Roles', 'subtitle' => 'People', 'url' => '/admin/user-management/roles', 'permission' => 'admin.user-management.roles.view', 'keywords' => 'roles permissions access control'],
+
+            ['title' => 'Teaching Staff Attendance Reports', 'subtitle' => 'Attendance', 'url' => '/admin/attendance', 'permission' => 'admin.attendance.view', 'keywords' => 'attendance report teaching lecturer'],
+            ['title' => 'Non-Teaching Staff Attendance Reports', 'subtitle' => 'Attendance', 'url' => '/admin/settings-reports/staff-attendance-reports', 'permission' => 'admin.staff-attendance.view', 'keywords' => 'staff attendance report administrator'],
+            ['title' => 'Attendance Explanations', 'subtitle' => 'Attendance', 'url' => '/admin/attendance-explanations', 'permission' => 'admin.attendance-explanations.view', 'keywords' => 'explanation absence excused self reported'],
+
             ['title' => 'Assigned Schedules', 'subtitle' => 'Schedules', 'url' => '/admin/academics/time-tables', 'permission' => 'admin.academics.time-tables.view', 'keywords' => 'timetable schedule'],
-            ['title' => 'All Staff', 'subtitle' => 'Staff', 'url' => '/admin/teachers', 'permission' => 'admin.teachers.view', 'keywords' => 'staff lecturers administrators'],
-            ['title' => 'Venues', 'subtitle' => 'Settings', 'url' => '/admin/school-management/class-rooms', 'permission' => 'admin.school-management.class-rooms.view', 'keywords' => 'venue classroom'],
-            ['title' => 'System Settings', 'subtitle' => 'Settings', 'url' => '/admin/settings-reports/settings', 'permission' => 'admin.settings.view', 'keywords' => 'settings configuration'],
+            ['title' => 'Create Schedule', 'subtitle' => 'Schedules', 'url' => '/admin/academics/time-tables/create', 'permission' => 'admin.academics.time-tables.create', 'keywords' => 'new schedule timetable venue slot'],
+            ['title' => 'Bulk Create Schedules', 'subtitle' => 'Schedules', 'url' => '/admin/academics/time-tables/bulk-create', 'permission' => 'admin.academics.time-tables.create', 'keywords' => 'bulk import schedules csv'],
+            ['title' => 'Generate Time Table', 'subtitle' => 'Schedules', 'url' => '/admin/academics/time-tables/generate', 'permission' => 'admin.academics.time-tables.generate', 'keywords' => 'generate automatic timetable'],
+            ['title' => 'Rescheduled Sessions', 'subtitle' => 'Schedules', 'url' => '/admin/school-management/schedules', 'permission' => 'admin.schedules.view', 'keywords' => 'reschedule moved session'],
+            ['title' => 'Venue Change Authorizations', 'subtitle' => 'Schedules', 'url' => '/admin/venue-change-authorizations', 'permission' => 'admin.venue-change-authorizations.view', 'keywords' => 'venue change authorization room move'],
+            ['title' => 'Venue Change Requests', 'subtitle' => 'Schedules', 'url' => '/admin/venue-change-requests', 'permission' => 'admin.venue-change-requests.view', 'keywords' => 'venue change request approval dean head of department'],
+
+            ['title' => 'Inbox', 'subtitle' => 'Communication', 'url' => '/admin/communication/inbox', 'permission' => 'admin.communication.view', 'keywords' => 'mail messages inbox conversations threads'],
+            ['title' => 'Sent', 'subtitle' => 'Communication', 'url' => '/admin/communication/sent', 'permission' => ['admin.communication.view-sent', 'admin.communication.view'], 'keywords' => 'mail messages sent'],
+            ['title' => 'Drafts', 'subtitle' => 'Communication', 'url' => '/admin/communication/drafts', 'permission' => ['admin.communication.view', 'admin.communication.manage-drafts'], 'keywords' => 'mail messages drafts unsent'],
+            ['title' => 'All Mail', 'subtitle' => 'Communication', 'url' => '/admin/communication/all', 'permission' => 'admin.communication.view', 'keywords' => 'mail messages archive everything'],
+            ['title' => 'Communication Dashboard', 'subtitle' => 'Communication', 'url' => '/admin/communication', 'permission' => 'admin.communication.view', 'keywords' => 'communication overview messaging'],
+            ['title' => 'Compose Message', 'subtitle' => 'Communication', 'url' => '/admin/communication/compose', 'permission' => 'admin.communication.compose', 'keywords' => 'new message announcement broadcast write'],
+
+            ['title' => 'Faculties', 'subtitle' => 'School', 'url' => '/admin/school-management/faculties', 'permission' => 'admin.school-management.faculties.view', 'keywords' => 'faculty school'],
+            ['title' => 'Departments', 'subtitle' => 'School', 'url' => '/admin/school-management/departments', 'permission' => 'admin.school-management.departments.view', 'keywords' => 'department unit'],
+            ['title' => 'Venues', 'subtitle' => 'School', 'url' => '/admin/school-management/class-rooms', 'permission' => 'admin.school-management.class-rooms.view', 'keywords' => 'venue classroom room hall'],
+
+            ['title' => 'Academic Years', 'subtitle' => 'Catalog', 'url' => '/admin/school-management/academic-years', 'permission' => 'admin.school-management.academic-years.view', 'keywords' => 'academic year session'],
+            ['title' => 'Academic Periods', 'subtitle' => 'Catalog', 'url' => '/admin/school-management/academic-periods', 'permission' => 'admin.school-management.academic-periods.view', 'keywords' => 'academic period semester trimester'],
+            ['title' => 'Programs', 'subtitle' => 'Catalog', 'url' => '/admin/school-management/programs', 'permission' => 'admin.school-management.programs.view', 'keywords' => 'program course of study'],
+            ['title' => 'Courses', 'subtitle' => 'Catalog', 'url' => '/admin/school-management/courses', 'permission' => 'admin.school-management.courses.view', 'keywords' => 'course subject module'],
+
+            ['title' => 'System Settings', 'subtitle' => 'System', 'url' => '/admin/settings-reports/settings', 'permission' => 'admin.settings.view', 'keywords' => 'settings configuration face verification geolocation'],
+            ['title' => 'Holidays & Breaks', 'subtitle' => 'System', 'url' => '/admin/holidays-breaks', 'permission' => 'admin.holidays-breaks.view', 'keywords' => 'holiday break vacation non working day'],
+            ['title' => 'System Logs', 'subtitle' => 'System', 'url' => '/admin/system-logs', 'permission' => 'admin.system-logs.view', 'keywords' => 'logs audit activity trail'],
+
+            ['title' => 'Help Desk', 'subtitle' => 'Support', 'url' => '/admin/help-desk', 'permission' => 'admin.help-desk.view', 'keywords' => 'help desk tickets support'],
         ];
 
         return $this->filterStaticPages($pages, $query, true);
     }
 
-    private function searchTeacherPages(string $query, string $staffType): Collection
+    private function searchTeacherPages(string $query, Teacher $teacher): Collection
     {
+        $anyStaff = [Teacher::STAFF_TYPE_LECTURER, Teacher::STAFF_TYPE_ADMINISTRATOR];
+        $lecturer = [Teacher::STAFF_TYPE_LECTURER];
+        $administrator = [Teacher::STAFF_TYPE_ADMINISTRATOR];
+
         $pages = [
-            ['title' => 'Help Desk', 'subtitle' => 'Support', 'url' => '/teacher/help-desk', 'keywords' => 'help desk tickets support', 'staffTypes' => ['lecturer', 'administrator']],
-            ['title' => 'Explanations', 'subtitle' => 'Attendance', 'url' => '/teacher/attendance-explanations', 'keywords' => 'explanation absence', 'staffTypes' => ['lecturer', 'administrator']],
-            ['title' => 'My Schedules', 'subtitle' => 'Academic', 'url' => '/teacher/timetable', 'keywords' => 'timetable schedule', 'staffTypes' => ['lecturer']],
-            ['title' => 'My Courses', 'subtitle' => 'Academic', 'url' => '/teacher/my-courses', 'keywords' => 'courses teaching', 'staffTypes' => ['lecturer']],
-            ['title' => 'Attendance Records', 'subtitle' => 'Attendance', 'url' => '/teacher/records', 'keywords' => 'records attendance', 'staffTypes' => ['lecturer']],
-            ['title' => 'Attendance Analytics', 'subtitle' => 'Reports', 'url' => '/teacher/reports', 'keywords' => 'reports analytics', 'staffTypes' => ['lecturer']],
-            ['title' => 'Take Attendance', 'subtitle' => 'Attendance', 'url' => '/teacher/attendance', 'keywords' => 'check in attendance', 'staffTypes' => ['lecturer']],
-            ['title' => 'Staff Attendance', 'subtitle' => 'Attendance', 'url' => '/teacher/staff-attendance', 'keywords' => 'staff attendance check in', 'staffTypes' => ['administrator']],
-            ['title' => 'Staff Attendance Report', 'subtitle' => 'Reports', 'url' => '/teacher/staff-reports', 'keywords' => 'staff report', 'staffTypes' => ['administrator']],
+            ['title' => 'Dashboard', 'subtitle' => 'Overview', 'url' => '/teacher/dashboard', 'keywords' => 'home overview', 'staffTypes' => $anyStaff],
+
+            ['title' => 'Take Attendance', 'subtitle' => 'Attendance', 'url' => '/teacher/attendance', 'keywords' => 'check in check out attendance face', 'staffTypes' => $lecturer],
+            ['title' => 'Take Attendance', 'subtitle' => 'Attendance', 'url' => '/teacher/staff-attendance', 'keywords' => 'check in check out staff attendance shift face', 'staffTypes' => $administrator],
+            ['title' => 'Explanations', 'subtitle' => 'Attendance', 'url' => '/teacher/attendance-explanations', 'keywords' => 'explanation absence excuse self reported absent', 'staffTypes' => $anyStaff],
+            ['title' => 'Venue Change Requests', 'subtitle' => 'Attendance', 'url' => '/teacher/venue-change-requests', 'keywords' => 'venue change request room move approval', 'staffTypes' => $administrator, 'requiresVenueChangeRequests' => true],
+            ['title' => 'Attendance Report', 'subtitle' => 'Attendance', 'url' => '/teacher/staff-reports', 'keywords' => 'staff attendance report summary', 'staffTypes' => $administrator],
+
+            ['title' => 'My Schedules', 'subtitle' => 'Academic', 'url' => '/teacher/timetable', 'keywords' => 'timetable schedule lectures', 'staffTypes' => $lecturer],
+            ['title' => 'My Courses', 'subtitle' => 'Academic', 'url' => '/teacher/my-courses', 'keywords' => 'courses teaching subjects', 'staffTypes' => $lecturer],
+
+            ['title' => 'Records', 'subtitle' => 'My Work', 'url' => '/teacher/records', 'keywords' => 'attendance records history', 'staffTypes' => $lecturer],
+            ['title' => 'Reminders', 'subtitle' => 'My Work', 'url' => '/teacher/reminders', 'keywords' => 'reminders alerts notes', 'staffTypes' => $lecturer],
+            ['title' => 'Reports', 'subtitle' => 'My Work', 'url' => '/teacher/reports', 'keywords' => 'reports analytics attendance', 'staffTypes' => $lecturer],
+
+            ['title' => 'Inbox', 'subtitle' => 'Communication', 'url' => '/teacher/communication/inbox', 'keywords' => 'mail messages inbox conversations threads', 'staffTypes' => $anyStaff],
+            ['title' => 'Sent', 'subtitle' => 'Communication', 'url' => '/teacher/communication/sent', 'keywords' => 'mail messages sent', 'staffTypes' => $anyStaff],
+            ['title' => 'Drafts', 'subtitle' => 'Communication', 'url' => '/teacher/communication/drafts', 'keywords' => 'mail messages drafts unsent', 'staffTypes' => $anyStaff],
+            ['title' => 'All Mail', 'subtitle' => 'Communication', 'url' => '/teacher/communication/all', 'keywords' => 'mail messages archive everything', 'staffTypes' => $anyStaff],
+            ['title' => 'Communication Dashboard', 'subtitle' => 'Communication', 'url' => '/teacher/communication', 'keywords' => 'communication overview messaging', 'staffTypes' => $anyStaff, 'requiresLeadership' => true],
+            ['title' => 'Compose Message', 'subtitle' => 'Communication', 'url' => '/teacher/communication/compose', 'keywords' => 'new message announcement write', 'staffTypes' => $anyStaff, 'requiresLeadership' => true],
+
+            ['title' => 'Unit Staff', 'subtitle' => 'My Unit', 'url' => '/teacher/unit/staff', 'keywords' => 'unit staff faculty department members', 'staffTypes' => $anyStaff, 'requiresLeadership' => true],
+            ['title' => 'Unit Attendance', 'subtitle' => 'My Unit', 'url' => '/teacher/unit/attendance', 'keywords' => 'unit attendance monitoring', 'staffTypes' => $anyStaff, 'requiresLeadership' => true],
+            ['title' => 'Self-reported Absences', 'subtitle' => 'My Unit', 'url' => '/teacher/unit/self-reported-absences', 'keywords' => 'self reported absence absent mark reason', 'staffTypes' => $anyStaff, 'requiresLeadership' => true],
+            ['title' => 'Venue Change Requests', 'subtitle' => 'My Unit', 'url' => '/teacher/unit/venue-change-requests', 'keywords' => 'unit venue change request approve reject', 'staffTypes' => $anyStaff, 'requiresLeadership' => true],
+            ['title' => 'Venue Change Authorizations', 'subtitle' => 'My Unit', 'url' => '/teacher/unit/venue-change-authorizations', 'keywords' => 'unit venue change authorization room move', 'staffTypes' => $anyStaff, 'requiresLeadership' => true],
+            ['title' => 'New Venue Change Authorization', 'subtitle' => 'My Unit', 'url' => '/teacher/unit/venue-change-authorizations/create', 'keywords' => 'authorize venue change create room move', 'staffTypes' => $anyStaff, 'requiresLeadership' => true],
+
+            ['title' => 'Help Desk', 'subtitle' => 'Support', 'url' => '/teacher/help-desk', 'keywords' => 'help desk tickets support', 'staffTypes' => $anyStaff],
         ];
 
-        $pages = array_values(array_filter(
-            $pages,
-            fn (array $page) => in_array($staffType, $page['staffTypes'], true)
-        ));
+        $staffType = $teacher->staff_type ?? Teacher::STAFF_TYPE_LECTURER;
+        $hasLeadership = $teacher->hasLeadershipAssignment();
+        $venueChangeRequestsEnabled = SystemSetting::administratorVenueChangeRequestsEnabled();
+
+        $pages = array_values(array_filter($pages, function (array $page) use ($staffType, $hasLeadership, $venueChangeRequestsEnabled) {
+            if (! in_array($staffType, $page['staffTypes'], true)) {
+                return false;
+            }
+
+            if (! empty($page['requiresLeadership']) && ! $hasLeadership) {
+                return false;
+            }
+
+            return empty($page['requiresVenueChangeRequests']) || $venueChangeRequestsEnabled;
+        }));
 
         return $this->filterStaticPages($pages, $query, false);
     }
@@ -575,26 +651,54 @@ class GlobalSearchService
         $user = Auth::guard('web')->user();
 
         return collect($pages)
-            ->filter(function (array $page) use ($needle, $checkPermission, $user) {
-                if ($checkPermission && ! empty($page['permission'])) {
-                    if (! $user || ! $user->can($page['permission'])) {
-                        return false;
-                    }
+            ->filter(function (array $page) use ($checkPermission, $user) {
+                if (! $checkPermission || empty($page['permission'])) {
+                    return true;
                 }
 
-                $haystack = Str::lower(($page['title'] ?? '') . ' ' . ($page['subtitle'] ?? '') . ' ' . ($page['keywords'] ?? ''));
-
-                return str_contains($haystack, $needle);
+                return $user !== null
+                    && collect((array) $page['permission'])->contains(fn (string $permission) => $user->can($permission));
             })
-            ->take(self::LIMIT_PER_GROUP)
+            ->map(fn (array $page) => $page + ['rank' => $this->pageMatchRank($page, $needle)])
+            ->filter(fn (array $page) => $page['rank'] !== null)
+            ->sortBy('rank')
+            ->take(self::PAGE_LIMIT)
             ->values()
-            ->map(fn (array $page, int $index) => [
-                'id' => 'page-' . $index . '-' . Str::slug($page['title']),
+            ->map(fn (array $page) => [
+                'id' => 'page-'.Str::slug($page['url']),
                 'title' => $page['title'],
                 'subtitle' => $page['subtitle'],
                 'url' => $page['url'],
                 'meta' => null,
             ]);
+    }
+
+    /**
+     * Rank a page against the query so the closest titles survive the result cap.
+     *
+     * @param  array<string, mixed>  $page
+     */
+    private function pageMatchRank(array $page, string $needle): ?int
+    {
+        $title = Str::lower((string) ($page['title'] ?? ''));
+
+        if (str_starts_with($title, $needle)) {
+            return 0;
+        }
+
+        if (str_contains($title, $needle)) {
+            return 1;
+        }
+
+        if (str_contains(Str::lower((string) ($page['subtitle'] ?? '')), $needle)) {
+            return 2;
+        }
+
+        if (str_contains(Str::lower((string) ($page['keywords'] ?? '')), $needle)) {
+            return 3;
+        }
+
+        return null;
     }
 
     /**
