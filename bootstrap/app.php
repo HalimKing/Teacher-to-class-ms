@@ -45,6 +45,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'leadership' => EnsureLeadershipAssignment::class,
         ]);
 
+        $middleware->redirectGuestsTo(fn () => route('login'));
         $middleware->redirectUsersTo(fn (Request $request) => AuthenticatedHome::path($request));
 
         $middleware->web(append: [

@@ -112,8 +112,13 @@ beforeEach(function () {
 });
 
 it('redirects unauthenticated users away from search', function () {
-    $this->getJson(route('search', ['q' => 'ada']))
+    $this->get(route('search', ['q' => 'ada']))
         ->assertRedirect(route('login'));
+});
+
+it('returns 401 for unauthenticated json search requests', function () {
+    $this->getJson(route('search', ['q' => 'ada']))
+        ->assertUnauthorized();
 });
 
 it('allows admins to search authorized modules', function () {

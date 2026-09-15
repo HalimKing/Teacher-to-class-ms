@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Services\AuthSecuritySettingsService;
+use App\Services\UnifiedAuthenticationService;
 use App\Support\AuthenticatedHome;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -16,6 +17,7 @@ class UnifiedLoginController extends Controller
 {
     public function __construct(
         private AuthSecuritySettingsService $authSecuritySettings,
+        private UnifiedAuthenticationService $unifiedAuthentication,
     ) {}
 
     public function show(Request $request): Response|RedirectResponse
@@ -41,23 +43,10 @@ class UnifiedLoginController extends Controller
         $credentials = $request->only('email', 'password');
         $remember = $request->boolean('remember');
 
-        // Match the login form: "Remember me for 30 days"
-        $rememberMinutes = 60 * 24 * 30;
-        Auth::guard('web')->setRememberDuration($rememberMinutes);
-        Auth::guard('teacher')->setRememberDuration($rememberMinutes);
-
-        // 1️⃣ Try admin login
-        if (Auth::guard('web')->attempt($credentials, $remember)) {
+        if ($this->unifiedAuthentication->attempt($credentials, $remember)) {
             $request->session()->regenerate();
 
-            return redirect()->to(AuthenticatedHome::path($request));
-        }
-
-        // 2️⃣ Try teacher login
-        if (Auth::guard('teacher')->attempt($credentials, $remember)) {
-            $request->session()->regenerate();
-
-            return redirect()->to(AuthenticatedHome::path($request));
+            return redirect()->to(AuthenticatedHome::afterLogin($request));
         }
 
         return back()->withErrors([
