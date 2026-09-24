@@ -14,6 +14,7 @@ use App\Services\HolidayBreakService;
 use App\Services\LecturerNotificationService;
 use App\Services\RescheduledAttendanceService;
 use App\Services\SelfReportedAbsenceService;
+use App\Http\Controllers\Concerns\EnforcesAttendanceGeofence;
 use App\Support\AttendanceLock;
 use App\Support\LecturerNotificationPayload;
 use Carbon\Carbon;
@@ -25,6 +26,8 @@ use Inertia\Response;
 
 class TeacherAttendanceController extends Controller
 {
+    use EnforcesAttendanceGeofence;
+
     public function __construct(
         private AttendanceTimingService $timingService,
         private LecturerNotificationService $lecturerNotifications,
@@ -144,6 +147,7 @@ class TeacherAttendanceController extends Controller
             'coordinates.latitude' => 'required|numeric',
             'coordinates.longitude' => 'required|numeric',
             'coordinates.accuracy' => 'required|numeric',
+            'coordinates.captured_at' => 'nullable',
             'course_id' => 'required|exists:courses,id',
             'course_name' => 'required|string',
             'class_room' => 'required|string',
@@ -270,32 +274,21 @@ class TeacherAttendanceController extends Controller
             $faceMatchScore = $verifiedFace['score'];
         }
 
-        // System setting: enforce GPS after identity has been verified.
-        $gpsEnforcement = SystemSetting::getValue('gps_enforcement_enabled', true);
-        if ($gpsEnforcement && ! $request->within_range) {
-            AttendanceActivityLog::logAttempt('attempt_failed', auth('teacher')->id(), (int) $request->timetable_id, [
-                'reason' => 'out_of_range',
-                'coordinates' => $request->coordinates,
-                'distance' => $request->distance,
-                'within_range' => false,
-            ]);
+        $effectiveClassroom = $attendanceContext['effective_classroom'] ?? $timetable->classRoom;
+        if ($locationFailure = $this->rejectUnlessInsideVenue($request, $effectiveClassroom, auth('teacher')->id(), (int) $request->timetable_id)) {
             $this->notifyAttendanceFailure(
                 'attendance_geolocation_failed',
                 'Geolocation Verification Failed',
-                'You are outside the allowed attendance location. Please move within range.',
+                (string) $locationFailure->getData(true)['message'],
             );
 
-            return response()->json([
-                'success' => false,
-                'message' => 'You are outside the allowed attendance location. Please move within range.',
-            ], 400);
+            return $locationFailure;
         }
 
         $checkInOutcome = $this->timingService->resolveCheckInOutcome($now, $scheduledStart, AttendanceTimingService::ROLE_TEACHER);
         $status = $checkInOutcome['attendance_status'];
 
         try {
-            $effectiveClassroom = $attendanceContext['effective_classroom'] ?? $timetable->classRoom;
             $attendance = new TeacherAttendance;
             $attendance->classroom_id = $effectiveClassroom?->id ?? $timetable->class_room_id;
             $attendance->teacher_id = auth('teacher')->id();
@@ -382,6 +375,7 @@ class TeacherAttendanceController extends Controller
             'coordinates.latitude' => 'required|numeric',
             'coordinates.longitude' => 'required|numeric',
             'coordinates.accuracy' => 'required|numeric',
+            'coordinates.captured_at' => 'nullable',
         ], $facialRecognition->attendanceValidationRules($facialRecognition->isEnabled()));
         if (SystemSetting::getValue('gps_enforcement_enabled', true)) {
             $rules['distance'] = 'required|numeric';
@@ -464,20 +458,9 @@ class TeacherAttendanceController extends Controller
             }
         }
 
-        $gpsEnforcement = SystemSetting::getValue('gps_enforcement_enabled', true);
-        if ($gpsEnforcement && $request->has('within_range') && ! $request->boolean('within_range')) {
-            AttendanceActivityLog::logAttempt('attempt_failed', auth('teacher')->id(), (int) $attendance->timetable_id, [
-                'reason' => 'check_out_out_of_range',
-                'attendance_id' => $attendance->id,
-                'coordinates' => $request->coordinates,
-                'distance' => $request->input('distance'),
-                'within_range' => false,
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'You are outside the allowed attendance location for check-out.',
-            ], 400);
+        $checkoutClassroom = $attendanceContext['effective_classroom'] ?? $timetable->classRoom;
+        if ($locationFailure = $this->rejectUnlessInsideVenue($request, $checkoutClassroom, auth('teacher')->id(), (int) $attendance->timetable_id)) {
+            return $locationFailure;
         }
 
         $checkOutOutcome = $this->timingService->resolveCheckOutOutcome(

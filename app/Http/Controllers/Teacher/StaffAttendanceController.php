@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers\Teacher;
 
+use App\Http\Controllers\Concerns\EnforcesAttendanceGeofence;
 use App\Http\Controllers\Controller;
 use App\Models\StaffAttendance;
-use App\Models\SystemSetting;
 use App\Models\Teacher;
 use App\Models\TimeTable;
 use App\Services\ActivityLogService;
@@ -27,6 +27,8 @@ use Inertia\Response;
 
 class StaffAttendanceController extends Controller
 {
+    use EnforcesAttendanceGeofence;
+
     public function __construct(
         private AttendanceTimingService $timingService,
         private VenueChangeAuthorizationService $venueChangeAuthorization,
@@ -142,6 +144,7 @@ class StaffAttendanceController extends Controller
             'coordinates.latitude' => 'required|numeric',
             'coordinates.longitude' => 'required|numeric',
             'coordinates.accuracy' => 'required|numeric',
+            'coordinates.captured_at' => 'nullable',
             'distance' => 'required|numeric',
             'within_range' => 'required|boolean',
         ], $facialRecognition->attendanceValidationRules($facialRecognition->isEnabled())));
@@ -264,7 +267,6 @@ class StaffAttendanceController extends Controller
             $faceMatchScore = $verifiedFace['score'];
         }
 
-        $gpsEnforcement = SystemSetting::getValue('gps_enforcement_enabled', true);
         $venueContext = $this->venueChangeAuthorization->resolveEffectiveVenue(
             $timetable,
             (int) $staff->id,
@@ -272,12 +274,12 @@ class StaffAttendanceController extends Controller
             'check_in',
         );
 
-        if ($gpsEnforcement && ! $request->boolean('within_range')) {
-            return response()->json([
-                'success' => false,
-                'message' => 'You are outside the allowed attendance location. Please move within range.',
-            ], 400);
+        if ($locationFailure = $this->rejectUnlessInsideVenue($request, $venueContext['classroom'] ?? $timetable->classRoom, $staff->id, $timetable->id)) {
+            return $locationFailure;
         }
+
+        $validated['distance'] = $request->input('distance');
+        $validated['within_range'] = $request->boolean('within_range');
 
         $effectiveClassroom = $venueContext['classroom'] ?? $timetable->classRoom;
         $authorization = $venueContext['authorization'];
@@ -342,6 +344,7 @@ class StaffAttendanceController extends Controller
             'coordinates.latitude' => 'required|numeric',
             'coordinates.longitude' => 'required|numeric',
             'coordinates.accuracy' => 'required|numeric',
+            'coordinates.captured_at' => 'nullable',
             'distance' => 'required|numeric',
             'within_range' => 'required|boolean',
         ], $facialRecognition->attendanceValidationRules($facialRecognition->isEnabled())));
@@ -405,7 +408,6 @@ class StaffAttendanceController extends Controller
             }
         }
 
-        $gpsEnforcement = SystemSetting::getValue('gps_enforcement_enabled', true);
         $now = Carbon::now();
         $venueContext = $attendance->timetable
             ? $this->venueChangeAuthorization->resolveEffectiveVenue(
@@ -416,12 +418,12 @@ class StaffAttendanceController extends Controller
             )
             : ['classroom' => null, 'authorization' => null, 'authorized_venue_used' => false];
 
-        if ($gpsEnforcement && ! $request->boolean('within_range')) {
-            return response()->json([
-                'success' => false,
-                'message' => 'You are outside the allowed attendance location for check-out.',
-            ], 400);
+        if ($locationFailure = $this->rejectUnlessInsideVenue($request, $venueContext['classroom'] ?? $attendance->timetable?->classRoom, $staff->id, $attendance->timetable_id)) {
+            return $locationFailure;
         }
+
+        $validated['distance'] = $request->input('distance');
+        $validated['within_range'] = $request->boolean('within_range');
 
         $scheduledEnd = $this->timingService->parseScheduleTime((string) $attendance->timetable?->end_time, $now);
         $checkOutOutcome = $this->timingService->resolveCheckOutOutcome(

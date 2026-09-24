@@ -2,7 +2,8 @@ import FaceCaptureModal from '@/components/face/FaceCaptureModal';
 import AppLayout from '@/layouts/app-layout';
 import { ATTENDANCE_LOCK_MESSAGE } from '@/lib/attendance-lock';
 import { type FaceCaptureResult } from '@/lib/face-recognition';
-import { formatOutOfRangeAttendanceMessage } from '@/lib/geo';
+import { acquireFreshDeviceLocation } from '@/lib/device-location';
+import { evaluateAttendanceLocation } from '@/lib/geo';
 import { apiJsonRequest, getApiErrorMessage } from '@/lib/http';
 import { getBooleanSetting } from '@/lib/system-settings';
 import { buildFaceVerificationPayload } from '@/lib/teacher-api';
@@ -91,17 +92,6 @@ interface ApiResponse {
     verification_token?: string | null;
 }
 
-const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371e3;
-    const phi1 = (lat1 * Math.PI) / 180;
-    const phi2 = (lat2 * Math.PI) / 180;
-    const deltaPhi = ((lat2 - lat1) * Math.PI) / 180;
-    const deltaLambda = ((lon2 - lon1) * Math.PI) / 180;
-    const a = Math.sin(deltaPhi / 2) ** 2 + Math.cos(phi1) * Math.cos(phi2) * Math.sin(deltaLambda / 2) ** 2;
-
-    return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
-};
-
 const createUserLocationIcon = () => ({
     path: 0,
     scale: 7,
@@ -165,7 +155,7 @@ export default function StaffAttendancePage({
 
     const [todaySchedulesState, setTodaySchedulesState] = useState<StaffSchedule[]>(todaySchedules);
     const [selectedSchedule, setSelectedSchedule] = useState<StaffSchedule | null>(todaySchedules[0] || null);
-    const [userLocation, setUserLocation] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
+    const [userLocation, setUserLocation] = useState<{ lat: number; lng: number; accuracy: number; timestamp: number } | null>(null);
     const [distance, setDistance] = useState<number | null>(null);
     const [isWithinRange, setIsWithinRange] = useState(false);
     const [isLoadingApi, setIsLoadingApi] = useState(false);
@@ -295,36 +285,24 @@ export default function StaffAttendancePage({
         }
     };
 
-    const requestCurrentLocation = (): Promise<{ lat: number; lng: number; accuracy: number }> => {
-        if (!navigator.geolocation) {
-            const errorText = 'Location is not available on this device.';
+    const requestCurrentLocation = async (): Promise<{ lat: number; lng: number; accuracy: number; timestamp: number }> => {
+        setUserLocation(null);
+        setDistance(null);
+        try {
+            const fix = await acquireFreshDeviceLocation();
+            const location = {
+                lat: fix.latitude,
+                lng: fix.longitude,
+                accuracy: fix.accuracy,
+                timestamp: fix.timestamp,
+            };
+            setUserLocation(location);
+            return location;
+        } catch (error) {
+            const errorText = getApiErrorMessage(error, 'Location could not be determined. Please try again.');
             setMessage({ type: 'error', text: errorText });
-            return Promise.reject(new Error(errorText));
+            throw new Error(errorText);
         }
-
-        return new Promise((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    const location = {
-                        lat: position.coords.latitude,
-                        lng: position.coords.longitude,
-                        accuracy: position.coords.accuracy,
-                    };
-                    setUserLocation(location);
-                    resolve(location);
-                },
-                (error) => {
-                    const errorText =
-                        error.code === error.PERMISSION_DENIED
-                            ? 'Please allow location access in your browser to mark attendance.'
-                            : 'We could not find your location. Please try again.';
-
-                    setMessage({ type: 'error', text: errorText });
-                    reject(new Error(errorText));
-                },
-                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
-            );
-        });
     };
 
     useEffect(() => {
@@ -343,14 +321,17 @@ export default function StaffAttendancePage({
             return;
         }
 
-        const nextDistance = calculateDistance(
-            userLocation.lat,
-            userLocation.lng,
-            Number(selectedSchedule.coordinates.lat),
-            Number(selectedSchedule.coordinates.lng),
-        );
-        setDistance(nextDistance);
-        setIsWithinRange(nextDistance <= Number(selectedSchedule.radius));
+        const verdict = evaluateAttendanceLocation({
+            latitude: userLocation.lat,
+            longitude: userLocation.lng,
+            accuracy: userLocation.accuracy,
+            capturedAt: userLocation.timestamp,
+            venueLatitude: Number(selectedSchedule.coordinates.lat),
+            venueLongitude: Number(selectedSchedule.coordinates.lng),
+            radiusMeters: Number(selectedSchedule.radius),
+        });
+        setDistance(verdict.distanceMeters);
+        setIsWithinRange(verdict.status === 'verified');
     }, [userLocation, selectedSchedule, canVerifyLocation, gpsEnforcementEnabled]);
 
     const getVerifiedLocationPayload = async (schedule: StaffSchedule) => {
@@ -367,20 +348,28 @@ export default function StaffAttendancePage({
                     latitude: location.lat,
                     longitude: location.lng,
                     accuracy: location.accuracy,
+                    captured_at: location.timestamp,
                 },
                 distance: 0,
                 within_range: true,
             };
         }
 
-        const nextDistance = calculateDistance(location.lat, location.lng, Number(schedule.coordinates.lat), Number(schedule.coordinates.lng));
-        const nextWithinRange = nextDistance <= Number(schedule.radius);
+        const verdict = evaluateAttendanceLocation({
+            latitude: location.lat,
+            longitude: location.lng,
+            accuracy: location.accuracy,
+            capturedAt: location.timestamp,
+            venueLatitude: Number(schedule.coordinates.lat),
+            venueLongitude: Number(schedule.coordinates.lng),
+            radiusMeters: Number(schedule.radius),
+        });
 
-        setDistance(nextDistance);
-        setIsWithinRange(nextWithinRange);
+        setDistance(verdict.distanceMeters);
+        setIsWithinRange(verdict.status === 'verified');
 
-        if (gpsEnforcementEnabled && !nextWithinRange) {
-            throw new Error(formatOutOfRangeAttendanceMessage(nextDistance, Number(schedule.radius)));
+        if (gpsEnforcementEnabled && verdict.status !== 'verified') {
+            throw new Error(verdict.message);
         }
 
         return {
@@ -388,9 +377,10 @@ export default function StaffAttendancePage({
                 latitude: location.lat,
                 longitude: location.lng,
                 accuracy: location.accuracy,
+                captured_at: location.timestamp,
             },
-            distance: nextDistance,
-            within_range: nextWithinRange,
+            distance: verdict.distanceMeters ?? 0,
+            within_range: verdict.status === 'verified',
         };
     };
 

@@ -3,7 +3,8 @@ import FaceCaptureModal from '@/components/face/FaceCaptureModal';
 import AppLayout from '@/layouts/app-layout';
 import { ATTENDANCE_LOCK_MESSAGE } from '@/lib/attendance-lock';
 import { type FaceCaptureResult } from '@/lib/face-recognition';
-import { formatOutOfRangeAttendanceMessage } from '@/lib/geo';
+import { acquireFreshDeviceLocation } from '@/lib/device-location';
+import { evaluateAttendanceLocation } from '@/lib/geo';
 import { getBooleanSetting } from '@/lib/system-settings';
 import { buildFaceVerificationPayload, getApiErrorMessage, teacherJsonRequest } from '@/lib/teacher-api';
 import { BreadcrumbItem } from '@/types';
@@ -119,19 +120,6 @@ interface ApiResponse {
     verification_token?: string | null;
 }
 
-// Utilities (keep as before)
-const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371e3; // Earth radius in meters
-    const φ1 = (lat1 * Math.PI) / 180;
-    const φ2 = (lat2 * Math.PI) / 180;
-    const Δφ = ((lat2 - lat1) * Math.PI) / 180;
-    const Δλ = ((lon2 - lon1) * Math.PI) / 180;
-
-    const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
-
-    return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
-};
-
 const containerStyle = {
     width: '100%',
     height: '400px',
@@ -244,7 +232,7 @@ const getTimeUntilCheckoutDeadline = (classEndTime: string, checkoutGraceMinutes
 export default function AttendancePage() {
     const [todaysClasses, setTodaysClasses] = useState<ClassLocation[]>([]);
     const [selectedClass, setSelectedClass] = useState<ClassLocation | null>(null);
-    const [userLocation, setUserLocation] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
+    const [userLocation, setUserLocation] = useState<{ lat: number; lng: number; accuracy: number; timestamp: number } | null>(null);
     const [distance, setDistance] = useState<number | null>(null);
     const [isWithinRange, setIsWithinRange] = useState(false);
     const [isLoadingLocation, setIsLoadingLocation] = useState(false);
@@ -421,10 +409,19 @@ export default function AttendancePage() {
         [teacherEarlyCheckInMinutes, checkoutGracePeriodMinutes],
     );
 
-    const validatePresence = useCallback((userLoc: { lat: number; lng: number }, targetClass: ClassLocation) => {
-        const d = calculateDistance(userLoc.lat, userLoc.lng, targetClass.coordinates.lat, targetClass.coordinates.lng);
-        setDistance(d);
-        setIsWithinRange(d <= targetClass.radius);
+    const validatePresence = useCallback((userLoc: { lat: number; lng: number; accuracy: number; timestamp: number }, targetClass: ClassLocation) => {
+        const verdict = evaluateAttendanceLocation({
+            latitude: userLoc.lat,
+            longitude: userLoc.lng,
+            accuracy: userLoc.accuracy,
+            capturedAt: userLoc.timestamp,
+            venueLatitude: targetClass.coordinates.lat,
+            venueLongitude: targetClass.coordinates.lng,
+            radiusMeters: targetClass.radius,
+        });
+        setDistance(verdict.distanceMeters);
+        setIsWithinRange(verdict.status === 'verified');
+        setLocationError(verdict.status === 'verified' ? null : verdict.message);
     }, []);
 
     useEffect(() => {
@@ -469,49 +466,31 @@ export default function AttendancePage() {
         }
     }, [todaysClasses, attendanceRecords]);
 
-    const requestCurrentLocation = (): Promise<{ lat: number; lng: number; accuracy: number }> => {
-        if (!navigator.geolocation) {
-            const message = 'Geolocation is not supported by your browser';
-            setLocationError(message);
-            return Promise.reject(new Error(message));
-        }
-
+    const requestCurrentLocation = async (): Promise<{ lat: number; lng: number; accuracy: number; timestamp: number }> => {
         setIsLoadingLocation(true);
         setLocationError(null);
+        setUserLocation(null);
+        setDistance(null);
+        setIsWithinRange(false);
 
-        return new Promise((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(
-                (pos) => {
-                    const loc = {
-                        lat: pos.coords.latitude,
-                        lng: pos.coords.longitude,
-                        accuracy: pos.coords.accuracy,
-                    };
-                    setUserLocation(loc);
-                    setMapCenter({ lat: loc.lat, lng: loc.lng });
-                    setIsLoadingLocation(false);
-                    resolve(loc);
-                },
-                (error) => {
-                    setIsLoadingLocation(false);
-                    let errorMessage = 'Unable to retrieve your location';
-                    switch (error.code) {
-                        case error.PERMISSION_DENIED:
-                            errorMessage = 'Location permission denied. Please enable location access.';
-                            break;
-                        case error.POSITION_UNAVAILABLE:
-                            errorMessage = 'Location information unavailable.';
-                            break;
-                        case error.TIMEOUT:
-                            errorMessage = 'Location request timed out.';
-                            break;
-                    }
-                    setLocationError(errorMessage);
-                    reject(new Error(errorMessage));
-                },
-                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
-            );
-        });
+        try {
+            const fix = await acquireFreshDeviceLocation();
+            const loc = {
+                lat: fix.latitude,
+                lng: fix.longitude,
+                accuracy: fix.accuracy,
+                timestamp: fix.timestamp,
+            };
+            setUserLocation(loc);
+            setMapCenter({ lat: loc.lat, lng: loc.lng });
+            return loc;
+        } catch (error) {
+            const errorMessage = getApiErrorMessage(error, 'Location could not be determined. Please try again.');
+            setLocationError(errorMessage);
+            throw new Error(errorMessage);
+        } finally {
+            setIsLoadingLocation(false);
+        }
     };
 
     const getCurrentLocation = () => {
@@ -591,14 +570,21 @@ export default function AttendancePage() {
 
     const getVerifiedLocationPayload = async (targetClass: ClassLocation) => {
         const loc = await requestCurrentLocation();
-        const nextDistance = calculateDistance(loc.lat, loc.lng, targetClass.coordinates.lat, targetClass.coordinates.lng);
-        const nextWithinRange = nextDistance <= targetClass.radius;
+        const verdict = evaluateAttendanceLocation({
+            latitude: loc.lat,
+            longitude: loc.lng,
+            accuracy: loc.accuracy,
+            capturedAt: loc.timestamp,
+            venueLatitude: targetClass.coordinates.lat,
+            venueLongitude: targetClass.coordinates.lng,
+            radiusMeters: targetClass.radius,
+        });
 
-        setDistance(nextDistance);
-        setIsWithinRange(nextWithinRange);
+        setDistance(verdict.distanceMeters);
+        setIsWithinRange(verdict.status === 'verified');
 
-        if (gpsEnforcementEnabled && !nextWithinRange) {
-            throw new Error(formatOutOfRangeAttendanceMessage(nextDistance, targetClass.radius));
+        if (gpsEnforcementEnabled && verdict.status !== 'verified') {
+            throw new Error(verdict.message);
         }
 
         return {
@@ -606,9 +592,10 @@ export default function AttendancePage() {
                 latitude: loc.lat,
                 longitude: loc.lng,
                 accuracy: loc.accuracy,
+                captured_at: loc.timestamp,
             },
-            distance: nextDistance,
-            within_range: nextWithinRange,
+            distance: verdict.distanceMeters ?? 0,
+            within_range: verdict.status === 'verified',
         };
     };
 
@@ -1113,7 +1100,15 @@ export default function AttendancePage() {
                                     <div>
                                         <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">Status</p>
                                         <p className="font-medium text-slate-900">
-                                            {selectedClass?.is_completed ? 'Completed' : isWithinRange ? 'In Range' : 'Out of Range'}
+                                            {selectedClass?.is_completed
+                                                ? 'Completed'
+                                                : !userLocation
+                                                  ? 'Waiting for location'
+                                                  : isWithinRange
+                                                    ? 'Location verified'
+                                                    : locationError?.includes('accuracy')
+                                                      ? 'Accuracy too low'
+                                                      : 'Out of range'}
                                         </p>
                                     </div>
                                 </div>
@@ -1518,7 +1513,11 @@ export default function AttendancePage() {
                                         className="flex w-full items-center justify-center gap-2 rounded-lg bg-slate-100 px-4 py-2.5 font-medium text-slate-700 transition-colors hover:bg-slate-200 disabled:opacity-50"
                                     >
                                         {isLoadingLocation ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
-                                        {facialRecognitionEnabled ? 'Location Captured After Face Verification' : 'Refresh My Location'}
+                                        {facialRecognitionEnabled
+                                            ? 'Location Captured After Face Verification'
+                                            : locationError
+                                              ? 'Try Again'
+                                              : 'Refresh My Location'}
                                     </button>
 
                                     {locationError && (
@@ -1538,6 +1537,11 @@ export default function AttendancePage() {
                                                         {distance.toFixed(1)}m
                                                     </span>
                                                 </div>
+                                                {userLocation ? (
+                                                    <p className="mb-2 text-xs text-slate-500">
+                                                        Allowed radius: {Math.round(selectedClass.radius)} m · GPS accuracy: ±{Math.round(userLocation.accuracy)} m
+                                                    </p>
+                                                ) : null}
                                                 <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
                                                     <div
                                                         className={`h-full transition-all duration-500 ${isWithinRange ? 'bg-green-500' : 'bg-amber-500'}`}

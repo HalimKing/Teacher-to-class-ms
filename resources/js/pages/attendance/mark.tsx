@@ -3,7 +3,8 @@ import FaceCaptureModal from '@/components/face/FaceCaptureModal';
 import AttendancePortalLayout from '@/layouts/attendance-portal-layout';
 import { ATTENDANCE_LOCK_MESSAGE } from '@/lib/attendance-lock';
 import { type FaceCaptureResult } from '@/lib/face-recognition';
-import { distanceInMeters, formatOutOfRangeAttendanceMessage } from '@/lib/geo';
+import { acquireFreshDeviceLocation } from '@/lib/device-location';
+import { evaluateAttendanceLocation } from '@/lib/geo';
 import { apiJsonRequest, getApiErrorMessage } from '@/lib/http';
 import { getBooleanSetting } from '@/lib/system-settings';
 import { buildFaceVerificationPayload } from '@/lib/teacher-api';
@@ -281,22 +282,7 @@ export default function AttendancePortalMarkPage({
     };
 
     const getLocationPayload = async (session: PortalSession) => {
-        const location = await new Promise<{ lat: number; lng: number; accuracy: number }>((resolve, reject) => {
-            if (!navigator.geolocation) {
-                reject(new Error('Location is not available on this device.'));
-                return;
-            }
-            navigator.geolocation.getCurrentPosition(
-                (position) =>
-                    resolve({
-                        lat: position.coords.latitude,
-                        lng: position.coords.longitude,
-                        accuracy: position.coords.accuracy,
-                    }),
-                () => reject(new Error('Please allow location access to mark attendance.')),
-                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
-            );
-        });
+        const location = await acquireFreshDeviceLocation();
 
         const lat = session.coordinates?.lat;
         const lng = session.coordinates?.lng;
@@ -307,23 +293,40 @@ export default function AttendancePortalMarkPage({
                 throw new Error('This session does not have a valid work location configured.');
             }
             return {
-                coordinates: { latitude: location.lat, longitude: location.lng, accuracy: location.accuracy },
+                coordinates: {
+                    latitude: location.latitude,
+                    longitude: location.longitude,
+                    accuracy: location.accuracy,
+                    captured_at: location.timestamp,
+                },
                 distance: 0,
                 within_range: true,
             };
         }
 
-        const distance = distanceInMeters(location.lat, location.lng, Number(lat), Number(lng));
-        const within_range = distance <= radius;
+        const verdict = evaluateAttendanceLocation({
+            latitude: location.latitude,
+            longitude: location.longitude,
+            accuracy: location.accuracy,
+            capturedAt: location.timestamp,
+            venueLatitude: Number(lat),
+            venueLongitude: Number(lng),
+            radiusMeters: radius,
+        });
 
-        if (gpsEnforcementEnabled && !within_range) {
-            throw new Error(formatOutOfRangeAttendanceMessage(distance, radius));
+        if (gpsEnforcementEnabled && verdict.status !== 'verified') {
+            throw new Error(verdict.message);
         }
 
         return {
-            coordinates: { latitude: location.lat, longitude: location.lng, accuracy: location.accuracy },
-            distance,
-            within_range,
+            coordinates: {
+                latitude: location.latitude,
+                longitude: location.longitude,
+                accuracy: location.accuracy,
+                captured_at: location.timestamp,
+            },
+            distance: verdict.distanceMeters ?? 0,
+            within_range: verdict.status === 'verified',
         };
     };
 

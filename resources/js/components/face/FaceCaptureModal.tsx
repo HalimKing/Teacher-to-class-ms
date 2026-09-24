@@ -13,7 +13,8 @@ import {
     type FaceCaptureResult,
     type FaceDetectionIssue,
 } from '@/lib/face-recognition';
-import { distanceInMeters, formatOutOfRangeAttendanceMessage } from '@/lib/geo';
+import { acquireFreshDeviceLocation, cancelDeviceLocation, LocationRequestError } from '@/lib/device-location';
+import { distanceInMeters, evaluateAttendanceLocation, formatLocationDiagnostics } from '@/lib/geo';
 import { getApiErrorMessage } from '@/lib/http';
 import { Camera, ImageUp, Loader2, MapPin, RefreshCw } from 'lucide-react';
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
@@ -36,6 +37,10 @@ type VenueGate = {
     radiusMeters: number;
     venueName?: string;
 };
+
+function distanceFromGate(latitude: number, longitude: number, gate: VenueGate): number {
+    return distanceInMeters(latitude, longitude, gate.latitude, gate.longitude);
+}
 
 function toFiniteNumber(value: unknown): number | null {
     if (value === null || value === undefined || value === '') {
@@ -102,7 +107,6 @@ export default function FaceCaptureModal({
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
     const coachingTimerRef = useRef<number | null>(null);
-    const watchIdRef = useRef<number | null>(null);
     const processingRef = useRef(false);
     const locationBlockedRef = useRef(false);
     const successRef = useRef(false);
@@ -125,6 +129,7 @@ export default function FaceCaptureModal({
     const [locationBlock, setLocationBlock] = useState<LocationBlock | null>(null);
     const [devicePosition, setDevicePosition] = useState<{ lat: number; lng: number } | null>(null);
     const [deviceDistance, setDeviceDistance] = useState<number | null>(null);
+    const [locationHint, setLocationHint] = useState('Getting your location...');
 
     const venueGate = normalizeLocationGate(locationGate);
     locationGateRef.current = venueGate;
@@ -134,7 +139,7 @@ export default function FaceCaptureModal({
 
     useEffect(() => {
         if (!open) {
-            stopWatch();
+            cancelDeviceLocation();
             stopCoaching();
             stopCamera();
             resetStatus();
@@ -159,14 +164,13 @@ export default function FaceCaptureModal({
                 return;
             }
             await startCamera();
-            startWatch();
         };
 
         void boot();
 
         return () => {
             cancelled = true;
-            stopWatch();
+            cancelDeviceLocation();
             stopCoaching();
             stopCamera();
         };
@@ -211,67 +215,7 @@ export default function FaceCaptureModal({
         setProcessingState(false);
         stopCoaching();
         stopCamera();
-        stopWatch();
-    };
-
-    const requestCurrentPosition = (): Promise<{ lat: number; lng: number }> => {
-        return new Promise((resolve, reject) => {
-            if (!navigator.geolocation) {
-                reject(new Error('Location is not available on this device.'));
-                return;
-            }
-
-            navigator.geolocation.getCurrentPosition(
-                (position) =>
-                    resolve({
-                        lat: position.coords.latitude,
-                        lng: position.coords.longitude,
-                    }),
-                (error) => {
-                    if (error.code === error.PERMISSION_DENIED) {
-                        reject(new Error('Please allow location access to mark attendance.'));
-                        return;
-                    }
-                    reject(new Error('We could not confirm your location. Please try again.'));
-                },
-                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
-            );
-        });
-    };
-
-    const applyCoordinates = (lat: number, lng: number): boolean => {
-        const gate = locationGateRef.current;
-        setDevicePosition({ lat, lng });
-
-        if (!gate) {
-            setDeviceDistance(null);
-            blockLocation({
-                title: 'Location Not Configured',
-                message: 'This session does not have a valid attendance location configured. Contact an administrator if this continues.',
-            });
-            return false;
-        }
-
-        const distance = distanceInMeters(lat, lng, gate.latitude, gate.longitude);
-        setDeviceDistance(distance);
-
-        if (distance > gate.radiusMeters) {
-            blockLocation({
-                title: 'Outside Permitted Location',
-                message: formatOutOfRangeAttendanceMessage(distance, gate.radiusMeters),
-                tips: [
-                    gate.venueName ? `Move closer to ${gate.venueName}.` : 'Move closer to the permitted attendance venue.',
-                    `Required range: ${Math.round(gate.radiusMeters)}m.`,
-                    `Your current distance: ${Math.round(distance)}m.`,
-                ],
-            });
-            return false;
-        }
-
-        locationBlockedRef.current = false;
-        setLocationBlock(null);
-        setLocationPhase((current) => (current === 'allowed' ? current : 'allowed'));
-        return true;
+        cancelDeviceLocation();
     };
 
     const confirmLocation = async (): Promise<boolean> => {
@@ -292,46 +236,69 @@ export default function FaceCaptureModal({
         }
 
         setLocationPhase('checking');
+        setLocationHint('Getting your location...');
         setLocationBlock(null);
+        setDevicePosition(null);
+        setDeviceDistance(null);
         locationBlockedRef.current = false;
 
         try {
-            const position = await requestCurrentPosition();
-            return applyCoordinates(position.lat, position.lng);
+            const fix = await acquireFreshDeviceLocation();
+            if (locationBlockedRef.current) {
+                return false;
+            }
+
+            setLocationHint('Checking distance from venue...');
+            setDevicePosition({ lat: fix.latitude, lng: fix.longitude });
+            const verdict = evaluateAttendanceLocation({
+                latitude: fix.latitude,
+                longitude: fix.longitude,
+                accuracy: fix.accuracy,
+                capturedAt: fix.timestamp,
+                venueLatitude: gate.latitude,
+                venueLongitude: gate.longitude,
+                radiusMeters: gate.radiusMeters,
+            });
+            setDeviceDistance(verdict.distanceMeters);
+
+            if (verdict.status !== 'verified') {
+                const diagnostics =
+                    verdict.distanceMeters == null
+                        ? []
+                        : formatLocationDiagnostics(verdict.distanceMeters, gate.radiusMeters, fix.accuracy);
+                blockLocation({
+                    title: verdict.status === 'out_of_range' ? 'Outside Permitted Location' : 'Location Needs Another Try',
+                    message: verdict.message,
+                    tips: [
+                        ...diagnostics,
+                        gate.venueName ? `Stay at ${gate.venueName} and tap Try Again.` : 'Stay at the attendance venue and tap Try Again.',
+                    ],
+                });
+                return false;
+            }
+
+            locationBlockedRef.current = false;
+            setLocationBlock(null);
+            setLocationPhase('allowed');
+            return true;
         } catch (error) {
+            if (error instanceof LocationRequestError && error.code === 'cancelled') {
+                return false;
+            }
+
+            const fix = error instanceof LocationRequestError ? error.fix : null;
+            if (fix) {
+                setDevicePosition({ lat: fix.latitude, lng: fix.longitude });
+            }
+            const diagnostics =
+                fix == null ? [] : formatLocationDiagnostics(distanceFromGate(fix.latitude, fix.longitude, gate), gate.radiusMeters, fix.accuracy);
+
             blockLocation({
-                title: 'Location Needed',
-                message: getApiErrorMessage(error, 'We could not confirm your location. Please try again.'),
-                tips: ['Allow location access in your browser settings.', 'Move to an open area and tap Try Again.'],
+                title: error instanceof LocationRequestError && error.code === 'denied' ? 'Location Permission Needed' : 'Location Needs Another Try',
+                message: getApiErrorMessage(error, 'Location could not be determined. Please try again.'),
+                tips: [...diagnostics, 'Turn on GPS, allow location access, then tap Try Again.'],
             });
             return false;
-        }
-    };
-
-    const startWatch = () => {
-        stopWatch();
-        if (!locationEnabled || !navigator.geolocation) {
-            return;
-        }
-
-        watchIdRef.current = navigator.geolocation.watchPosition(
-            (position) => {
-                if (locationBlockedRef.current || successRef.current) {
-                    return;
-                }
-                applyCoordinates(position.coords.latitude, position.coords.longitude);
-            },
-            () => {
-                // Keep the last known location state if a watch update fails.
-            },
-            { enableHighAccuracy: true, timeout: 15000, maximumAge: 3000 },
-        );
-    };
-
-    const stopWatch = () => {
-        if (watchIdRef.current != null && navigator.geolocation) {
-            navigator.geolocation.clearWatch(watchIdRef.current);
-            watchIdRef.current = null;
         }
     };
 
@@ -655,19 +622,21 @@ export default function FaceCaptureModal({
     };
 
     const handleLocationRetry = async () => {
-        stopWatch();
+        cancelDeviceLocation();
         stopCoaching();
         stopCamera();
         resetStatus();
         locationBlockedRef.current = false;
         setLocationPhase('checking');
+        setLocationHint('Getting your location...');
         setLocationBlock(null);
+        setDevicePosition(null);
+        setDeviceDistance(null);
         const allowed = await confirmLocation();
         if (!allowed) {
             return;
         }
         await startCamera();
-        startWatch();
     };
 
     /** True while the existing stream can still be reused for another attempt. */
@@ -732,9 +701,9 @@ export default function FaceCaptureModal({
                             <div className="flex items-start gap-2.5">
                                 <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
                                 <div>
-                                    <p className="leading-tight font-semibold">Checking Location</p>
+                                    <p className="leading-tight font-semibold">{locationHint}</p>
                                     <p className="mt-1 leading-snug opacity-90">
-                                        Confirming you are within the permitted attendance range before face verification starts.
+                                        A fresh GPS reading is required before face verification starts.
                                     </p>
                                 </div>
                             </div>
