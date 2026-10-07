@@ -24,6 +24,7 @@ use App\Http\Controllers\GlobalSearchController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\Teacher\CommunicationController as TeacherCommunicationController;
 use App\Http\Controllers\Teacher\DashboardController;
+use App\Http\Controllers\Teacher\StaffActivityController;
 use App\Http\Controllers\Teacher\FaceVerificationController;
 use App\Http\Controllers\Teacher\NotificationController;
 use App\Http\Controllers\Teacher\SessionReminderController;
@@ -102,6 +103,8 @@ Route::middleware(['auth:teacher', 'attendance.portal.restrict'])->group(functio
     // Route::get('/teacher/attendance/history', [TeacherAttendanceController::class, 'getAttendanceHistory'])->name('teacher.attendance.history');
 
     Route::get('/teacher/dashboard', [DashboardController::class, 'index'])->name('teacher.dashboard');
+    Route::get('/staff/activities', [StaffActivityController::class, 'index'])->name('staff.activities');
+    Route::get('/teacher/activities', fn () => redirect()->route('staff.activities'))->name('teacher.activities');
 
     Route::middleware('leadership')->prefix('teacher/unit')->name('teacher.unit.')->group(function () {
         Route::get('/staff', [UnitStaffController::class, 'index'])->name('staff.index');

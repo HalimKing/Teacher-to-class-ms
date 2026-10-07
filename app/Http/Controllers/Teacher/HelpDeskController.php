@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Teacher;
 
 use App\Http\Controllers\Controller;
 use App\Models\HelpDeskTicket;
+use App\Services\ActivityLogService;
 use App\Services\HelpDeskService;
 use App\Support\HelpDeskAttachment;
 use Illuminate\Http\RedirectResponse;
@@ -17,6 +18,7 @@ class HelpDeskController extends Controller
 {
     public function __construct(
         private HelpDeskService $service,
+        private ActivityLogService $activityLogs,
     ) {}
 
     public function index(Request $request): Response
@@ -81,6 +83,20 @@ class HelpDeskController extends Controller
 
         $ticket = $this->service->createTicket($staff, $data, $request->file('attachment'));
 
+        $this->activityLogs->logHelpDesk(
+            'help_desk_ticket_created',
+            'Submitted a help desk ticket',
+            [
+                'resource_type' => 'help_desk_ticket',
+                'resource_id' => $ticket->id,
+                'resource_label' => $ticket->ticket_number,
+                'ticket_id' => $ticket->id,
+                'ticket_number' => $ticket->ticket_number,
+                'subject' => $ticket->subject,
+                'has_attachment' => filled($ticket->attachment_path),
+            ],
+        );
+
         return redirect()
             ->route('teacher.help-desk.show', $ticket)
             ->with('success', 'Ticket submitted successfully.');
@@ -115,6 +131,19 @@ class HelpDeskController extends Controller
 
         $this->service->addComment($helpDesk, $staff, $data['body'], $request->file('attachment'));
 
+        $this->activityLogs->logHelpDesk(
+            'help_desk_ticket_commented',
+            'Replied to a help desk ticket',
+            [
+                'resource_type' => 'help_desk_ticket',
+                'resource_id' => $helpDesk->id,
+                'resource_label' => $helpDesk->ticket_number,
+                'ticket_id' => $helpDesk->id,
+                'ticket_number' => $helpDesk->ticket_number,
+                'has_attachment' => $request->hasFile('attachment'),
+            ],
+        );
+
         return back()->with('success', 'Reply added.');
     }
 
@@ -128,6 +157,18 @@ class HelpDeskController extends Controller
             return back()->with('error', $e->getMessage());
         }
 
+        $this->activityLogs->logHelpDesk(
+            'help_desk_ticket_closed',
+            'Closed a help desk ticket',
+            [
+                'resource_type' => 'help_desk_ticket',
+                'resource_id' => $helpDesk->id,
+                'resource_label' => $helpDesk->ticket_number,
+                'ticket_id' => $helpDesk->id,
+                'ticket_number' => $helpDesk->ticket_number,
+            ],
+        );
+
         return back()->with('success', 'Ticket closed.');
     }
 
@@ -139,6 +180,18 @@ class HelpDeskController extends Controller
         if (!$helpDesk->attachment_path) {
             abort(404);
         }
+
+        $this->activityLogs->logHelpDesk(
+            'help_desk_attachment_downloaded',
+            'Downloaded a help desk document',
+            [
+                'resource_type' => 'help_desk_ticket',
+                'resource_id' => $helpDesk->id,
+                'resource_label' => $helpDesk->attachment_name ?: $helpDesk->ticket_number,
+                'ticket_id' => $helpDesk->id,
+                'ticket_number' => $helpDesk->ticket_number,
+            ],
+        );
 
         return HelpDeskAttachment::serve(
             $helpDesk->attachment_path,
@@ -156,6 +209,19 @@ class HelpDeskController extends Controller
         if (!$commentModel->attachment_path) {
             abort(404);
         }
+
+        $this->activityLogs->logHelpDesk(
+            'help_desk_attachment_downloaded',
+            'Downloaded a help desk document',
+            [
+                'resource_type' => 'help_desk_ticket',
+                'resource_id' => $helpDesk->id,
+                'resource_label' => $commentModel->attachment_name ?: $helpDesk->ticket_number,
+                'ticket_id' => $helpDesk->id,
+                'ticket_number' => $helpDesk->ticket_number,
+                'comment_id' => $commentModel->id,
+            ],
+        );
 
         return HelpDeskAttachment::serve(
             $commentModel->attachment_path,

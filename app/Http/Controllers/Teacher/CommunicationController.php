@@ -7,6 +7,7 @@ use App\Http\Requests\ReplyCommunicationRequest;
 use App\Http\Requests\StoreCommunicationRequest;
 use App\Models\Communication;
 use App\Models\CommunicationConversation;
+use App\Services\ActivityLogService;
 use App\Services\CommunicationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -16,7 +17,10 @@ use Inertia\Response;
 
 class CommunicationController extends Controller
 {
-    public function __construct(private readonly CommunicationService $communications) {}
+    public function __construct(
+        private readonly CommunicationService $communications,
+        private readonly ActivityLogService $activityLogs,
+    ) {}
 
     public function index(Request $request): Response
     {
@@ -73,6 +77,12 @@ class CommunicationController extends Controller
         $asDraft = $request->boolean('save_as_draft');
         $communication = $this->communications->save($request->user('teacher'), $request->payload(), $asDraft);
 
+        $this->logMessageActivity(
+            $asDraft ? 'message_draft_saved' : 'message_sent',
+            $asDraft ? 'Saved a message draft' : 'Sent a message',
+            $communication,
+        );
+
         if ($asDraft) {
             return redirect()
                 ->route('teacher.communication.drafts')
@@ -114,6 +124,8 @@ class CommunicationController extends Controller
             $request->payload(),
         );
 
+        $this->logMessageActivity('message_replied', 'Replied to a message', $communication);
+
         return redirect()
             ->route('teacher.communication.thread', $communication->conversation_id)
             ->with('success', 'Reply sent.');
@@ -122,6 +134,8 @@ class CommunicationController extends Controller
     public function send(Request $request, Communication $communication): RedirectResponse
     {
         $communication = $this->communications->sendDraft($request->user('teacher'), $communication);
+
+        $this->logMessageActivity('message_sent', 'Sent a message', $communication);
 
         return $this->redirectAfterSend('teacher', $communication);
     }
@@ -165,5 +179,17 @@ class CommunicationController extends Controller
         return redirect()
             ->route($threadRoute, $communication->conversation_id)
             ->with('success', "Message sent to {$communication->recipient_count} staff member(s).");
+    }
+
+    private function logMessageActivity(string $eventType, string $description, Communication $communication): void
+    {
+        $this->activityLogs->logCommunication($eventType, $description, [
+            'resource_type' => 'communication',
+            'resource_id' => $communication->id,
+            'resource_label' => $communication->subject,
+            'communication_id' => $communication->id,
+            'subject' => $communication->subject,
+            'recipient_count' => $communication->recipient_count,
+        ]);
     }
 }

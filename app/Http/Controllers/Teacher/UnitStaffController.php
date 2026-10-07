@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Department;
 use App\Models\Faculty;
 use App\Models\Teacher;
+use App\Services\ActivityLogService;
 use App\Services\AdminTeacherManagementService;
 use App\Services\LeadershipScope;
 use Illuminate\Http\JsonResponse;
@@ -21,6 +22,7 @@ class UnitStaffController extends Controller
     public function __construct(
         private AdminTeacherManagementService $teacherManagement,
         private LeadershipScope $leadershipScope,
+        private ActivityLogService $activityLogs,
     ) {}
 
     public function index(Request $request): Response
@@ -121,6 +123,18 @@ class UnitStaffController extends Controller
         $teacher->staff_type = $validated['staffType'];
         $teacher->employment_status = $validated['employmentStatus'];
         $teacher->save();
+
+        $this->activityLogs->logUserManagement(
+            'unit_staff_updated',
+            'Updated unit staff details',
+            [
+                'resource_type' => 'teacher',
+                'resource_id' => $teacher->id,
+                'resource_label' => trim("{$teacher->first_name} {$teacher->last_name}"),
+                'staff_id' => $teacher->id,
+                'staff_name' => trim("{$teacher->first_name} {$teacher->last_name}"),
+            ],
+        );
 
         return redirect()
             ->route('teacher.unit.staff.index')

@@ -1,3 +1,4 @@
+import ComboBox from '@/components/combobox';
 import { ReportFilterField, StatusBadge, filterInputClass } from '@/components/reports/shared';
 import { Button } from '@/components/ui/button';
 import {
@@ -52,7 +53,7 @@ interface FilterOptions {
     statuses: string[];
     roles: string[];
     eventTypes: string[];
-    users: Array<{ id: number; name: string; role: string; type: string }>;
+    users: Array<{ id: number; name: string; role: string; type: string; value?: string }>;
 }
 
 interface ActivityLogRecord {
@@ -241,6 +242,31 @@ export default function SystemLogsIndex({ filterOptions, initialFilters, logRete
         );
     };
 
+    const userOptions = useMemo(() => {
+        const seen = new Set<string>();
+        const uniqueUsers = filterOptions.users.filter((user) => {
+            const key = user.value || `${user.type || 'unknown'}|${user.id}`;
+            if (seen.has(key)) {
+                return false;
+            }
+            seen.add(key);
+            return true;
+        });
+
+        return [
+            { label: 'All users', value: 'all' },
+            ...uniqueUsers.map((user) => ({
+                label: `${user.name}${user.role ? ` (${user.role})` : ''}`,
+                value: user.value || `${user.type || 'unknown'}|${user.id}`,
+            })),
+        ];
+    }, [filterOptions.users]);
+
+    const selectedUserOption = useMemo(
+        () => userOptions.find((option) => String(option.value) === String(filters.actor_id)) ?? userOptions[0],
+        [userOptions, filters.actor_id],
+    );
+
     const securityGroups = useMemo(() => {
         return {
             failedLogins: securityHighlights.filter((item) => item.event_type === 'failed_login'),
@@ -375,18 +401,19 @@ export default function SystemLogsIndex({ filterOptions, initialFilters, logRete
                             </div>
                         </ReportFilterField>
                         <ReportFilterField label="User">
-                            <select
-                                className={filterInputClass}
-                                value={filters.actor_id}
-                                onChange={(e) => setFilters((current) => ({ ...current, actor_id: e.target.value, page: 1 }))}
-                            >
-                                <option value="all">All users</option>
-                                {filterOptions.users.map((user) => (
-                                    <option key={`${user.type}-${user.id}`} value={user.id}>
-                                        {user.name} ({user.role})
-                                    </option>
-                                ))}
-                            </select>
+                            <ComboBox
+                                options={userOptions}
+                                label="Search users"
+                                size="small"
+                                defaultValue={selectedUserOption}
+                                externalValue={(value) =>
+                                    setFilters((current) => ({
+                                        ...current,
+                                        actor_id: value === undefined || value === null || value === '' ? 'all' : String(value),
+                                        page: 1,
+                                    }))
+                                }
+                            />
                         </ReportFilterField>
                         <ReportFilterField label="Role">
                             <select

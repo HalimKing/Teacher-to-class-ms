@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use App\Models\RescheduledSession;
 use App\Models\TimeTable;
+use App\Services\ActivityLogService;
 use Carbon\Carbon;
 
 class RescheduledSessionController extends Controller
@@ -120,6 +121,20 @@ class RescheduledSessionController extends Controller
         ]);
 
         Log::info('[Reschedule] created', ['id' => $res->id, 'teacher' => $teacherId, 'timetable' => $data['timetable_id']]);
+
+        app(ActivityLogService::class)->log(
+            eventType: 'session_rescheduled',
+            category: ActivityLogService::CATEGORY_TIMETABLE,
+            description: 'Submitted a reschedule request',
+            metadata: [
+                'resource_type' => 'rescheduled_session',
+                'resource_id' => $res->id,
+                'resource_label' => $timetable->course?->name ?: 'Session',
+                'timetable_id' => $res->timetable_id,
+                'original_date' => $res->original_date,
+                'new_date' => $res->new_date,
+            ],
+        );
 
         return redirect()->route('teacher.timetable')->with('success', 'Reschedule request submitted.');
     }

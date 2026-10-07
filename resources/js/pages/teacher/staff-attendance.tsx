@@ -1,3 +1,4 @@
+import { HolidayBreakBanner, type HolidayContext } from '@/components/attendance/HolidayBreakBanner';
 import FaceCaptureModal from '@/components/face/FaceCaptureModal';
 import AppLayout from '@/layouts/app-layout';
 import { ATTENDANCE_LOCK_MESSAGE } from '@/lib/attendance-lock';
@@ -33,6 +34,8 @@ interface ScheduleTiming {
     scheduled_end_time_display?: string | null;
     can_check_out_now?: boolean;
     checkout_opens_message?: string | null;
+    checkout_grace_deadline_display?: string | null;
+    is_after_checkout_grace?: boolean;
 }
 
 interface VenueAuthorization {
@@ -90,6 +93,7 @@ interface ApiResponse {
     data?: StaffSchedule[];
     attendance_id?: number;
     verification_token?: string | null;
+    holiday_context?: HolidayContext;
 }
 
 const createUserLocationIcon = () => ({
@@ -125,9 +129,11 @@ function isScheduleMissed(schedule: StaffSchedule | null): boolean {
 export default function StaffAttendancePage({
     todaySchedules = [],
     facialRecognitionEnabled: facialRecognitionEnabledProp,
+    holidayContext: initialHolidayContext,
 }: {
     todaySchedules?: StaffSchedule[];
     facialRecognitionEnabled?: boolean;
+    holidayContext?: HolidayContext;
 }) {
     const { system_settings: systemSettings, flash } = usePage().props as {
         system_settings?: {
@@ -164,6 +170,8 @@ export default function StaffAttendancePage({
     const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
     const [faceModalOpen, setFaceModalOpen] = useState(false);
     const [pendingAttendanceAction, setPendingAttendanceAction] = useState<'check-in' | 'check-out' | null>(null);
+    const [holidayContext, setHolidayContext] = useState<HolidayContext | null>(initialHolidayContext ?? null);
+    const attendanceSuspended = holidayContext?.attendance_required === false;
 
     const gpsEnforcementEnabled = getBooleanSetting(systemSettings?.attendance, 'gps_enforcement_enabled', true);
     const venueChangeRequestsEnabled = getBooleanSetting(systemSettings?.attendance, 'administrator_venue_change_requests_enabled', true);
@@ -192,8 +200,8 @@ export default function StaffAttendancePage({
             : null;
 
     const selectedTiming = selectedSchedule?.timing;
+    const activeTiming = activeSchedule?.timing ?? selectedTiming;
     const canCheckInNow = Boolean(selectedTiming?.can_check_in_now);
-    const canCheckOutNow = Boolean(selectedTiming?.can_check_out_now);
     const todayLabel = new Date().toLocaleDateString(undefined, {
         weekday: 'long',
         month: 'long',
@@ -201,6 +209,14 @@ export default function StaffAttendancePage({
     });
 
     const sessionStatus = useMemo(() => {
+        if (attendanceSuspended && holidayContext) {
+            return {
+                label: holidayContext.title,
+                description: holidayContext.message,
+                tone: 'waiting' as const,
+            };
+        }
+
         if (isScheduleMissed(selectedSchedule)) {
             return {
                 label: 'Absent',
@@ -212,7 +228,7 @@ export default function StaffAttendancePage({
         if (activeSchedule) {
             return {
                 label: 'You are checked in',
-                description: `Started at ${formatTime(activeSchedule.attendance_status?.check_in_time || '')}`,
+                description: `Started at ${formatTime(activeSchedule.attendance_status?.check_in_time || '')}. You can check out anytime.`,
                 tone: 'active' as const,
             };
         }
@@ -240,7 +256,7 @@ export default function StaffAttendancePage({
             description: 'Select your shift below, then tap Check In when you arrive.',
             tone: 'ready' as const,
         };
-    }, [activeSchedule, selectedSchedule, canCheckInNow, selectedTiming]);
+    }, [activeSchedule, selectedSchedule, canCheckInNow, selectedTiming, attendanceSuspended, holidayContext]);
 
     const canVerifyLocation =
         selectedSchedule?.coordinates?.lat != null && selectedSchedule?.coordinates?.lng != null && Number(selectedSchedule.radius) > 0;
@@ -265,6 +281,7 @@ export default function StaffAttendancePage({
         try {
             const response = await requestJson<ApiResponse>('/teacher/staff-attendance/todays-schedules');
             const schedules = response.data || [];
+            setHolidayContext(response.holiday_context ?? null);
             setTodaySchedulesState(schedules);
             setSelectedSchedule((current) => {
                 const stillSelected = current ? schedules.find((schedule) => schedule.id === current.id) : undefined;
@@ -540,12 +557,13 @@ export default function StaffAttendancePage({
     const showCheckIn = Boolean(
         !activeSchedule && selectedSchedule && !selectedSchedule.is_completed && !isScheduleMissed(selectedSchedule) && canCheckInNow,
     );
-    const showCheckOut = !!activeSchedule && !isScheduleMissed(activeSchedule) && canCheckOutNow;
-    const showWaitingForCheckout = !!activeSchedule && !isScheduleMissed(activeSchedule) && !canCheckOutNow;
+    const showCheckOut = !!activeSchedule && !isScheduleMissed(activeSchedule);
+    const isEarlyCheckout = showCheckOut && !Boolean(activeTiming?.can_check_out_now);
+    const isOvertimeCheckout = showCheckOut && Boolean(activeTiming?.is_after_checkout_grace);
+    const checkOutLabel = isOvertimeCheckout ? 'Check Out (Overtime)' : isEarlyCheckout ? 'Check Out (Early Leave)' : 'Check Out';
     const hasAttendanceActions = Boolean(
         showCheckIn ||
             showCheckOut ||
-            showWaitingForCheckout ||
             selectedSchedule?.can_self_report_absence ||
             selectedSchedule?.self_reported ||
             selectedSchedule?.attendance_status?.self_reported ||
@@ -600,6 +618,8 @@ export default function StaffAttendancePage({
                         </div>
                     </section>
 
+                    <HolidayBreakBanner context={holidayContext} />
+
                     {message && (
                         <div
                             role="alert"
@@ -638,7 +658,7 @@ export default function StaffAttendancePage({
                                     </div>
                                 ) : todaySchedulesState.length === 0 ? (
                                     <p className="rounded-2xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500 dark:border-sidebar-border dark:text-sidebar-foreground/60">
-                                        No shift is scheduled for you today.
+                                        {attendanceSuspended ? 'Attendance is not required today.' : 'No shift is scheduled for you today.'}
                                     </p>
                                 ) : todaySchedulesState.length === 1 ? (
                                     <ShiftCard
@@ -738,10 +758,12 @@ export default function StaffAttendancePage({
                                     <AttendanceActions
                                         showCheckIn={showCheckIn}
                                         showCheckOut={showCheckOut}
-                                        showWaitingForCheckout={showWaitingForCheckout}
+                                        isEarlyCheckout={isEarlyCheckout}
+                                        isOvertimeCheckout={isOvertimeCheckout}
+                                        checkOutLabel={checkOutLabel}
                                         isLoadingApi={isLoadingApi}
                                         selectedSchedule={selectedSchedule}
-                                        selectedTiming={selectedTiming}
+                                        selectedTiming={activeTiming}
                                         activeSchedule={activeSchedule}
                                         onCheckIn={handleCheckIn}
                                         onCheckOut={handleCheckOut}
@@ -846,10 +868,12 @@ export default function StaffAttendancePage({
                         <AttendanceActions
                             showCheckIn={showCheckIn}
                             showCheckOut={showCheckOut}
-                            showWaitingForCheckout={showWaitingForCheckout}
+                            isEarlyCheckout={isEarlyCheckout}
+                            isOvertimeCheckout={isOvertimeCheckout}
+                            checkOutLabel={checkOutLabel}
                             isLoadingApi={isLoadingApi}
                             selectedSchedule={selectedSchedule}
-                            selectedTiming={selectedTiming}
+                            selectedTiming={activeTiming}
                             activeSchedule={activeSchedule}
                             onCheckIn={handleCheckIn}
                             onCheckOut={handleCheckOut}
@@ -875,7 +899,9 @@ export default function StaffAttendancePage({
 function AttendanceActions({
     showCheckIn,
     showCheckOut,
-    showWaitingForCheckout,
+    isEarlyCheckout,
+    isOvertimeCheckout,
+    checkOutLabel,
     isLoadingApi,
     selectedSchedule,
     selectedTiming,
@@ -885,7 +911,9 @@ function AttendanceActions({
 }: {
     showCheckIn: boolean;
     showCheckOut: boolean;
-    showWaitingForCheckout: boolean;
+    isEarlyCheckout: boolean;
+    isOvertimeCheckout: boolean;
+    checkOutLabel: string;
     isLoadingApi: boolean;
     selectedSchedule: StaffSchedule | null;
     selectedTiming?: ScheduleTiming;
@@ -907,10 +935,20 @@ function AttendanceActions({
                 </button>
             )}
 
-            {showWaitingForCheckout && (
-                <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-4 text-center text-sm text-blue-800 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-200">
-                    {selectedTiming?.checkout_opens_message ||
-                        `Check-out opens at ${selectedTiming?.scheduled_end_time_display || formatTime(selectedSchedule?.end_time || '')}.`}
+            {showCheckOut && isEarlyCheckout && (
+                <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-4 text-center text-sm text-sky-800 dark:border-sky-900/40 dark:bg-sky-950/20 dark:text-sky-200">
+                    You can check out anytime. Early departure will be recorded as early leave
+                    {selectedTiming?.scheduled_end_time_display || selectedSchedule?.end_time
+                        ? ` (shift ends at ${selectedTiming?.scheduled_end_time_display || formatTime(selectedSchedule?.end_time || '')})`
+                        : ''}
+                    .
+                </div>
+            )}
+
+            {showCheckOut && isOvertimeCheckout && (
+                <div className="rounded-2xl border border-orange-200 bg-orange-50 px-4 py-4 text-center text-sm text-orange-800 dark:border-orange-900/40 dark:bg-orange-950/20 dark:text-orange-200">
+                    Check-out will be recorded as overtime
+                    {selectedTiming?.checkout_grace_deadline_display ? ` (grace ended at ${selectedTiming.checkout_grace_deadline_display})` : ''}.
                 </div>
             )}
 
@@ -922,7 +960,7 @@ function AttendanceActions({
                     className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-violet-600 px-6 py-3.5 text-base font-semibold text-white shadow-sm shadow-violet-600/20 transition-colors hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                     {isLoadingApi ? <Loader2 className="size-5 animate-spin" /> : <LogOut className="size-5" />}
-                    Check Out
+                    {checkOutLabel}
                 </button>
             )}
 

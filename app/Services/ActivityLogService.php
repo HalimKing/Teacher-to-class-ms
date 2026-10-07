@@ -20,6 +20,27 @@ class ActivityLogService
     public const CATEGORY_TIMETABLE = 'timetable';
     public const CATEGORY_SYSTEM_SETTINGS = 'system_settings';
     public const CATEGORY_SECURITY = 'security';
+    public const CATEGORY_COMMUNICATION = 'communication';
+    public const CATEGORY_HELP_DESK = 'help_desk';
+    public const CATEGORY_ACCOUNT = 'account';
+
+    /**
+     * @return list<string>
+     */
+    public static function categories(): array
+    {
+        return [
+            self::CATEGORY_AUTHENTICATION,
+            self::CATEGORY_ATTENDANCE,
+            self::CATEGORY_COMMUNICATION,
+            self::CATEGORY_HELP_DESK,
+            self::CATEGORY_ACCOUNT,
+            self::CATEGORY_USER_MANAGEMENT,
+            self::CATEGORY_TIMETABLE,
+            self::CATEGORY_SYSTEM_SETTINGS,
+            self::CATEGORY_SECURITY,
+        ];
+    }
 
     public function log(
         string $eventType,
@@ -138,6 +159,36 @@ class ActivityLogService
             status: $status,
             metadata: $metadata,
             securityFlag: true,
+        );
+    }
+
+    public function logCommunication(string $eventType, string $description, array $metadata = []): ?ActivityLog
+    {
+        return $this->log(
+            eventType: $eventType,
+            category: self::CATEGORY_COMMUNICATION,
+            description: $description,
+            metadata: $metadata,
+        );
+    }
+
+    public function logHelpDesk(string $eventType, string $description, array $metadata = []): ?ActivityLog
+    {
+        return $this->log(
+            eventType: $eventType,
+            category: self::CATEGORY_HELP_DESK,
+            description: $description,
+            metadata: $metadata,
+        );
+    }
+
+    public function logAccount(string $eventType, string $description, array $metadata = []): ?ActivityLog
+    {
+        return $this->log(
+            eventType: $eventType,
+            category: self::CATEGORY_ACCOUNT,
+            description: $description,
+            metadata: $metadata,
         );
     }
 

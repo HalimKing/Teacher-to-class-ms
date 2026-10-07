@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
@@ -38,5 +39,14 @@ class ActivityLog extends Model
     public function actor(): MorphTo
     {
         return $this->morphTo(__FUNCTION__, 'actor_type', 'actor_id');
+    }
+
+    public function scopeForTeacher(Builder $query, Teacher|int $teacher): Builder
+    {
+        $teacherId = $teacher instanceof Teacher ? $teacher->id : $teacher;
+
+        return $query
+            ->where('actor_type', Teacher::class)
+            ->where('actor_id', $teacherId);
     }
 }

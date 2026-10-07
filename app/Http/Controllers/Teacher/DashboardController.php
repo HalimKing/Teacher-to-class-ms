@@ -11,6 +11,7 @@ use App\Models\TeacherAttendance;
 use App\Models\TimeTable;
 use App\Models\VenueChangeRequest;
 use App\Models\VenueChangeRequestApproval;
+use App\Services\StaffActivityService;
 use App\Support\VenueChangeApprovalRole;
 use Carbon\Carbon;
 use DateTime;
@@ -19,7 +20,9 @@ use ZipStream\Time;
 
 class DashboardController extends Controller
 {
-    //
+    public function __construct(
+        private StaffActivityService $staffActivities,
+    ) {}
 
     public function index()
     {
@@ -112,6 +115,9 @@ class DashboardController extends Controller
             'upcomingReminders' => $upcomingReminders,
             'staffType' => $teacher?->staff_type,
             'pendingVenueChangeApprovals' => $this->pendingVenueChangeApprovalsCount($teacher),
+            'recentActivities' => $teacher instanceof Teacher
+                ? $this->staffActivities->recentFor($teacher)
+                : [],
         ]);
     }
 

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Teacher;
 use App\Http\Controllers\Controller;
 use App\Models\SessionReminder;
 use App\Models\TimeTable;
+use App\Services\ActivityLogService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -97,7 +98,7 @@ class SessionReminderController extends Controller
             }
         }
 
-        SessionReminder::create([
+        $reminder = SessionReminder::create([
             'teacher_id' => $teacherId,
             'timetable_id' => $validated['timetable_id'] ?? null,
             'title' => $validated['title'],
@@ -105,6 +106,19 @@ class SessionReminderController extends Controller
             'send_via' => $validated['send_via'] ?? 'mail',
             'reminder_at' => $validated['reminder_at'],
         ]);
+
+        app(ActivityLogService::class)->log(
+            eventType: 'reminder_created',
+            category: ActivityLogService::CATEGORY_TIMETABLE,
+            description: 'Created a reminder',
+            metadata: [
+                'resource_type' => 'session_reminder',
+                'resource_id' => $reminder->id,
+                'resource_label' => $reminder->title,
+                'reminder_id' => $reminder->id,
+                'title' => $reminder->title,
+            ],
+        );
 
         return redirect()->route('teacher.reminders.index')->with('success', 'Reminder created.');
     }
@@ -142,6 +156,19 @@ class SessionReminderController extends Controller
             'reminder_at' => $validated['reminder_at'],
         ]);
 
+        app(ActivityLogService::class)->log(
+            eventType: 'reminder_updated',
+            category: ActivityLogService::CATEGORY_TIMETABLE,
+            description: 'Updated a reminder',
+            metadata: [
+                'resource_type' => 'session_reminder',
+                'resource_id' => $reminder->id,
+                'resource_label' => $reminder->title,
+                'reminder_id' => $reminder->id,
+                'title' => $reminder->title,
+            ],
+        );
+
         return redirect()->route('teacher.reminders.index')->with('success', 'Reminder updated.');
     }
 
@@ -150,7 +177,24 @@ class SessionReminderController extends Controller
         if ($reminder->teacher_id !== auth('teacher')->id()) {
             abort(403);
         }
+
+        $title = $reminder->title;
+        $reminderId = $reminder->id;
         $reminder->delete();
+
+        app(ActivityLogService::class)->log(
+            eventType: 'reminder_deleted',
+            category: ActivityLogService::CATEGORY_TIMETABLE,
+            description: 'Deleted a reminder',
+            metadata: [
+                'resource_type' => 'session_reminder',
+                'resource_id' => $reminderId,
+                'resource_label' => $title,
+                'reminder_id' => $reminderId,
+                'title' => $title,
+            ],
+        );
+
         return redirect()->route('teacher.reminders.index')->with('success', 'Reminder deleted.');
     }
 

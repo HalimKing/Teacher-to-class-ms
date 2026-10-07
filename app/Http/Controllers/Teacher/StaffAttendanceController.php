@@ -84,6 +84,7 @@ class StaffAttendanceController extends Controller
 
         $today = now()->format('l');
         $date = now()->format('Y-m-d');
+        $attendanceSuspended = $this->holidayBreaks->isAttendanceSuspended($teacher, $date);
 
         return Inertia::render('teacher/staff-attendance', [
             'staffMember' => [
@@ -94,9 +95,10 @@ class StaffAttendanceController extends Controller
                 'department' => $teacher->department?->name,
             ],
             'assignedSchedules' => $schedules->map(fn (TimeTable $schedule) => $this->formatSchedule($schedule))->values(),
-            'todaySchedules' => $schedules->where('day_of_week', $today)->map(function (TimeTable $schedule) use ($teacher, $date) {
+            'todaySchedules' => $attendanceSuspended ? [] : $schedules->where('day_of_week', $today)->map(function (TimeTable $schedule) use ($teacher, $date) {
                 return $this->formatSchedule($schedule, $this->todayAttendanceFor($teacher->id, $schedule->id, $date));
             })->values(),
+            'holidayContext' => $this->holidayBreaks->portalContext($teacher, $date),
             'upcomingSchedules' => $schedules->filter(fn (TimeTable $schedule) => $this->isUpcoming($schedule))->map(fn (TimeTable $schedule) => $this->formatSchedule($schedule))->values(),
             'facialRecognitionEnabled' => $facialRecognition->isEnabled(),
         ]);

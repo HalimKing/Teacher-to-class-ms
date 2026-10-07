@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
+use App\Models\Teacher;
 use App\Models\User;
+use App\Services\ActivityLogService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rules\Password;
@@ -23,27 +25,43 @@ class PasswordController extends Controller
 
     public function update(Request $request): RedirectResponse
     {
-        /** @var User $user */
         $user = $request->user();
-        $forceChange = $user->must_change_password;
+        $forceChange = $user instanceof User && $user->must_change_password;
 
         $rules = [
             'password' => ['required', Password::defaults(), 'confirmed'],
         ];
 
         if (!$forceChange) {
-            $rules['current_password'] = ['required', 'current_password'];
+            $guard = $user instanceof Teacher ? 'teacher' : 'web';
+            $rules['current_password'] = ['required', "current_password:{$guard}"];
         }
 
         $validated = $request->validate($rules);
 
         $user->password = $validated['password'];
-        $user->must_change_password = false;
+        if ($user instanceof User) {
+            $user->must_change_password = false;
+        }
         $user->password_changed_at = now();
         $user->save();
 
+        if ($user instanceof Teacher) {
+            app(ActivityLogService::class)->logAccount(
+                'password_changed',
+                'Changed account password',
+                [
+                    'resource_type' => 'account',
+                    'resource_id' => $user->id,
+                    'resource_label' => 'Password',
+                ],
+            );
+        }
+
+        $home = $user instanceof Teacher ? 'teacher.dashboard' : 'admin.dashboard';
+
         return redirect()
-            ->route('admin.dashboard')
+            ->route($home)
             ->with('success', 'Password updated successfully.');
     }
 }

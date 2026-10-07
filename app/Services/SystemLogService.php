@@ -17,21 +17,14 @@ class SystemLogService
     public function getFilterOptions(): array
     {
         return [
-            'categories' => [
-                ActivityLogService::CATEGORY_AUTHENTICATION,
-                ActivityLogService::CATEGORY_ATTENDANCE,
-                ActivityLogService::CATEGORY_USER_MANAGEMENT,
-                ActivityLogService::CATEGORY_TIMETABLE,
-                ActivityLogService::CATEGORY_SYSTEM_SETTINGS,
-                ActivityLogService::CATEGORY_SECURITY,
-            ],
+            'categories' => ActivityLogService::categories(),
             'statuses' => [ActivityLogService::STATUS_SUCCESS, ActivityLogService::STATUS_FAILED],
             'roles' => ActivityLog::query()->distinct()->orderBy('actor_role')->pluck('actor_role')->filter()->values()->all(),
             'eventTypes' => ActivityLog::query()->distinct()->orderBy('event_type')->pluck('event_type')->filter()->values()->all(),
             'users' => ActivityLog::query()
-                ->select(['actor_id', 'actor_name', 'actor_role', 'actor_type'])
+                ->selectRaw('actor_id, actor_type, max(actor_name) as actor_name, max(actor_role) as actor_role')
                 ->whereNotNull('actor_id')
-                ->distinct()
+                ->groupBy('actor_id', 'actor_type')
                 ->orderBy('actor_name')
                 ->get()
                 ->map(fn ($row) => [
@@ -39,6 +32,7 @@ class SystemLogService
                     'name' => $row->actor_name,
                     'role' => $row->actor_role,
                     'type' => $row->actor_type,
+                    'value' => ($row->actor_type ?: 'unknown').'|'.$row->actor_id,
                 ])
                 ->values()
                 ->all(),
@@ -191,7 +185,13 @@ class SystemLogService
         }
 
         if ($request->filled('actor_id') && $request->actor_id !== 'all') {
-            $query->where('actor_id', (int) $request->actor_id);
+            $raw = (string) $request->actor_id;
+            if (str_contains($raw, '|')) {
+                [$actorType, $actorId] = explode('|', $raw, 2);
+                $query->where('actor_type', $actorType)->where('actor_id', (int) $actorId);
+            } else {
+                $query->where('actor_id', (int) $raw);
+            }
         }
 
         if ($request->filled('actor_role') && $request->actor_role !== 'all') {

@@ -1,4 +1,6 @@
 import RecentNotificationsWidget from '@/components/notifications/RecentNotificationsWidget';
+import RecentActivities from '@/components/staff-activity/RecentActivities';
+import type { StaffActivityItem } from '@/components/staff-activity/types';
 import { type TeacherNotificationItem } from '@/components/notifications/types';
 import AppLayout from '@/layouts/app-layout';
 import { cn } from '@/lib/utils';
@@ -181,6 +183,7 @@ export default function TeacherDashboard({
     upcomingReminders = [],
     staffType,
     pendingVenueChangeApprovals = 0,
+    recentActivities = [],
 }: {
     upcomingClasses: TodayLectures[];
     todayLectures: TodayLectures[];
@@ -190,6 +193,7 @@ export default function TeacherDashboard({
     upcomingReminders?: UpcomingReminder[];
     staffType?: string;
     pendingVenueChangeApprovals?: number;
+    recentActivities?: StaffActivityItem[];
 }) {
     const [timeFilter, setTimeFilter] = useState('week');
     const [chartData, setChartData] = useState<AttendanceData>(attendanceData);
@@ -412,6 +416,8 @@ export default function TeacherDashboard({
                             );
                         })}
                     </section>
+
+                    <RecentActivities activities={recentActivities} />
 
                     {isLecturer && (
                         <RecentNotificationsWidget

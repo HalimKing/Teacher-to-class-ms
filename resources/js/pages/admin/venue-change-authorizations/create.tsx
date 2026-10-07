@@ -1,3 +1,4 @@
+import ComboBox from '@/components/combobox';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -128,6 +129,20 @@ export default function VenueChangeAuthorizationCreate({ staffMembers, venues }:
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [data.staff_id, data.start_date, data.end_date]);
 
+    const staffOptions = useMemo(
+        () =>
+            staffMembers.map((member) => ({
+                label: `${member.title || ''} ${member.first_name} ${member.last_name}${member.employee_id ? ` (${member.employee_id})` : ''}`.replace(/\s+/g, ' ').trim(),
+                value: String(member.id),
+            })),
+        [staffMembers],
+    );
+
+    const selectedStaffOption = useMemo(
+        () => staffOptions.find((option) => option.value === String(data.staff_id)) ?? null,
+        [staffOptions, data.staff_id],
+    );
+
     const dayOptions = useMemo(
         () => Array.from(new Set(schedules.map((schedule) => schedule.day).filter(Boolean))),
         [schedules],
@@ -215,26 +230,23 @@ export default function VenueChangeAuthorizationCreate({ staffMembers, venues }:
                                     error={errors.staff_id}
                                     required
                                 >
-                                    <select
-                                        id="staff_id"
-                                        value={data.staff_id}
-                                        onChange={(e) => {
-                                            setData('staff_id', e.target.value);
+                                    <ComboBox
+                                        options={staffOptions}
+                                        label="Search staff"
+                                        size="small"
+                                        defaultValue={selectedStaffOption}
+                                        className={cn(errors.staff_id && 'rounded-md ring-1 ring-destructive')}
+                                        externalValue={(value) => {
+                                            const next = value === undefined || value === null || value === '' ? '' : String(value);
+                                            if (next === data.staff_id) {
+                                                return;
+                                            }
+                                            setData('staff_id', next);
                                             setData('timetable_ids', []);
                                             setScheduleSearch('');
                                             setDayFilter('');
                                         }}
-                                        className={cn(inputClass, errors.staff_id && 'border-destructive')}
-                                        required
-                                        aria-invalid={Boolean(errors.staff_id)}
-                                    >
-                                        <option value="">Select administrator</option>
-                                        {staffMembers.map((member) => (
-                                            <option key={member.id} value={member.id}>
-                                                {member.title} {member.first_name} {member.last_name} ({member.employee_id})
-                                            </option>
-                                        ))}
-                                    </select>
+                                    />
                                 </Field>
 
                                 <div className="grid gap-4 sm:grid-cols-2">

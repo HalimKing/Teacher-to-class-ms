@@ -13,6 +13,7 @@ interface ComboBoxProps {
   externalValue?: (value: string | number | undefined) => void;
   defaultValue?: Option | null;
   className?: string;
+  size?: 'small' | 'medium';
 }
 
 export default function ComboBox({ 
@@ -20,7 +21,8 @@ export default function ComboBox({
   label = "Select Option", 
   externalValue, 
   defaultValue = null,
-  className = ""
+  className = "",
+  size = "medium",
 }: ComboBoxProps) {
   const [value, setValue] = React.useState<Option | null>(defaultValue);
 
@@ -45,9 +47,10 @@ export default function ComboBox({
       className={className}
       sx={{ width: '100%', minWidth: 0 }}
       getOptionLabel={(option) => option.label}
-      isOptionEqualToValue={(option, value) => option.value === value.value}
+      getOptionKey={(option) => String(option.value ?? option.label)}
+      isOptionEqualToValue={(option, value) => String(option.value) === String(value.value)}
       renderInput={(params) => (
-        <TextField {...params} label={label} variant="outlined" />
+        <TextField {...params} label={label} variant="outlined" size={size} />
       )}
     />
   );
