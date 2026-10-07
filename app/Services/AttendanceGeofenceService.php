@@ -5,14 +5,16 @@ namespace App\Services;
 use Carbon\Carbon;
 
 /**
- * Server-side attendance geofence. The reported GPS point is not treated as exact:
- * a reading is accepted only when its accuracy is usable and the accuracy circle
- * still reaches the venue radius. Poor accuracy is rejected instead of being
- * reported as out of range.
+ * Server-side attendance geofence. The reported GPS point is not treated as exact.
+ * A pin already inside the venue is accepted with typical indoor GPS accuracy.
+ * A pin outside is accepted only when a usable accuracy circle still reaches the
+ * venue. Extremely coarse readings are rejected instead of being reported as out of range.
  */
 class AttendanceGeofenceService
 {
-    public const MAX_ACCEPTABLE_ACCURACY_METERS = 100;
+    public const MAX_ACCEPTABLE_ACCURACY_METERS = 200;
+
+    public const MAX_INSIDE_ACCURACY_METERS = 300;
 
     public const MAX_FIX_AGE_SECONDS = 120;
 
@@ -77,7 +79,7 @@ class AttendanceGeofenceService
         $distance = $this->distanceInMeters($latitude, $longitude, $venueLat, $venueLng);
         $diagnostics['distance_meters'] = round($distance, 1);
 
-        if (! is_finite($accuracy) || $accuracy <= 0 || $accuracy > self::MAX_ACCEPTABLE_ACCURACY_METERS) {
+        if (! is_finite($accuracy) || $accuracy <= 0) {
             $diagnostics['failure_reason'] = 'poor_accuracy';
 
             return $this->result(
@@ -89,7 +91,22 @@ class AttendanceGeofenceService
             );
         }
 
-        if (($distance - $accuracy) > $radius) {
+        $insideVenue = $distance <= $radius;
+        $accuracyCap = $insideVenue ? self::MAX_INSIDE_ACCURACY_METERS : self::MAX_ACCEPTABLE_ACCURACY_METERS;
+
+        if ($accuracy > $accuracyCap) {
+            $diagnostics['failure_reason'] = 'poor_accuracy';
+
+            return $this->result(
+                'accuracy_too_low',
+                false,
+                $distance,
+                'Location accuracy is too low. Please enable GPS/location services, move to an area with a clearer GPS signal, and try again.',
+                $diagnostics,
+            );
+        }
+
+        if (! $insideVenue && ($distance - $accuracy) > $radius) {
             $diagnostics['failure_reason'] = 'out_of_range';
 
             return $this->result(

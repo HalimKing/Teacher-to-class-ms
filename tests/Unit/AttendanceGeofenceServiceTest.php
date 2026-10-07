@@ -31,8 +31,16 @@ it('rejects a reading that is outside the venue even after accuracy is applied',
         ->and($verdict['distance'])->toBeGreaterThan(500);
 });
 
+it('accepts an indoor reading that is already inside the venue even when accuracy is slightly coarse', function () {
+    $verdict = $this->geofence->verify(0, 0.00019, 104, null, 0, 0, 50);
+
+    expect($verdict['status'])->toBe('verified')
+        ->and($verdict['accepted'])->toBeTrue()
+        ->and($verdict['distance'])->toBeLessThanOrEqual(50);
+});
+
 it('asks for another reading when gps accuracy is too poor', function () {
-    $verdict = $this->geofence->verify(0, 0.001, 150, null, 0, 0, 50);
+    $verdict = $this->geofence->verify(0, 0.001, 400, null, 0, 0, 50);
 
     expect($verdict['status'])->toBe('accuracy_too_low')
         ->and($verdict['accepted'])->toBeFalse()

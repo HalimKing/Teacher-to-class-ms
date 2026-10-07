@@ -1,5 +1,14 @@
-/** Readings coarser than this are not reliable enough for attendance. */
-export const MAX_ACCEPTABLE_ACCURACY_METERS = 100;
+/**
+ * Maximum uncertainty allowed when the pin is outside the venue and we rely on
+ * the accuracy circle reaching the fence. Indoor phones often report 80–150 m.
+ */
+export const MAX_ACCEPTABLE_ACCURACY_METERS = 200;
+
+/**
+ * When the reported point is already inside the venue, allow coarser indoor GPS
+ * rather than blocking staff who are standing at the location.
+ */
+export const MAX_INSIDE_ACCURACY_METERS = 300;
 
 /** Ignore browser fixes older than this when a fresh reading was requested. */
 export const MAX_FIX_AGE_MS = 30_000;
@@ -67,11 +76,18 @@ export function evaluateAttendanceLocation(input: {
 
     const distanceMeters = distanceInMeters(latitude, longitude, venueLatitude, venueLongitude);
 
-    if (!Number.isFinite(accuracy) || accuracy <= 0 || accuracy > MAX_ACCEPTABLE_ACCURACY_METERS) {
+    if (!Number.isFinite(accuracy) || accuracy <= 0) {
         return { status: 'accuracy_too_low', distanceMeters, message: POOR_ACCURACY_MESSAGE };
     }
 
-    if (distanceMeters - accuracy > radiusMeters) {
+    const insideVenue = distanceMeters <= radiusMeters;
+    const accuracyCap = insideVenue ? MAX_INSIDE_ACCURACY_METERS : MAX_ACCEPTABLE_ACCURACY_METERS;
+
+    if (accuracy > accuracyCap) {
+        return { status: 'accuracy_too_low', distanceMeters, message: POOR_ACCURACY_MESSAGE };
+    }
+
+    if (!insideVenue && distanceMeters - accuracy > radiusMeters) {
         return {
             status: 'out_of_range',
             distanceMeters,

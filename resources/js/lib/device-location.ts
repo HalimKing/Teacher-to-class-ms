@@ -1,4 +1,4 @@
-import { MAX_ACCEPTABLE_ACCURACY_METERS, MAX_FIX_AGE_MS } from '@/lib/geo';
+import { MAX_FIX_AGE_MS, MAX_INSIDE_ACCURACY_METERS } from '@/lib/geo';
 
 export type DeviceFix = {
     latitude: number;
@@ -111,7 +111,7 @@ export function acquireFreshDeviceLocation(): Promise<DeviceFix> {
         };
 
         const acceptBest = () => {
-            if (best && best.accuracy <= MAX_ACCEPTABLE_ACCURACY_METERS) {
+            if (best && best.accuracy <= MAX_INSIDE_ACCURACY_METERS) {
                 finish(() => resolve(best as DeviceFix));
                 return;
             }
@@ -146,7 +146,7 @@ export function acquireFreshDeviceLocation(): Promise<DeviceFix> {
         };
 
         quickTimer = window.setTimeout(() => {
-            if (best && best.accuracy <= MAX_ACCEPTABLE_ACCURACY_METERS) {
+            if (best && best.accuracy <= MAX_INSIDE_ACCURACY_METERS) {
                 finish(() => resolve(best as DeviceFix));
             }
         }, QUICK_ACCEPT_MS);
@@ -154,7 +154,7 @@ export function acquireFreshDeviceLocation(): Promise<DeviceFix> {
         windowTimer = window.setTimeout(acceptBest, SAMPLE_WINDOW_MS);
 
         activeWatch = navigator.geolocation.watchPosition(consider, (error) => {
-            if (best && best.accuracy <= MAX_ACCEPTABLE_ACCURACY_METERS) {
+            if (best && best.accuracy <= MAX_INSIDE_ACCURACY_METERS) {
                 finish(() => resolve(best as DeviceFix));
                 return;
             }
