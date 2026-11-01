@@ -1,4 +1,4 @@
-import { Check, Clock3, X } from 'lucide-react';
+import { Check, Clock3, Minus, X } from 'lucide-react';
 
 export interface VenueChangeApprovalItem {
     id: number;
@@ -19,6 +19,10 @@ const statusClass = (status: string) => {
 
     if (status === 'rejected') {
         return 'bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-200';
+    }
+
+    if (status === 'not_required') {
+        return 'bg-slate-100 text-slate-600 dark:bg-slate-800/60 dark:text-slate-300';
     }
 
     return 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200';
@@ -53,11 +57,31 @@ function TimelineIcon({ status }: { status: string }) {
         );
     }
 
+    if (status === 'not_required') {
+        return (
+            <span className="flex size-9 items-center justify-center rounded-full bg-slate-200 text-slate-600 ring-1 ring-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
+                <Minus className="size-4" />
+            </span>
+        );
+    }
+
     return (
         <span className="flex size-9 items-center justify-center rounded-full bg-amber-100 text-amber-700 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-200 dark:ring-amber-900/60">
             <Clock3 className="size-4" />
         </span>
     );
+}
+
+function compactStatusLabel(status: string, statusLabel: string) {
+    if (status === 'pending') {
+        return 'Pending';
+    }
+
+    if (status === 'not_required') {
+        return 'Skipped';
+    }
+
+    return statusLabel;
 }
 
 export default function VenueChangeApprovalStatus({
@@ -67,10 +91,25 @@ export default function VenueChangeApprovalStatus({
 }: {
     approvals?: VenueChangeApprovalItem[];
     progress?: string | null;
-    variant?: 'cards' | 'timeline';
+    variant?: 'cards' | 'timeline' | 'compact';
 }) {
     if (approvals.length === 0) {
         return null;
+    }
+
+    if (variant === 'compact') {
+        return (
+            <ul className="min-w-[14rem] space-y-1.5">
+                {approvals.map((approval) => (
+                    <li key={approval.id} className="flex items-center justify-between gap-3">
+                        <span className="truncate text-xs font-medium text-sidebar-foreground/75">{approval.role_label}</span>
+                        <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusClass(approval.status)}`}>
+                            {compactStatusLabel(approval.status, approval.status_label)}
+                        </span>
+                    </li>
+                ))}
+            </ul>
+        );
     }
 
     if (variant === 'timeline') {

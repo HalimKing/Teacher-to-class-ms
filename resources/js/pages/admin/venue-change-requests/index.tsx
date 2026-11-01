@@ -52,8 +52,8 @@ export default function VenueChangeRequestIndex({ requests, filters }: PageProps
                     <div>
                         <h1 className="text-2xl font-bold text-slate-900">Venue Change Requests</h1>
                         <p className="mt-1 text-sm text-slate-500">
-                            Review administrator-submitted requests. A request is fully approved only after the required
-                            Director/Dean, Head of Department, and administrator reviews. Approved requests become Venue Change Authorizations.
+                            Review administrator-submitted requests. Approval from an administrator, Director/Dean, or Head of
+                            Department is enough. Approved requests become Venue Change Authorizations.
                             Direct authorizations remain available under Schedules → Venue Change Authorizations.
                         </p>
                     </div>

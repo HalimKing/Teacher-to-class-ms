@@ -36,7 +36,7 @@ interface Option {
 }
 
 interface CreateTimeTablePageProps {
-    academicYear: AcademicYear;
+    academicYear: AcademicYear | null;
     courses: Option[];
     classRooms: Option[];
     teachers: Array<Option & { staff_type?: string; employee_id?: string }>;
@@ -117,7 +117,7 @@ export default function CreateTimeTablePage({ academicYear, courses, classRooms,
     const { flash } = usePage().props as PagePropsWithFlash;
 
     const { data, setData, post, processing, errors, transform } = useForm<CreateTimeTableForm>({
-        academic_year_id: academicYear.id,
+        academic_year_id: academicYear?.id ?? 0,
         staff_type: 'lecturer',
         teacher_id: '',
         course_id: '',
@@ -158,7 +158,7 @@ export default function CreateTimeTablePage({ academicYear, courses, classRooms,
 
     const resetSlotFields = () => {
         setData({
-            academic_year_id: academicYear.id,
+            academic_year_id: academicYear?.id ?? 0,
             staff_type: data.staff_type,
             teacher_id: '',
             course_id: '',
@@ -314,6 +314,33 @@ export default function CreateTimeTablePage({ academicYear, courses, classRooms,
             onError: showFormErrorToast,
         });
     };
+
+    if (!academicYear) {
+        return (
+            <AppLayout breadcrumbs={breadcrumbs}>
+                <Head title="Create Schedule" />
+                <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 p-6">
+                    <div className="rounded-3xl border border-amber-200 bg-amber-50 p-6 text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-50">
+                        <div className="flex items-start gap-3">
+                            <AlertTriangle className="mt-0.5 size-5 shrink-0" />
+                            <div>
+                                <h1 className="text-lg font-semibold">An active academic year is required</h1>
+                                <p className="mt-2 text-sm">
+                                    Create an academic year and set it to active before assigning a schedule. A lecturer schedule also needs a course.
+                                </p>
+                                <Link
+                                    href={route('admin.school-management.academic-years.create')}
+                                    className="mt-4 inline-flex min-h-11 items-center rounded-2xl bg-indigo-600 px-4 text-sm font-semibold text-white hover:bg-indigo-700"
+                                >
+                                    Create academic year
+                                </Link>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </AppLayout>
+        );
+    }
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>

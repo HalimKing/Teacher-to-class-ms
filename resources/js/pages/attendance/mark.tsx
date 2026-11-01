@@ -7,7 +7,8 @@ import { acquireFreshDeviceLocation } from '@/lib/device-location';
 import { evaluateAttendanceLocation } from '@/lib/geo';
 import { apiJsonRequest, getApiErrorMessage } from '@/lib/http';
 import { getBooleanSetting } from '@/lib/system-settings';
-import { buildFaceVerificationPayload } from '@/lib/teacher-api';
+import { buildFaceAttendanceProof } from '@/lib/teacher-api';
+import { verifyFace } from '@/services/faceVerification';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { AlertTriangle, ArrowLeft, CalendarOff, CheckCircle2, Clock, Loader2, LogIn, LogOut, MapPin, ShieldAlert } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -64,6 +65,7 @@ interface MarkPageProps {
     staffType: string;
     roleLabel: string;
     facialRecognitionEnabled?: boolean;
+    faceRecognitionEngine?: 'face_api' | 'arcface';
     holidayContext?: {
         mode: string;
         title: string;
@@ -95,6 +97,7 @@ export default function AttendancePortalMarkPage({
     staffType,
     roleLabel,
     facialRecognitionEnabled: facialRecognitionEnabledProp,
+    faceRecognitionEngine = 'face_api',
     holidayContext,
 }: MarkPageProps) {
     const isLecturer = staffType === 'lecturer';
@@ -460,20 +463,14 @@ export default function AttendancePortalMarkPage({
 
         setSubmitting(true);
         try {
-            const verification = await requestJson<ApiResponse>(endpoints.verifyFace, {
-                method: 'POST',
-                body: JSON.stringify(buildFaceVerificationPayload(session.timetable_id, result.descriptor, result.quality)),
-            });
+            const verification = await verifyFace<ApiResponse>(endpoints.verifyFace, session.timetable_id, result);
 
             if (!verification.success || !verification.verification_token) {
                 throw new Error(verification.message || 'Face verification failed.');
             }
 
             const locationPayload = await getLocationPayload(session);
-            const facePayload = {
-                face_descriptor: result.descriptor,
-                face_verification_token: verification.verification_token,
-            };
+            const facePayload = buildFaceAttendanceProof(result, verification.verification_token);
 
             if (pendingAction === 'check-in') {
                 if (isLecturer) {
@@ -784,6 +781,7 @@ export default function AttendancePortalMarkPage({
                 title="Verify your face"
                 description="Confirm your identity to save attendance."
                 captureLabel="Verify and continue"
+                engine={faceRecognitionEngine}
                 requireLocation={gpsEnforcementEnabled}
                 locationGate={faceLocationGate}
                 onCapture={handleFaceVerified}

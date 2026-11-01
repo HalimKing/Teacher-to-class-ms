@@ -9,8 +9,8 @@ import { Separator } from '@/components/ui/separator';
 import { apiJsonRequest, getApiErrorMessage } from '@/lib/http';
 import { cn } from '@/lib/utils';
 import { Link, useForm } from '@inertiajs/react';
-import { AlertTriangle, Building2, Landmark, Loader2, Send, Users } from 'lucide-react';
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, Bell, Building2, Check, Circle, FileText, Landmark, Loader2, PenLine, Send, Users, UsersRound } from 'lucide-react';
+import { FormEvent, ReactNode, useEffect, useMemo, useState } from 'react';
 import { Bounce, toast } from 'react-toastify';
 
 type PreviewResponse = {
@@ -60,19 +60,74 @@ function AudienceToggle({
     return (
         <label
             className={cn(
-                'flex min-h-14 cursor-pointer items-start gap-3 rounded-xl border p-3.5 transition-colors',
+                'flex min-h-14 cursor-pointer items-start gap-3 rounded-2xl border p-4 transition',
                 checked
-                    ? 'border-primary/40 bg-primary/5'
-                    : 'border-sidebar-border/70 bg-background hover:bg-muted/50',
+                    ? 'border-indigo-300 bg-indigo-50/70 shadow-sm shadow-indigo-100 dark:border-indigo-800 dark:bg-indigo-950/30 dark:shadow-none'
+                    : 'border-sidebar-border/70 bg-background hover:border-indigo-200 hover:bg-indigo-50/30 dark:hover:border-indigo-900',
             )}
         >
             <Checkbox checked={checked} onCheckedChange={(value) => onCheckedChange(value === true)} className="mt-0.5" />
-            <Icon className="mt-0.5 size-4 shrink-0 text-sidebar-foreground/55" />
+            <span
+                className={cn(
+                    'flex size-9 shrink-0 items-center justify-center rounded-xl',
+                    checked ? 'bg-indigo-600 text-white' : 'bg-muted text-sidebar-foreground/60',
+                )}
+            >
+                <Icon className="size-4" />
+            </span>
             <span className="min-w-0">
-                <span className="block text-sm font-medium text-sidebar-foreground">{title}</span>
+                <span className="block text-sm font-semibold text-sidebar-foreground">{title}</span>
                 <span className="mt-0.5 block text-xs leading-relaxed text-sidebar-foreground/60">{description}</span>
             </span>
         </label>
+    );
+}
+
+function SectionHeader({
+    step,
+    icon: Icon,
+    title,
+    description,
+    aside,
+}: {
+    step: string;
+    icon: typeof Users;
+    title: string;
+    description: string;
+    aside?: ReactNode;
+}) {
+    return (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex items-start gap-3">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-300">
+                    <Icon className="size-5" />
+                </span>
+                <div className="min-w-0">
+                    <p className="text-[11px] font-semibold tracking-[0.18em] text-slate-400 uppercase">Step {step}</p>
+                    <h2 className="mt-0.5 text-base font-semibold text-sidebar-foreground sm:text-lg">{title}</h2>
+                    <p className="mt-1 text-sm text-sidebar-foreground/60">{description}</p>
+                </div>
+            </div>
+            {aside}
+        </div>
+    );
+}
+
+function ReadinessItem({ done, label, hint }: { done: boolean; label: string; hint?: string }) {
+    return (
+        <li className="flex items-start gap-2.5">
+            {done ? (
+                <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
+                    <Check className="size-2.5" />
+                </span>
+            ) : (
+                <Circle className="mt-0.5 size-4 shrink-0 text-sidebar-foreground/30" />
+            )}
+            <span className="min-w-0">
+                <span className={cn('block text-sm', done ? 'text-sidebar-foreground' : 'text-sidebar-foreground/60')}>{label}</span>
+                {hint && !done && <span className="block text-xs text-sidebar-foreground/50">{hint}</span>}
+            </span>
+        </li>
     );
 }
 
@@ -82,43 +137,65 @@ function AudiencePreviewDetails({
     previewing,
     previewError,
     preview,
+    subjectReady,
+    bodyReady,
 }: {
     hasAudience: boolean;
     recipientCount: number;
     previewing: boolean;
     previewError: string | null;
     preview: PreviewResponse | null;
+    subjectReady: boolean;
+    bodyReady: boolean;
 }) {
+    const audienceReady = hasAudience && recipientCount > 0;
+
     return (
         <>
             <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                    <h2 className="text-sm font-semibold text-sidebar-foreground">Audience preview</h2>
-                    <p className="mt-1 text-xs text-sidebar-foreground/60">Review the reach before you send.</p>
+                    <p className="text-[11px] font-semibold tracking-[0.18em] text-slate-400 uppercase">Summary</p>
+                    <h2 className="mt-0.5 text-base font-semibold text-sidebar-foreground">Audience preview</h2>
                 </div>
                 {previewing && <Loader2 className="size-4 shrink-0 animate-spin text-sidebar-foreground/50" />}
             </div>
 
-            <div className="mt-4 rounded-xl bg-muted/50 px-4 py-4">
-                <p className="text-xs font-medium tracking-wide text-sidebar-foreground/55 uppercase">Eligible staff</p>
-                <p className="mt-1 text-3xl font-semibold tracking-tight text-sidebar-foreground">{hasAudience ? recipientCount : 0}</p>
+            <div className="mt-4 rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 px-4 py-4 text-white">
+                <p className="text-[11px] font-medium tracking-wide text-indigo-100 uppercase">Eligible staff</p>
+                <div className="mt-1 flex items-end gap-2">
+                    <p className="text-4xl font-semibold tracking-tight">{hasAudience ? recipientCount : 0}</p>
+                    <p className="pb-1 text-sm text-indigo-100">{recipientCount === 1 ? 'recipient' : 'recipients'}</p>
+                </div>
+                {!hasAudience && <p className="mt-2 text-xs text-indigo-100/90">Select recipients to calculate the reach.</p>}
             </div>
 
-            <div className="mt-4 space-y-2 text-sm text-sidebar-foreground/70">
-                {!hasAudience && <p>Select a recipient group to calculate who will receive this message.</p>}
-                {previewError && <p className="break-words text-rose-600">{previewError}</p>}
-                {preview?.groups?.map((group) => (
-                    <p key={group} className="break-words rounded-lg bg-muted/40 px-3 py-2 text-xs leading-5">
-                        {group}
-                    </p>
-                ))}
-                {preview?.warning && (
-                    <p className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
-                        <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                        {preview.warning}
-                    </p>
-                )}
-            </div>
+            {previewError && <p className="mt-3 break-words text-sm text-rose-600">{previewError}</p>}
+
+            {preview?.groups?.length ? (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                    {preview.groups.map((group) => (
+                        <span
+                            key={group}
+                            className="max-w-full truncate rounded-full border border-sidebar-border/70 bg-muted/40 px-2.5 py-1 text-xs text-sidebar-foreground/75"
+                        >
+                            {group}
+                        </span>
+                    ))}
+                </div>
+            ) : null}
+
+            {preview?.warning && (
+                <p className="mt-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
+                    <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                    {preview.warning}
+                </p>
+            )}
+
+            <ul className="mt-5 space-y-2.5">
+                <ReadinessItem done={audienceReady} label="Recipients selected" hint="Choose at least one staff member or group." />
+                <ReadinessItem done={subjectReady} label="Subject added" hint="A short, clear subject line." />
+                <ReadinessItem done={bodyReady} label="Message written" hint="The full text staff will receive." />
+            </ul>
         </>
     );
 }
@@ -349,6 +426,9 @@ export function CommunicationComposeForm({
 
     const needsStrongConfirm = data.all_faculties || data.all_departments || data.all_staff || Boolean(preview?.large_audience);
     const recipientCount = preview?.count ?? 0;
+    const subjectReady = data.subject.trim().length > 0;
+    const bodyReady = data.body.trim().length > 0;
+    const recipientsError = (errors as Record<string, string | undefined>).recipients;
 
     const staffPickerItems: RecipientOption[] = staffOptions.map((item) => ({
         id: item.id,
@@ -363,36 +443,58 @@ export function CommunicationComposeForm({
 
     const actionButtons = (
         <div className="flex flex-col gap-2">
-            <Button type="submit" disabled={processing || !capabilities.can_send} className="min-h-11 w-full">
+            <Button
+                type="submit"
+                disabled={processing || !capabilities.can_send}
+                className="min-h-11 w-full rounded-xl bg-indigo-600 text-white shadow-sm shadow-indigo-600/20 hover:bg-indigo-700"
+            >
                 {processing ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
                 {processing ? 'Sending...' : 'Send message'}
             </Button>
             {capabilities.can_manage_drafts && (
-                <Button type="button" variant="outline" disabled={processing} className="min-h-11 w-full" onClick={() => submit(true)}>
+                <Button type="button" variant="outline" disabled={processing} className="min-h-11 w-full rounded-xl" onClick={() => submit(true)}>
+                    <FileText className="size-4" />
                     Save draft
                 </Button>
             )}
-            <Button type="button" variant="ghost" className="min-h-11 w-full" asChild>
+            <Button type="button" variant="ghost" className="min-h-11 w-full rounded-xl" asChild>
                 <Link href={cancelHref}>Cancel</Link>
             </Button>
         </div>
     );
 
+    const selectionCount = data.faculty_ids.length + data.department_ids.length + data.staff_ids.length;
+    const recipientsAside = hasAudience ? (
+        <span className="inline-flex w-fit shrink-0 items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-200 dark:ring-emerald-900/60">
+            <Check className="size-3.5" />
+            {data.all_faculties || data.all_departments || data.all_staff
+                ? 'Group selected'
+                : `${selectionCount} selected`}
+        </span>
+    ) : (
+        <span className="inline-flex w-fit shrink-0 rounded-full bg-muted px-3 py-1 text-xs font-medium text-sidebar-foreground/60">
+            Nothing selected yet
+        </span>
+    );
+
     return (
         <>
-            <form onSubmit={handleSubmit} className="relative grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_20.5rem] xl:gap-6">
+            <form onSubmit={handleSubmit} className="relative grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_21rem] xl:gap-6">
                 <div className="min-w-0 space-y-5">
-                    <section className="rounded-2xl border border-sidebar-border/70 bg-card p-4 shadow-sm sm:p-6">
-                        <div className="mb-4">
-                            <h2 className="text-base font-semibold text-sidebar-foreground">Recipients</h2>
-                            <p className="mt-1 text-sm text-sidebar-foreground/60">
-                                {mode === 'admin'
+                    <section className="rounded-3xl border border-slate-200/80 bg-card p-4 shadow-sm sm:p-6 dark:border-sidebar-border">
+                        <SectionHeader
+                            step="1"
+                            icon={UsersRound}
+                            title="Recipients"
+                            description={
+                                mode === 'admin'
                                     ? 'Choose one or more faculties/directorates, departments, or staff members. Overlapping selections are sent once.'
-                                    : `Only staff in ${capabilities.scope_label} can be selected.`}
-                            </p>
-                        </div>
+                                    : `Only staff in ${capabilities.scope_label} can be selected.`
+                            }
+                            aside={recipientsAside}
+                        />
 
-                        <div className="space-y-4">
+                        <div className="mt-5 space-y-4">
                             {mode === 'admin' && (
                                 <div className="grid gap-3 sm:grid-cols-2">
                                     {capabilities.can_send_all_faculties && (
@@ -488,17 +590,27 @@ export function CommunicationComposeForm({
                                 />
                             )}
 
-                            {errors.recipients && <p className="text-sm text-rose-600">{errors.recipients}</p>}
+                            {recipientsError && (
+                                <p className="flex items-center gap-1.5 text-sm text-rose-600">
+                                    <AlertTriangle className="size-4 shrink-0" />
+                                    {recipientsError}
+                                </p>
+                            )}
                         </div>
                     </section>
 
-                    <section className="rounded-2xl border border-sidebar-border/70 bg-card p-3 shadow-sm sm:p-4 xl:hidden">
+                    <section className="rounded-3xl border border-slate-200/80 bg-card p-4 shadow-sm sm:p-5 xl:hidden dark:border-sidebar-border">
                         <div className="flex items-center justify-between gap-3">
-                            <div className="min-w-0">
-                                <p className="text-[11px] font-medium uppercase tracking-wide text-sidebar-foreground/50">Audience</p>
-                                <p className="mt-0.5 truncate text-sm font-semibold text-sidebar-foreground">
-                                    {hasAudience ? `${recipientCount} eligible staff` : 'Select recipients to preview the audience'}
-                                </p>
+                            <div className="flex min-w-0 items-center gap-3">
+                                <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-indigo-600 text-sm font-semibold text-white">
+                                    {hasAudience ? recipientCount : 0}
+                                </span>
+                                <div className="min-w-0">
+                                    <p className="text-[11px] font-medium tracking-wide text-sidebar-foreground/50 uppercase">Audience</p>
+                                    <p className="truncate text-sm font-semibold text-sidebar-foreground">
+                                        {hasAudience ? 'Eligible staff will receive this' : 'Select recipients to preview the audience'}
+                                    </p>
+                                </div>
                             </div>
                             {previewing && <Loader2 className="size-4 shrink-0 animate-spin text-sidebar-foreground/50" />}
                         </div>
@@ -514,76 +626,110 @@ export function CommunicationComposeForm({
                         )}
                     </section>
 
-                    <section className="rounded-2xl border border-sidebar-border/70 bg-card p-4 shadow-sm sm:p-6">
-                        <div className="mb-4">
-                            <h2 className="text-base font-semibold text-sidebar-foreground">Message</h2>
-                            <p className="mt-1 text-sm text-sidebar-foreground/60">Write a clear subject and the full message staff will receive.</p>
-                        </div>
+                    <section className="rounded-3xl border border-slate-200/80 bg-card p-4 shadow-sm sm:p-6 dark:border-sidebar-border">
+                        <SectionHeader
+                            step="2"
+                            icon={PenLine}
+                            title="Message"
+                            description="Write a clear subject and the full message staff will receive."
+                        />
 
-                        <div className="space-y-4">
+                        <div className="mt-5 space-y-5">
                             <div className="space-y-2">
-                                <Label htmlFor="communication-subject">Subject</Label>
+                                <Label htmlFor="communication-subject" className="text-sm font-semibold">
+                                    Subject <span className="text-rose-500">*</span>
+                                </Label>
                                 <Input
                                     id="communication-subject"
                                     value={data.subject}
                                     onChange={(event) => setData('subject', event.target.value)}
                                     placeholder="e.g. Attendance briefing for this week"
-                                    className="h-11 bg-background text-base md:text-sm"
+                                    className={cn(
+                                        'h-12 rounded-2xl border-slate-200 bg-background px-4 text-base shadow-sm focus-visible:border-indigo-500 focus-visible:ring-indigo-500/15 focus-visible:ring-4 md:text-sm dark:border-sidebar-border',
+                                        errors.subject && 'border-rose-300 focus-visible:border-rose-500 focus-visible:ring-rose-500/10',
+                                    )}
                                     aria-invalid={Boolean(errors.subject)}
+                                    maxLength={255}
                                     required
                                 />
-                                {errors.subject && <p className="text-sm text-rose-600">{errors.subject}</p>}
+                                {errors.subject && (
+                                    <p className="flex items-center gap-1.5 text-sm text-rose-600">
+                                        <AlertTriangle className="size-4 shrink-0" />
+                                        {errors.subject}
+                                    </p>
+                                )}
                             </div>
 
                             <div className="space-y-2">
-                                <Label htmlFor="communication-body">Message body</Label>
+                                <div className="flex items-end justify-between gap-3">
+                                    <Label htmlFor="communication-body" className="text-sm font-semibold">
+                                        Message body <span className="text-rose-500">*</span>
+                                    </Label>
+                                    <span className="text-xs text-sidebar-foreground/50">{data.body.trim().length.toLocaleString()} characters</span>
+                                </div>
                                 <textarea
                                     id="communication-body"
                                     value={data.body}
                                     onChange={(event) => setData('body', event.target.value)}
                                     placeholder="Write the announcement, instruction, or update you want staff to receive..."
-                                    rows={8}
+                                    rows={10}
                                     required
                                     aria-invalid={Boolean(errors.body)}
                                     className={cn(
-                                        'border-input placeholder:text-muted-foreground min-h-40 w-full rounded-md border bg-background px-3 py-3 text-base leading-6 shadow-xs outline-none sm:min-h-64 md:text-sm',
-                                        'focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]',
-                                        errors.body && 'border-destructive',
+                                        'placeholder:text-muted-foreground min-h-44 w-full resize-y rounded-2xl border border-slate-200 bg-background px-4 py-3 text-base leading-7 shadow-sm outline-none transition sm:min-h-64 md:text-sm dark:border-sidebar-border',
+                                        'focus-visible:border-indigo-500 focus-visible:ring-4 focus-visible:ring-indigo-500/15',
+                                        errors.body && 'border-rose-300 focus-visible:border-rose-500 focus-visible:ring-rose-500/10',
                                     )}
                                 />
-                                <div className="flex flex-col gap-1 text-xs text-sidebar-foreground/50 sm:flex-row sm:items-center sm:justify-between">
-                                    <span>Staff will also receive an in-app notification.</span>
-                                    <span>{data.body.trim().length} characters</span>
-                                </div>
-                                {errors.body && <p className="text-sm text-rose-600">{errors.body}</p>}
+                                <p className="flex items-center gap-1.5 text-xs text-sidebar-foreground/55">
+                                    <Bell className="size-3.5 shrink-0" />
+                                    Staff will also receive an in-app notification.
+                                </p>
+                                {errors.body && (
+                                    <p className="flex items-center gap-1.5 text-sm text-rose-600">
+                                        <AlertTriangle className="size-4 shrink-0" />
+                                        {errors.body}
+                                    </p>
+                                )}
                             </div>
                         </div>
                     </section>
 
-                    <section className="rounded-2xl border border-sidebar-border/70 bg-card p-4 shadow-sm xl:hidden">
+                    <section className="rounded-3xl border border-slate-200/80 bg-card p-4 shadow-sm xl:hidden dark:border-sidebar-border">
                         {actionButtons}
                     </section>
                 </div>
 
                 <aside className="hidden space-y-4 xl:sticky xl:top-24 xl:block">
-                    <section className="rounded-2xl border border-sidebar-border/70 bg-card p-5 shadow-sm">
+                    <section className="rounded-3xl border border-slate-200/80 bg-card p-5 shadow-sm dark:border-sidebar-border">
                         <AudiencePreviewDetails
                             hasAudience={hasAudience}
                             recipientCount={recipientCount}
                             previewing={previewing}
                             previewError={previewError}
                             preview={preview}
+                            subjectReady={subjectReady}
+                            bodyReady={bodyReady}
                         />
                         <Separator className="my-5" />
                         {actionButtons}
                     </section>
                 </aside>
-
             </form>
 
             <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-                <DialogContent>
+                <DialogContent className="rounded-3xl sm:max-w-md">
                     <DialogHeader>
+                        <span
+                            className={cn(
+                                'mb-2 flex size-11 items-center justify-center rounded-2xl',
+                                needsStrongConfirm
+                                    ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-200'
+                                    : 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-300',
+                            )}
+                        >
+                            {needsStrongConfirm ? <AlertTriangle className="size-5" /> : <Send className="size-5" />}
+                        </span>
                         <DialogTitle>{needsStrongConfirm ? 'Confirm a large send?' : 'Send this message?'}</DialogTitle>
                         <DialogDescription>
                             {needsStrongConfirm
@@ -591,32 +737,47 @@ export function CommunicationComposeForm({
                                 : 'Confirm the subject and recipient list before sending.'}
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="space-y-3 rounded-xl border border-sidebar-border/70 bg-muted/40 p-4 text-sm">
-                        <p className="break-words">
-                            <span className="font-medium text-sidebar-foreground">Subject:</span>{' '}
-                            <span className="text-sidebar-foreground/70">{data.subject || '—'}</span>
-                        </p>
-                        <p>
-                            <span className="font-medium text-sidebar-foreground">Recipients:</span>{' '}
-                            <span className="text-sidebar-foreground/70">{recipientCount} staff</span>
-                        </p>
+                    <dl className="divide-y divide-sidebar-border/60 rounded-2xl border border-sidebar-border/70 bg-muted/30 text-sm">
+                        <div className="flex items-start justify-between gap-4 px-4 py-3">
+                            <dt className="shrink-0 text-xs font-medium tracking-wide text-sidebar-foreground/55 uppercase">Subject</dt>
+                            <dd className="min-w-0 text-right font-medium break-words text-sidebar-foreground">{data.subject || '—'}</dd>
+                        </div>
+                        <div className="flex items-start justify-between gap-4 px-4 py-3">
+                            <dt className="shrink-0 text-xs font-medium tracking-wide text-sidebar-foreground/55 uppercase">Recipients</dt>
+                            <dd className="text-right font-medium text-sidebar-foreground">
+                                {recipientCount} {recipientCount === 1 ? 'staff member' : 'staff'}
+                            </dd>
+                        </div>
                         {preview?.groups?.length ? (
-                            <p className="text-xs leading-5 text-sidebar-foreground/60">{preview.groups.join(' · ')}</p>
+                            <div className="px-4 py-3">
+                                <dt className="text-xs font-medium tracking-wide text-sidebar-foreground/55 uppercase">Audience</dt>
+                                <dd className="mt-1.5 flex flex-wrap gap-1.5">
+                                    {preview.groups.map((group) => (
+                                        <span
+                                            key={group}
+                                            className="max-w-full truncate rounded-full bg-background px-2.5 py-1 text-xs text-sidebar-foreground/75 ring-1 ring-sidebar-border/70"
+                                        >
+                                            {group}
+                                        </span>
+                                    ))}
+                                </dd>
+                            </div>
                         ) : null}
-                    </div>
+                    </dl>
                     <DialogFooter>
-                        <Button type="button" variant="outline" className="min-h-11 w-full sm:w-auto" onClick={() => setConfirmOpen(false)}>
+                        <Button type="button" variant="outline" className="min-h-11 w-full rounded-xl sm:w-auto" onClick={() => setConfirmOpen(false)}>
                             Review message
                         </Button>
                         <Button
                             type="button"
                             disabled={processing}
-                            className="min-h-11 w-full sm:w-auto"
+                            className="min-h-11 w-full rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 sm:w-auto"
                             onClick={() => {
                                 setConfirmOpen(false);
                                 submit(false);
                             }}
                         >
+                            <Send className="size-4" />
                             Confirm send
                         </Button>
                     </DialogFooter>

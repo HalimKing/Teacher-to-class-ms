@@ -124,6 +124,7 @@ class TeacherAttendanceController extends Controller
 
         return Inertia::render('teacher/attendance', [
             'facialRecognitionEnabled' => $facialRecognition->isEnabled(),
+            'faceRecognitionEngine' => $facialRecognition->engine(),
         ]);
     }
 
@@ -306,9 +307,11 @@ class TeacherAttendanceController extends Controller
             $attendance->arrival_category = $checkInOutcome['arrival_category'];
             $attendance->minutes_early = $checkInOutcome['minutes_early'];
             $attendance->minutes_late = $checkInOutcome['minutes_late'];
-            $attendance->face_verified = $faceVerificationPayload !== null;
-            $attendance->face_match_score = $faceMatchScore ?? ($faceVerificationPayload['score'] ?? null);
-            $attendance->face_verified_at = $faceVerificationPayload ? now() : null;
+            foreach ($facialRecognition->verifiedAttendanceAttributes(
+                $faceVerificationPayload ? ['payload' => $faceVerificationPayload, 'score' => $faceMatchScore] : null
+            ) as $attribute => $value) {
+                $attendance->{$attribute} = $value;
+            }
 
             $breakMeta = $this->holidayBreaks->breakDutyMeta($teacher, $now);
             if ($breakMeta) {

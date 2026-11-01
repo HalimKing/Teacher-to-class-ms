@@ -526,3 +526,25 @@ it('audits previous and new values when the venue change request setting is togg
         ->and($log->metadata['changed_by'] ?? null)->toBe($this->admin->id)
         ->and($log->metadata['changed_at'] ?? null)->not->toBeNull();
 });
+
+it('lets the requester open their venue change request details', function () {
+    $request = app(VenueChangeRequestService::class)->submit($this->staff, [
+        'authorized_classroom_id' => $this->authorizedVenue->id,
+        'authorization_type' => VenueChangeRequest::TYPE_BOTH,
+        'start_date' => now()->toDateString(),
+        'end_date' => now()->addDay()->toDateString(),
+        'reason' => 'Temporary office relocation',
+        'notes' => 'Need closer venue',
+    ], [$this->timetable->id]);
+
+    $this->actingAs($this->staff, 'teacher')
+        ->get(route('teacher.venue-change-requests.show', $request))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('teacher/venue-change-requests/show')
+            ->where('requestRecord.id', $request->id)
+            ->where('requestRecord.status', VenueChangeRequest::STATUS_PENDING)
+            ->has('approvals')
+            ->has('approvalProgress')
+        );
+});

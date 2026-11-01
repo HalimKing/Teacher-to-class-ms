@@ -3,6 +3,7 @@ import { ReportAttendanceTable } from '@/components/reports/ReportAttendanceTabl
 import { ReportExportButtons } from '@/components/reports/ReportExportButtons';
 import { ReportErrorState, ReportLoadingState } from '@/components/reports/ReportStates';
 import { ReportSummaryCards } from '@/components/reports/ReportSummaryCards';
+import { SearchableSelect, type SearchableSelectOption } from '@/components/reports/SearchableSelect';
 import {
     PaginatedRecords,
     ReportAnalytics,
@@ -117,6 +118,95 @@ export default function TeacherAttendanceReportsIndex({ filterOptions, initialFi
         if (filters.faculty_id === 'all') return filterOptions.departments;
         return filterOptions.departments.filter((d) => String(d.faculty_id) === filters.faculty_id);
     }, [filterOptions.departments, filters.faculty_id]);
+
+    const teacherOptions = useMemo<SearchableSelectOption[]>(
+        () =>
+            filterOptions.teachers.map((t) => ({
+                value: String(t.id),
+                label: t.name,
+                meta: t.employee_id,
+                keywords: t.employment_status_label ?? t.employment_status ?? '',
+            })),
+        [filterOptions.teachers],
+    );
+
+    const monthOptions = useMemo<SearchableSelectOption[]>(
+        () =>
+            Array.from({ length: 12 }, (_, i) => ({
+                value: String(i + 1),
+                label: new Date(2000, i, 1).toLocaleString('default', { month: 'long' }),
+            })),
+        [],
+    );
+
+    const yearOptions = useMemo<SearchableSelectOption[]>(() => {
+        const currentYear = new Date().getFullYear();
+        return Array.from({ length: 5 }, (_, i) => ({ value: String(currentYear - i), label: String(currentYear - i) }));
+    }, []);
+
+    const facultyOptions = useMemo<SearchableSelectOption[]>(
+        () => filterOptions.faculties.map((f) => ({ value: String(f.id), label: f.name })),
+        [filterOptions.faculties],
+    );
+
+    const facultyNameById = useMemo(
+        () => Object.fromEntries(filterOptions.faculties.map((f) => [f.id, f.name])) as Record<number, string>,
+        [filterOptions.faculties],
+    );
+
+    const departmentOptions = useMemo<SearchableSelectOption[]>(
+        () =>
+            filteredDepartments.map((d) => ({
+                value: String(d.id),
+                label: d.name,
+                meta: filters.faculty_id === 'all' ? (facultyNameById[d.faculty_id] ?? null) : null,
+            })),
+        [filteredDepartments, facultyNameById, filters.faculty_id],
+    );
+
+    const employmentStatusOptions = useMemo<SearchableSelectOption[]>(
+        () => (filterOptions.employmentStatuses || []).map((s) => ({ value: s.value, label: s.label })),
+        [filterOptions.employmentStatuses],
+    );
+
+    const courseOptions = useMemo<SearchableSelectOption[]>(
+        () => filterOptions.courses.map((c) => ({ value: String(c.id), label: c.name })),
+        [filterOptions.courses],
+    );
+
+    const attendanceStatusOptions = useMemo<SearchableSelectOption[]>(
+        () =>
+            filterOptions.attendanceStatuses.map((s) => {
+                const label = s.replace(/_/g, ' ');
+                return { value: s, label: label.charAt(0).toUpperCase() + label.slice(1) };
+            }),
+        [filterOptions.attendanceStatuses],
+    );
+
+    const exceptionCategoryOptions = useMemo<SearchableSelectOption[]>(
+        () => (filterOptions.exceptionCategories || []).map((c) => ({ value: c.value, label: c.label })),
+        [filterOptions.exceptionCategories],
+    );
+
+    const attendanceSourceOptions = useMemo<SearchableSelectOption[]>(
+        () => (filterOptions.attendanceSources || []).map((s) => ({ value: s.value, label: s.label })),
+        [filterOptions.attendanceSources],
+    );
+
+    const sessionTypeOptions = useMemo<SearchableSelectOption[]>(
+        () => (filterOptions.sessionTypes || []).map((s) => ({ value: s.value, label: s.label })),
+        [filterOptions.sessionTypes],
+    );
+
+    const faceVerificationOptions: SearchableSelectOption[] = [
+        { value: 'verified', label: 'Verified' },
+        { value: 'unverified', label: 'Unverified' },
+    ];
+
+    const geolocationOptions: SearchableSelectOption[] = [
+        { value: 'verified', label: 'Verified' },
+        { value: 'failed', label: 'Failed' },
+    ];
 
     const buildQueryParams = useCallback((pageNumber = currentPage) => {
         const params = new URLSearchParams();
@@ -249,19 +339,127 @@ export default function TeacherAttendanceReportsIndex({ filterOptions, initialFi
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                         <ReportFilterField label="Start Date"><input type="date" value={filters.start_date} onChange={(e) => setFilters((p) => ({ ...p, start_date: e.target.value }))} className={filterInputClass} /></ReportFilterField>
                         <ReportFilterField label="End Date"><input type="date" value={filters.end_date} onChange={(e) => setFilters((p) => ({ ...p, end_date: e.target.value }))} className={filterInputClass} /></ReportFilterField>
-                        <ReportFilterField label="Month"><select value={filters.month} onChange={(e) => setFilters((p) => ({ ...p, month: e.target.value }))} className={filterInputClass}><option value="">All Months</option>{Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={String(i + 1)}>{new Date(2000, i, 1).toLocaleString('default', { month: 'long' })}</option>)}</select></ReportFilterField>
-                        <ReportFilterField label="Year"><select value={filters.year} onChange={(e) => setFilters((p) => ({ ...p, year: e.target.value }))} className={filterInputClass}><option value="">All Years</option>{Array.from({ length: 5 }, (_, i) => { const y = new Date().getFullYear() - i; return <option key={y} value={String(y)}>{y}</option>; })}</select></ReportFilterField>
-                        <ReportFilterField label="Teaching Staff"><select value={filters.teacher_id} onChange={(e) => setFilters((p) => ({ ...p, teacher_id: e.target.value }))} className={filterInputClass}><option value="all">All Teaching Staff</option>{filterOptions.teachers.map((t) => <option key={t.id} value={String(t.id)}>{t.name} ({t.employee_id})</option>)}</select></ReportFilterField>
-                        <ReportFilterField label="Faculty"><select value={filters.faculty_id} onChange={(e) => setFilters((p) => ({ ...p, faculty_id: e.target.value, department_id: 'all' }))} className={filterInputClass}><option value="all">All Faculties</option>{filterOptions.faculties.map((f) => <option key={f.id} value={String(f.id)}>{f.name}</option>)}</select></ReportFilterField>
-                        <ReportFilterField label="Department"><select value={filters.department_id} onChange={(e) => setFilters((p) => ({ ...p, department_id: e.target.value }))} className={filterInputClass}><option value="all">All Departments</option>{filteredDepartments.map((d) => <option key={d.id} value={String(d.id)}>{d.name}</option>)}</select></ReportFilterField>
-                        <ReportFilterField label="Employment Status"><select value={filters.employment_status} onChange={(e) => setFilters((p) => ({ ...p, employment_status: e.target.value }))} className={filterInputClass}><option value="all">All Employment Statuses</option>{(filterOptions.employmentStatuses || []).map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select></ReportFilterField>
-                        <ReportFilterField label="Course"><select value={filters.course_id} onChange={(e) => setFilters((p) => ({ ...p, course_id: e.target.value }))} className={filterInputClass}><option value="all">All Courses</option>{filterOptions.courses.map((c) => <option key={c.id} value={String(c.id)}>{c.name}</option>)}</select></ReportFilterField>
-                        <ReportFilterField label="Attendance Status"><select value={filters.attendance_status} onChange={(e) => setFilters((p) => ({ ...p, attendance_status: e.target.value }))} className={filterInputClass}><option value="all">All Statuses</option>{filterOptions.attendanceStatuses.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}</select></ReportFilterField>
-                        <ReportFilterField label="Exception Category"><select value={filters.exception_category} onChange={(e) => setFilters((p) => ({ ...p, exception_category: e.target.value }))} className={filterInputClass}><option value="all">All Exceptions</option>{(filterOptions.exceptionCategories || []).map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}</select></ReportFilterField>
-                        <ReportFilterField label="Attendance Source"><select value={filters.attendance_source} onChange={(e) => setFilters((p) => ({ ...p, attendance_source: e.target.value }))} className={filterInputClass}><option value="all">All Sources</option>{filterOptions.attendanceSources?.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select></ReportFilterField>
-                        <ReportFilterField label="Session Type"><select value={filters.session_type} onChange={(e) => setFilters((p) => ({ ...p, session_type: e.target.value }))} className={filterInputClass}><option value="all">All Sessions</option>{filterOptions.sessionTypes?.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select></ReportFilterField>
-                        <ReportFilterField label="Face Verification"><select value={filters.face_verification_status} onChange={(e) => setFilters((p) => ({ ...p, face_verification_status: e.target.value }))} className={filterInputClass}><option value="all">All</option><option value="verified">Verified</option><option value="unverified">Unverified</option></select></ReportFilterField>
-                        <ReportFilterField label="Geolocation"><select value={filters.geolocation_status} onChange={(e) => setFilters((p) => ({ ...p, geolocation_status: e.target.value }))} className={filterInputClass}><option value="all">All</option><option value="verified">Verified</option><option value="failed">Failed</option></select></ReportFilterField>
+                        <ReportFilterField label="Month">
+                            <SearchableSelect
+                                value={filters.month}
+                                options={monthOptions}
+                                onChange={(month) => setFilters((p) => ({ ...p, month }))}
+                                allOption={{ value: '', label: 'All Months' }}
+                                searchPlaceholder="Search months..."
+                            />
+                        </ReportFilterField>
+                        <ReportFilterField label="Year">
+                            <SearchableSelect
+                                value={filters.year}
+                                options={yearOptions}
+                                onChange={(year) => setFilters((p) => ({ ...p, year }))}
+                                allOption={{ value: '', label: 'All Years' }}
+                                searchPlaceholder="Search years..."
+                            />
+                        </ReportFilterField>
+                        <ReportFilterField label="Teaching Staff">
+                            <SearchableSelect
+                                value={filters.teacher_id}
+                                options={teacherOptions}
+                                onChange={(teacherId) => setFilters((p) => ({ ...p, teacher_id: teacherId }))}
+                                allOption={{ value: 'all', label: 'All Teaching Staff' }}
+                                searchPlaceholder="Search by name or staff ID..."
+                                emptyMessage="No teaching staff match your search."
+                            />
+                        </ReportFilterField>
+                        <ReportFilterField label="Faculty">
+                            <SearchableSelect
+                                value={filters.faculty_id}
+                                options={facultyOptions}
+                                onChange={(facultyId) => setFilters((p) => ({ ...p, faculty_id: facultyId, department_id: 'all' }))}
+                                allOption={{ value: 'all', label: 'All Faculties' }}
+                                searchPlaceholder="Search faculties or directorates..."
+                                emptyMessage="No faculties match your search."
+                            />
+                        </ReportFilterField>
+                        <ReportFilterField label="Department">
+                            <SearchableSelect
+                                value={filters.department_id}
+                                options={departmentOptions}
+                                onChange={(departmentId) => setFilters((p) => ({ ...p, department_id: departmentId }))}
+                                allOption={{ value: 'all', label: 'All Departments' }}
+                                searchPlaceholder="Search departments..."
+                                emptyMessage="No departments match your search."
+                            />
+                        </ReportFilterField>
+                        <ReportFilterField label="Employment Status">
+                            <SearchableSelect
+                                value={filters.employment_status}
+                                options={employmentStatusOptions}
+                                onChange={(status) => setFilters((p) => ({ ...p, employment_status: status }))}
+                                allOption={{ value: 'all', label: 'All Employment Statuses' }}
+                                searchPlaceholder="Search statuses..."
+                            />
+                        </ReportFilterField>
+                        <ReportFilterField label="Course">
+                            <SearchableSelect
+                                value={filters.course_id}
+                                options={courseOptions}
+                                onChange={(courseId) => setFilters((p) => ({ ...p, course_id: courseId }))}
+                                allOption={{ value: 'all', label: 'All Courses' }}
+                                searchPlaceholder="Search courses..."
+                                emptyMessage="No courses match your search."
+                            />
+                        </ReportFilterField>
+                        <ReportFilterField label="Attendance Status">
+                            <SearchableSelect
+                                value={filters.attendance_status}
+                                options={attendanceStatusOptions}
+                                onChange={(status) => setFilters((p) => ({ ...p, attendance_status: status }))}
+                                allOption={{ value: 'all', label: 'All Statuses' }}
+                                searchPlaceholder="Search statuses..."
+                            />
+                        </ReportFilterField>
+                        <ReportFilterField label="Exception Category">
+                            <SearchableSelect
+                                value={filters.exception_category}
+                                options={exceptionCategoryOptions}
+                                onChange={(category) => setFilters((p) => ({ ...p, exception_category: category }))}
+                                allOption={{ value: 'all', label: 'All Exceptions' }}
+                                searchPlaceholder="Search exception categories..."
+                            />
+                        </ReportFilterField>
+                        <ReportFilterField label="Attendance Source">
+                            <SearchableSelect
+                                value={filters.attendance_source}
+                                options={attendanceSourceOptions}
+                                onChange={(source) => setFilters((p) => ({ ...p, attendance_source: source }))}
+                                allOption={{ value: 'all', label: 'All Sources' }}
+                                searchPlaceholder="Search sources..."
+                            />
+                        </ReportFilterField>
+                        <ReportFilterField label="Session Type">
+                            <SearchableSelect
+                                value={filters.session_type}
+                                options={sessionTypeOptions}
+                                onChange={(sessionType) => setFilters((p) => ({ ...p, session_type: sessionType }))}
+                                allOption={{ value: 'all', label: 'All Sessions' }}
+                                searchPlaceholder="Search session types..."
+                            />
+                        </ReportFilterField>
+                        <ReportFilterField label="Face Verification">
+                            <SearchableSelect
+                                value={filters.face_verification_status}
+                                options={faceVerificationOptions}
+                                onChange={(status) => setFilters((p) => ({ ...p, face_verification_status: status }))}
+                                allOption={{ value: 'all', label: 'All' }}
+                                searchPlaceholder="Search..."
+                            />
+                        </ReportFilterField>
+                        <ReportFilterField label="Geolocation">
+                            <SearchableSelect
+                                value={filters.geolocation_status}
+                                options={geolocationOptions}
+                                onChange={(status) => setFilters((p) => ({ ...p, geolocation_status: status }))}
+                                allOption={{ value: 'all', label: 'All' }}
+                                searchPlaceholder="Search..."
+                            />
+                        </ReportFilterField>
                         <ReportFilterField label="Check-in From"><input type="time" value={filters.check_in_from} onChange={(e) => setFilters((p) => ({ ...p, check_in_from: e.target.value }))} className={filterInputClass} /></ReportFilterField>
                         <ReportFilterField label="Check-in To"><input type="time" value={filters.check_in_to} onChange={(e) => setFilters((p) => ({ ...p, check_in_to: e.target.value }))} className={filterInputClass} /></ReportFilterField>
                         <ReportFilterField label="Check-out From"><input type="time" value={filters.check_out_from} onChange={(e) => setFilters((p) => ({ ...p, check_out_from: e.target.value }))} className={filterInputClass} /></ReportFilterField>

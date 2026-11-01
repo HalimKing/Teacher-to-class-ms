@@ -111,9 +111,7 @@ class UnitVenueChangeRequestController extends Controller
         }
 
         $message = $approved
-            ? ($updated->status === VenueChangeRequest::STATUS_APPROVED
-                ? 'Request approved. Venue change authorization(s) are now active.'
-                : 'Your approval has been recorded. The request remains pending until all required approvers have approved.')
+            ? 'Request approved. Venue change authorization(s) are now active.'
             : 'Venue change request rejected.';
 
         return redirect()

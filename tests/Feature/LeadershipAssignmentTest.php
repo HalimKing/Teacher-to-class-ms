@@ -129,7 +129,7 @@ it('keeps ordinary lecturers on their original routes and blocks unit management
         ->assertForbidden();
 });
 
-it('lets a lecturer who is director or dean manage only staff in their faculty', function () {
+it('lets a lecturer who is director or dean view only staff in their faculty', function () {
     $dean = makeLeadershipTeacher($this->facultyA, $this->departmentA1, [
         'first_name' => 'Dean',
         'leadership_role' => LeadershipAssignment::DIRECTOR_DEAN,
@@ -149,8 +149,12 @@ it('lets a lecturer who is director or dean manage only staff in their faculty',
         ->assertDontSee('OutFaculty');
 
     $this->actingAs($dean, 'teacher')
-        ->get(route('teacher.unit.staff.edit', $sameFaculty))
+        ->get(route('teacher.unit.staff.quick-view', $sameFaculty))
         ->assertOk();
+
+    $this->actingAs($dean, 'teacher')
+        ->get(route('teacher.unit.staff.edit', $sameFaculty))
+        ->assertForbidden();
 
     $this->actingAs($dean, 'teacher')
         ->get(route('teacher.unit.staff.edit', $otherFaculty))
@@ -161,7 +165,7 @@ it('lets a lecturer who is director or dean manage only staff in their faculty',
         ->assertForbidden();
 });
 
-it('lets a lecturer who is head of department manage only staff in their department', function () {
+it('lets a lecturer who is head of department view only staff in their department', function () {
     $head = makeLeadershipTeacher($this->facultyA, $this->departmentA1, [
         'first_name' => 'Head',
         'leadership_role' => LeadershipAssignment::HEAD_OF_DEPARTMENT,
@@ -182,8 +186,12 @@ it('lets a lecturer who is head of department manage only staff in their departm
         ->assertDontSee('OtherDept');
 
     $this->actingAs($head, 'teacher')
-        ->get(route('teacher.unit.staff.edit', $sameDepartment))
+        ->get(route('teacher.unit.staff.quick-view', $sameDepartment))
         ->assertOk();
+
+    $this->actingAs($head, 'teacher')
+        ->get(route('teacher.unit.staff.edit', $sameDepartment))
+        ->assertForbidden();
 
     $this->actingAs($head, 'teacher')
         ->get(route('teacher.unit.staff.edit', $sameFacultyOtherDept))
@@ -208,7 +216,7 @@ it('keeps ordinary administrators on staff attendance and blocks unit management
         ->assertForbidden();
 });
 
-it('lets an administrator who is director or dean keep staff attendance and manage faculty staff', function () {
+it('lets an administrator who is director or dean keep staff attendance and view faculty staff', function () {
     $dean = makeLeadershipTeacher($this->facultyA, $this->departmentA1, [
         'staff_type' => Teacher::STAFF_TYPE_ADMINISTRATOR,
         'leadership_role' => LeadershipAssignment::DIRECTOR_DEAN,
@@ -253,9 +261,9 @@ it('lets an administrator who is director or dean keep staff attendance and mana
             'staffType' => $sameFaculty->staff_type,
             'employmentStatus' => $sameFaculty->employment_status,
         ])
-        ->assertRedirect(route('teacher.unit.staff.index'));
+        ->assertForbidden();
 
-    expect($sameFaculty->fresh()->first_name)->toBe('Updated');
+    expect($sameFaculty->fresh()->first_name)->toBe($sameFaculty->first_name);
 });
 
 it('lets an administrator who is head of department keep staff attendance and stay inside the department', function () {

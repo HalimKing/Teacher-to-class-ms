@@ -39,6 +39,22 @@ it('accepts an indoor reading that is already inside the venue even when accurac
         ->and($verdict['distance'])->toBeLessThanOrEqual(50);
 });
 
+it('accepts a desktop reading that is already inside the venue even when windows reports a coarse accuracy', function () {
+    $verdict = $this->geofence->verify(5.6037, -0.1870, 10000, null, 5.6037, -0.1870, 193);
+
+    expect($verdict['status'])->toBe('verified')
+        ->and($verdict['accepted'])->toBeTrue()
+        ->and($verdict['distance'])->toEqual(0.0);
+});
+
+it('does not let a coarse accuracy circle pull a distant reading into the venue', function () {
+    $verdict = $this->geofence->verify(0, 0.02, 10000, null, 0, 0, 193);
+
+    expect($verdict['status'])->toBe('accuracy_too_low')
+        ->and($verdict['accepted'])->toBeFalse()
+        ->and($verdict['distance'])->toBeGreaterThan(193);
+});
+
 it('asks for another reading when gps accuracy is too poor', function () {
     $verdict = $this->geofence->verify(0, 0.001, 400, null, 0, 0, 50);
 

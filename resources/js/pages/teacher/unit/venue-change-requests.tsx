@@ -59,8 +59,8 @@ export default function UnitVenueChangeRequestsPage({ requests, staff, filters, 
                 <div>
                     <h1 className="text-xl font-semibold text-sidebar-foreground sm:text-2xl">Venue change requests</h1>
                     <p className="mt-1 text-sm text-sidebar-foreground/70">
-                        {leadershipScope?.role_label || 'Leadership'} · {unitLabel}. Requests stay pending until Director/Dean, Head of
-                        Department, and administrator approvals are complete.
+                        {leadershipScope?.role_label || 'Leadership'} · {unitLabel}. Approval from you, another assigned
+                        leader, or an administrator is enough.
                     </p>
                     {statusCounts && (
                         <p className="mt-2 text-xs text-sidebar-foreground/55">
@@ -134,7 +134,9 @@ export default function UnitVenueChangeRequestsPage({ requests, staff, filters, 
                                 </p>
                                 <p className="mt-1 text-xs text-sidebar-foreground/55">{row.period_label}</p>
                                 <p className="mt-2 line-clamp-2 text-sm text-sidebar-foreground/70">{row.reason}</p>
-                                <p className="mt-3 text-xs font-medium text-primary">{row.approval_progress}</p>
+                                <div className="mt-3">
+                                    <VenueChangeApprovalStatus approvals={row.approvals} variant="compact" />
+                                </div>
                             </Link>
                         ))
                     )}
@@ -170,8 +172,8 @@ export default function UnitVenueChangeRequestsPage({ requests, staff, filters, 
                                             {row.current_venue} → {row.requested_venue}
                                         </td>
                                         <td className="px-4 py-3 text-sidebar-foreground/80">{row.period_label}</td>
-                                        <td className="max-w-xs px-4 py-3">
-                                            <VenueChangeApprovalStatus approvals={row.approvals} progress={row.approval_progress} />
+                                        <td className="px-4 py-3 align-top">
+                                            <VenueChangeApprovalStatus approvals={row.approvals} variant="compact" />
                                         </td>
                                         <td className="px-4 py-3">
                                             <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusBadge(row.status)}`}>

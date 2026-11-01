@@ -191,33 +191,53 @@ it('routes a submitted venue change request to the dean, hod, and administrator'
     Notification::assertNotSentTo($this->staff, LeadershipVenueChangeRequestSubmitted::class);
 });
 
-it('keeps the request pending until dean, hod, and administrator have all approved', function () {
+it('approves the request as soon as an administrator, dean, or head of department approves it', function () {
     $service = app(VenueChangeRequestService::class);
-    $request = submitLeadershipVenueRequest();
 
-    $afterAdmin = $service->approve($request, $this->admin, 'Admin approved');
-    expect($afterAdmin->status)->toBe(VenueChangeRequest::STATUS_PENDING);
-    $this->assertDatabaseMissing('venue_change_authorizations', ['source_request_id' => $request->id]);
+    $adminRequest = submitLeadershipVenueRequest();
+    $afterAdmin = $service->approve($adminRequest, $this->admin, 'Admin approved');
+    expect($afterAdmin->status)->toBe(VenueChangeRequest::STATUS_APPROVED)
+        ->and($afterAdmin->resulting_authorization_id)->not->toBeNull()
+        ->and($afterAdmin->approvals->firstWhere('role', VenueChangeApprovalRole::DIRECTOR_DEAN)?->status)
+        ->toBe(VenueChangeRequestApproval::STATUS_NOT_REQUIRED)
+        ->and($afterAdmin->approvals->firstWhere('role', VenueChangeApprovalRole::HEAD_OF_DEPARTMENT)?->status)
+        ->toBe(VenueChangeRequestApproval::STATUS_NOT_REQUIRED);
 
-    $afterDean = $service->recordLeadershipDecision($afterAdmin, $this->dean, true, 'Dean approved');
-    expect($afterDean->status)->toBe(VenueChangeRequest::STATUS_PENDING);
-    $this->assertDatabaseMissing('venue_change_authorizations', ['source_request_id' => $request->id]);
+    $deanRequest = $service->submit($this->staff, [
+        'authorized_classroom_id' => $this->authorizedVenue->id,
+        'authorization_type' => VenueChangeRequest::TYPE_BOTH,
+        'start_date' => now()->addDays(3)->toDateString(),
+        'end_date' => now()->addDays(4)->toDateString(),
+        'reason' => 'Dean-only approval',
+    ], [$this->timetable->id]);
+    $afterDean = $service->recordLeadershipDecision($deanRequest, $this->dean, true, 'Dean approved');
+    expect($afterDean->status)->toBe(VenueChangeRequest::STATUS_APPROVED)
+        ->and($afterDean->resulting_authorization_id)->not->toBeNull()
+        ->and($afterDean->approvals->firstWhere('role', VenueChangeApprovalRole::ADMINISTRATOR)?->status)
+        ->toBe(VenueChangeRequestApproval::STATUS_NOT_REQUIRED);
 
-    $afterHod = $service->recordLeadershipDecision($afterDean, $this->hod, true, 'HoD approved');
+    $hodRequest = $service->submit($this->staff, [
+        'authorized_classroom_id' => $this->authorizedVenue->id,
+        'authorization_type' => VenueChangeRequest::TYPE_BOTH,
+        'start_date' => now()->addDays(6)->toDateString(),
+        'end_date' => now()->addDays(7)->toDateString(),
+        'reason' => 'HoD-only approval',
+    ], [$this->timetable->id]);
+    $afterHod = $service->recordLeadershipDecision($hodRequest, $this->hod, true, 'HoD approved');
     expect($afterHod->status)->toBe(VenueChangeRequest::STATUS_APPROVED)
         ->and($afterHod->resulting_authorization_id)->not->toBeNull();
 
     $authorization = VenueChangeAuthorization::query()->find($afterHod->resulting_authorization_id);
     expect($authorization)->not->toBeNull()
-        ->and($authorization->status)->toBe(VenueChangeAuthorization::STATUS_ACTIVE);
+        ->and($authorization->status)->toBe(VenueChangeAuthorization::STATUS_ACTIVE)
+        ->and($authorization->approved_by_teacher_id)->toBe($this->hod->id);
 });
 
 it('rejects the overall request when any required approver rejects it', function () {
     $service = app(VenueChangeRequestService::class);
     $request = submitLeadershipVenueRequest();
 
-    $service->approve($request, $this->admin, 'Admin approved');
-    $rejected = $service->recordLeadershipDecision($request->fresh(), $this->dean, false, 'Venue is not available');
+    $rejected = $service->recordLeadershipDecision($request, $this->dean, false, 'Venue is not available');
 
     expect($rejected->status)->toBe(VenueChangeRequest::STATUS_REJECTED)
         ->and($rejected->admin_comments)->toBe('Venue is not available');
@@ -282,22 +302,24 @@ it('lets authorized leaders review and act through HTTP while blocking unauthori
         ])
         ->assertRedirect(route('teacher.unit.venue-change-requests.show', $request));
 
-    expect($request->fresh()->status)->toBe(VenueChangeRequest::STATUS_PENDING)
+    expect($request->fresh()->status)->toBe(VenueChangeRequest::STATUS_APPROVED)
+        ->and($request->fresh()->resulting_authorization_id)->not->toBeNull()
         ->and($request->fresh()->approvals->firstWhere('role', VenueChangeApprovalRole::DIRECTOR_DEAN)?->status)
         ->toBe(VenueChangeRequestApproval::STATUS_APPROVED);
 });
 
-it('lets the administrator approve through the existing HTTP path without finalizing early', function () {
+it('lets the administrator approve through the existing HTTP path and finalizes immediately', function () {
     $request = submitLeadershipVenueRequest();
 
     $this->actingAs($this->admin)
         ->post(route('admin.venue-change-requests.approve', $request), [
-            'admin_comments' => 'Looks good so far',
+            'admin_comments' => 'Looks good',
         ])
         ->assertRedirect(route('admin.venue-change-requests.show', $request));
 
-    expect($request->fresh()->status)->toBe(VenueChangeRequest::STATUS_PENDING);
-    $this->assertDatabaseMissing('venue_change_authorizations', ['source_request_id' => $request->id]);
+    expect($request->fresh()->status)->toBe(VenueChangeRequest::STATUS_APPROVED)
+        ->and($request->fresh()->resulting_authorization_id)->not->toBeNull();
+    $this->assertDatabaseHas('venue_change_authorizations', ['source_request_id' => $request->id]);
 
     $this->actingAs($this->admin)
         ->post(route('admin.venue-change-requests.approve', $request), [
@@ -333,9 +355,7 @@ it('blocks lecturers from submitting venue change requests and keeps administrat
 it('lets deans and heads of department view unit venue change authorizations', function () {
     $service = app(VenueChangeRequestService::class);
     $request = submitLeadershipVenueRequest();
-    $service->approve($request, $this->admin, 'Admin approved');
-    $service->recordLeadershipDecision($request->fresh(), $this->dean, true, 'Dean approved');
-    $approved = $service->recordLeadershipDecision($request->fresh(), $this->hod, true, 'HoD approved');
+    $approved = $service->approve($request, $this->admin, 'Admin approved');
     $authorizationId = $approved->resulting_authorization_id;
 
     expect($authorizationId)->not->toBeNull();

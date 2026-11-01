@@ -11,9 +11,10 @@ interface TeacherQuickViewPanelProps {
     teacher: TeacherListItem | null;
     data: TeacherQuickViewData | null;
     onClose: () => void;
+    readOnly?: boolean;
 }
 
-export default function TeacherQuickViewPanel({ open, loading, teacher, data, onClose }: TeacherQuickViewPanelProps) {
+export default function TeacherQuickViewPanel({ open, loading, teacher, data, onClose, readOnly = false }: TeacherQuickViewPanelProps) {
     if (!open || !teacher) {
         return null;
     }
@@ -76,7 +77,7 @@ export default function TeacherQuickViewPanel({ open, loading, teacher, data, on
                                     <ShieldCheck className="size-4" />
                                     Facial Recognition
                                 </h3>
-                                {can('admin.teachers.edit') ? (
+                                {!readOnly && can('admin.teachers.edit') ? (
                                     <FaceEnrollmentSection
                                         teacherId={teacher.id}
                                         status={data.face.status}
@@ -111,21 +112,23 @@ export default function TeacherQuickViewPanel({ open, loading, teacher, data, on
                     )}
                 </div>
 
-                <div className="flex flex-wrap gap-2 border-t border-sidebar-border/60 p-4">
-                    {can('admin.teachers.edit') && (
+                {!readOnly && (
+                    <div className="flex flex-wrap gap-2 border-t border-sidebar-border/60 p-4">
+                        {can('admin.teachers.edit') && (
+                            <Button asChild variant="outline" size="sm">
+                                <Link href={route('admin.teachers.edit', teacher.id)}>
+                                    Edit Staff Member
+                                </Link>
+                            </Button>
+                        )}
                         <Button asChild variant="outline" size="sm">
-                            <Link href={route('admin.teachers.edit', teacher.id)}>
-                                Edit Staff Member
+                            <Link href={route('admin.teachers.password-management', { employee_id: teacher.employee_id })}>
+                                <Phone className="size-4" />
+                                Password Management
                             </Link>
                         </Button>
-                    )}
-                    <Button asChild variant="outline" size="sm">
-                        <Link href={route('admin.teachers.password-management', { employee_id: teacher.employee_id })}>
-                            <Phone className="size-4" />
-                            Password Management
-                        </Link>
-                    </Button>
-                </div>
+                    </div>
+                )}
             </aside>
         </div>
     );

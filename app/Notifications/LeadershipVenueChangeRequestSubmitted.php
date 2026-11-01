@@ -40,7 +40,7 @@ class LeadershipVenueChangeRequestSubmitted extends Notification
             ->line('Period: '.$this->details['period_label'])
             ->line('Reason: '.$this->details['reason'])
             ->action('Review request', url($this->details['url']))
-            ->line('This notice was sent because you are the assigned '.$this->details['supervisor_role'].'. The request stays pending until all required approvers have acted.');
+            ->line('This notice was sent because you are the assigned '.$this->details['supervisor_role'].'. Approval from you, another assigned leader, or an administrator is enough to authorize the venue change.');
     }
 
     /**

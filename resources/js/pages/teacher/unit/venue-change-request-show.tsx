@@ -272,7 +272,7 @@ export default function UnitVenueChangeRequestShow({ requestRecord, canDecide, l
                                             <p className="text-xs font-semibold tracking-[0.18em] text-slate-400 uppercase">Approval workflow</p>
                                             <h2 className="mt-1 text-lg font-semibold text-slate-900 sm:text-xl dark:text-sidebar-foreground">Required reviews</h2>
                                             <p className="mt-1 text-sm text-slate-500 dark:text-sidebar-foreground/60">
-                                                {requestRecord.approval_progress}. The request is fully approved only after every required reviewer has approved.
+                                                {requestRecord.approval_progress}. Approval from you, another assigned leader, or an administrator is enough.
                                             </p>
                                         </div>
                                     </div>

@@ -37,6 +37,11 @@ class SystemSettingsSeeder extends Seeder
             ['key' => 'face_match_threshold', 'value' => '0.45', 'group' => 'attendance', 'type' => 'string', 'description' => 'Maximum descriptor distance accepted for a face match.'],
             ['key' => 'face_verification_timeout', 'value' => '120', 'group' => 'attendance', 'type' => 'integer', 'description' => 'Face verification token lifetime in seconds.'],
             ['key' => 'face_enrollment_required', 'value' => '0', 'group' => 'attendance', 'type' => 'boolean', 'description' => 'Block attendance when a lecturer has no enrolled face descriptor.'],
+            ['key' => 'face_recognition_engine', 'value' => 'face_api', 'group' => 'attendance', 'type' => 'string', 'description' => 'Recognition engine used for enrollment and attendance. Use arcface after the face service is running and staff have re-enrolled. face_api keeps the previous browser recognizer.'],
+            ['key' => 'arcface_match_threshold', 'value' => '0.40', 'group' => 'attendance', 'type' => 'string', 'description' => 'Minimum ArcFace cosine similarity accepted as a match. Calibrate it with real samples from this deployment. A higher value is stricter.'],
+            ['key' => 'face_liveness_enabled', 'value' => '1', 'group' => 'attendance', 'type' => 'boolean', 'description' => 'Prevents attendance verification using photographs and other supported spoofing attempts by checking whether a live person is present in front of the camera.'],
+            ['key' => 'face_quality_threshold', 'value' => '0.55', 'group' => 'attendance', 'type' => 'string', 'description' => 'Minimum face quality score accepted by ArcFace enrollment and verification.'],
+            ['key' => 'face_service_timeout', 'value' => '15', 'group' => 'attendance', 'type' => 'integer', 'description' => 'Seconds Laravel waits for the face service before treating verification as unavailable.'],
             ['key' => 'administrator_venue_change_requests_enabled', 'value' => '1', 'group' => 'attendance', 'type' => 'boolean', 'description' => 'When enabled, administrator staff can submit venue change requests for approval. When disabled, the request option is hidden and new submissions are blocked. Existing approved authorizations still work. Direct admin authorizations are unaffected.'],
 
             // Map & Location

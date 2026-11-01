@@ -37,7 +37,7 @@ class AdminVenueChangeRequestSubmitted extends Notification
             ->line("Schedules: {$schedules}")
             ->line('Reason: ' . $this->request->reason)
             ->action('Review request', url('/admin/venue-change-requests/' . $this->request->id))
-            ->line('Please approve or reject this request. It remains pending until the Director/Dean, Head of Department, and administrator have all completed their required reviews.');
+            ->line('Please approve or reject this request. Approval from an administrator, Director/Dean, or Head of Department is enough to authorize the venue change.');
     }
 
     /**

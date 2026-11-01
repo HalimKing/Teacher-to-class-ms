@@ -111,7 +111,7 @@ export function acquireFreshDeviceLocation(): Promise<DeviceFix> {
         };
 
         const acceptBest = () => {
-            if (best && best.accuracy <= MAX_INSIDE_ACCURACY_METERS) {
+            if (best) {
                 finish(() => resolve(best as DeviceFix));
                 return;
             }
@@ -154,7 +154,7 @@ export function acquireFreshDeviceLocation(): Promise<DeviceFix> {
         windowTimer = window.setTimeout(acceptBest, SAMPLE_WINDOW_MS);
 
         activeWatch = navigator.geolocation.watchPosition(consider, (error) => {
-            if (best && best.accuracy <= MAX_INSIDE_ACCURACY_METERS) {
+            if (best) {
                 finish(() => resolve(best as DeviceFix));
                 return;
             }

@@ -35,6 +35,11 @@ class SystemSettingsUpdateRequest extends FormRequest
             'face_match_threshold'         => 'nullable|numeric|min:0.1|max:2',
             'face_verification_timeout'    => 'nullable|integer|min:30|max:600',
             'face_enrollment_required'     => 'nullable|boolean',
+            'face_recognition_engine'      => 'nullable|string|in:face_api,arcface',
+            'arcface_match_threshold'      => 'nullable|numeric|min:0.2|max:0.9',
+            'face_liveness_enabled'        => 'nullable|boolean',
+            'face_quality_threshold'       => 'nullable|numeric|min:0.2|max:0.95',
+            'face_service_timeout'         => 'nullable|integer|min:3|max:60',
             'administrator_venue_change_requests_enabled' => 'nullable|boolean',
         ],
         'map' => [

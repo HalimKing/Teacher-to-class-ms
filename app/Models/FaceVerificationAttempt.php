@@ -14,6 +14,10 @@ class FaceVerificationAttempt extends Model
         'score',
         'result',
         'failure_reason',
+        'liveness_passed',
+        'quality_score',
+        'processing_time_ms',
+        'engine',
         'ip_address',
         'user_agent',
     ];
@@ -22,6 +26,9 @@ class FaceVerificationAttempt extends Model
     {
         return [
             'score' => 'float',
+            'liveness_passed' => 'boolean',
+            'quality_score' => 'float',
+            'processing_time_ms' => 'integer',
             'created_at' => 'datetime',
         ];
     }

@@ -6,15 +6,14 @@ use Carbon\Carbon;
 
 /**
  * Server-side attendance geofence. The reported GPS point is not treated as exact.
- * A pin already inside the venue is accepted with typical indoor GPS accuracy.
+ * A pin already inside the venue is accepted. Desktop location often reports a
+ * large accuracy figure for a Wi-Fi fix that is still on the venue.
  * A pin outside is accepted only when a usable accuracy circle still reaches the
- * venue. Extremely coarse readings are rejected instead of being reported as out of range.
+ * venue. A coarse reading outside the fence cannot use that circle to pass.
  */
 class AttendanceGeofenceService
 {
     public const MAX_ACCEPTABLE_ACCURACY_METERS = 200;
-
-    public const MAX_INSIDE_ACCURACY_METERS = 300;
 
     public const MAX_FIX_AGE_SECONDS = 120;
 
@@ -92,9 +91,8 @@ class AttendanceGeofenceService
         }
 
         $insideVenue = $distance <= $radius;
-        $accuracyCap = $insideVenue ? self::MAX_INSIDE_ACCURACY_METERS : self::MAX_ACCEPTABLE_ACCURACY_METERS;
 
-        if ($accuracy > $accuracyCap) {
+        if (! $insideVenue && $accuracy > self::MAX_ACCEPTABLE_ACCURACY_METERS) {
             $diagnostics['failure_reason'] = 'poor_accuracy';
 
             return $this->result(

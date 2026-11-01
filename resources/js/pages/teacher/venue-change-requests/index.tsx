@@ -50,8 +50,8 @@ export default function TeacherVenueChangeRequestIndex({ requests, filters, feat
                     <div>
                         <h1 className="text-2xl font-bold text-slate-900">Venue Change Requests</h1>
                         <p className="mt-1 text-sm text-slate-500">
-                            Submit a request to attend at a replacement venue. Requests stay pending until the assigned
-                            Director/Dean, Head of Department, and administrator have all approved.
+                            Submit a request to attend at a replacement venue. An administrator, Director/Dean, or Head
+                            of Department can approve it.
                         </p>
                     </div>
                     {featureEnabled ? (

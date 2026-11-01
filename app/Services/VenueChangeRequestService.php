@@ -509,17 +509,11 @@ class VenueChangeRequestService
                 return $this->finalizeRejection($locked, $comments);
             }
 
-            $locked->load('approvals');
-
-            if ($locked->approvals->every(fn (VenueChangeRequestApproval $row) => $row->isApproved())) {
-                return $this->finalizeApproval($locked, $this->finalAdminReviewer($locked, $decidedBy), $locked->admin_comments);
-            }
-
-            return $this->freshRequest($locked);
+            return $this->finalizeApproval($locked, $decidedBy, $comments ?? $locked->admin_comments);
         });
     }
 
-    private function finalizeApproval(VenueChangeRequest $request, User $reviewer, ?string $comments): VenueChangeRequest
+    private function finalizeApproval(VenueChangeRequest $request, User|Teacher $reviewer, ?string $comments): VenueChangeRequest
     {
         $request->loadMissing('items');
 
@@ -540,9 +534,17 @@ class VenueChangeRequestService
 
         $first = $created->first();
 
+        $request->approvals()
+            ->where('status', VenueChangeRequestApproval::STATUS_PENDING)
+            ->update([
+                'status' => VenueChangeRequestApproval::STATUS_NOT_REQUIRED,
+                'comments' => 'Closed because another authorized reviewer approved the request.',
+                'decided_at' => now(),
+            ]);
+
         $request->update([
             'status' => VenueChangeRequest::STATUS_APPROVED,
-            'reviewed_by' => $reviewer->id,
+            'reviewed_by' => $reviewer instanceof User ? $reviewer->id : $request->reviewed_by,
             'reviewed_at' => now(),
             'admin_comments' => $comments,
             'resulting_bulk_group_id' => $first?->bulk_group_id,
@@ -552,11 +554,12 @@ class VenueChangeRequestService
         $this->activityLog->log(
             'venue_change_request_approved',
             ActivityLogService::CATEGORY_ATTENDANCE,
-            "Venue change request #{$request->id} fully approved; created {$created->count()} authorization(s).",
+            "Venue change request #{$request->id} approved; created {$created->count()} authorization(s).",
             metadata: [
                 'request_id' => $request->id,
                 'staff_id' => $request->staff_id,
-                'reviewed_by' => $reviewer->id,
+                'reviewed_by' => $reviewer instanceof User ? $reviewer->id : null,
+                'reviewed_by_teacher_id' => $reviewer instanceof Teacher ? $reviewer->id : null,
                 'admin_comments' => $comments,
                 'authorization_ids' => $created->pluck('id')->all(),
                 'bulk_group_id' => $first?->bulk_group_id,
@@ -692,42 +695,19 @@ class VenueChangeRequestService
         return $locked;
     }
 
-    private function finalAdminReviewer(VenueChangeRequest $request, User|Teacher $decidedBy): User
-    {
-        if ($decidedBy instanceof User) {
-            return $decidedBy;
-        }
-
-        $reviewer = User::query()->find($request->reviewed_by);
-
-        if ($reviewer instanceof User) {
-            return $reviewer;
-        }
-
-        throw new InvalidArgumentException('Administrator approval is required before this request can be fully approved.');
-    }
-
     private function approvalProgressLabel(VenueChangeRequest $request): string
     {
         $request->loadMissing('approvals');
 
-        $total = $request->approvals->count();
-
-        if ($total === 0) {
-            return $request->status_label;
-        }
-
         if ($request->status === VenueChangeRequest::STATUS_APPROVED) {
-            return 'Fully approved';
+            return 'Approved';
         }
 
         if ($request->status === VenueChangeRequest::STATUS_REJECTED) {
             return 'Rejected';
         }
 
-        $approved = $request->approvals->where('status', VenueChangeRequestApproval::STATUS_APPROVED)->count();
-
-        return "{$approved} of {$total} approvals recorded";
+        return 'Waiting for an administrator, Director/Dean, or Head of Department';
     }
 
     private function sessionLabel(VenueChangeRequest $request): string

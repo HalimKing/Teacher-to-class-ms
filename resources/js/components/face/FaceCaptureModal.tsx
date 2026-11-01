@@ -13,9 +13,13 @@ import {
     type FaceCaptureResult,
     type FaceDetectionIssue,
 } from '@/lib/face-recognition';
+import { assessLocalFrame, captureLivenessBurst, type FaceEngine } from '@/services/faceVerification';
+import FaceCamera from './FaceCamera';
+import LivenessCheck from './LivenessCheck';
 import { acquireFreshDeviceLocation, cancelDeviceLocation, LocationRequestError } from '@/lib/device-location';
 import { distanceInMeters, evaluateAttendanceLocation, formatLocationDiagnostics } from '@/lib/geo';
 import { getApiErrorMessage } from '@/lib/http';
+import { usePage } from '@inertiajs/react';
 import { Camera, ImageUp, Loader2, MapPin, RefreshCw } from 'lucide-react';
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import FaceVerificationStatus, { type FaceStatus } from './FaceVerificationStatus';
@@ -85,6 +89,9 @@ interface FaceCaptureModalProps {
     autoCapture?: boolean;
     captureLabel?: string;
     /** When true, location must be confirmed before the camera starts. */
+    engine?: FaceEngine;
+    /** ArcFace enrollment captures this many poses. Verification stays at one. */
+    sampleCount?: number;
     requireLocation?: boolean;
     /** Venue coordinates used when requireLocation is true. */
     locationGate?: FaceLocationGate | null;
@@ -99,11 +106,16 @@ export default function FaceCaptureModal({
     allowUpload = false,
     autoCapture = true,
     captureLabel = 'Capture Face',
+    engine = 'face_api',
+    sampleCount = 1,
     requireLocation = false,
     locationGate = null,
     onOpenChange,
     onCapture,
 }: FaceCaptureModalProps) {
+    const livenessRequired = engine === 'arcface' && (usePage().props as {
+        system_settings?: { attendance?: { face_liveness_enabled?: { value?: unknown } } };
+    }).system_settings?.attendance?.face_liveness_enabled?.value !== false;
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
     const coachingTimerRef = useRef<number | null>(null);
@@ -117,11 +129,13 @@ export default function FaceCaptureModal({
     const haltedRef = useRef(false);
     const cameraStartingRef = useRef(false);
     const retryingRef = useRef(false);
+    const samplesRef = useRef<string[]>([]);
+    const cameraInitMsRef = useRef<number | undefined>(undefined);
     const [status, setStatus] = useState<FaceStatus>('idle');
     const [statusTitle, setStatusTitle] = useState<string | undefined>();
     const [statusMessage, setStatusMessage] = useState<string | undefined>();
     const [statusTips, setStatusTips] = useState<string[] | undefined>();
-    const [liveGuidance, setLiveGuidance] = useState('Center your face in the oval guide.');
+    const [liveGuidance, setLiveGuidance] = useState('Position your face inside the guide.');
     const [guidanceTone, setGuidanceTone] = useState<'neutral' | 'good' | 'warn'>('neutral');
     const [processing, setProcessing] = useState(false);
     const [halted, setHalted] = useState(false);
@@ -182,7 +196,7 @@ export default function FaceCaptureModal({
         setStatusTitle(undefined);
         setStatusMessage(undefined);
         setStatusTips(undefined);
-        setLiveGuidance('Center your face in the oval guide.');
+        setLiveGuidance('Position your face inside the guide.');
         setGuidanceTone('neutral');
         setProcessing(false);
         processingRef.current = false;
@@ -190,6 +204,7 @@ export default function FaceCaptureModal({
         successRef.current = false;
         haltedRef.current = false;
         setHalted(false);
+        samplesRef.current = [];
     };
 
     const setProcessingState = (value: boolean) => {
@@ -318,14 +333,16 @@ export default function FaceCaptureModal({
         setStatusMessage('Please allow camera access if prompted.');
         setStatusTips(undefined);
         try {
+            const cameraStarted = performance.now();
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: {
                     facingMode: 'user',
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 },
+                    width: { ideal: engine === 'arcface' ? 640 : 1280 },
+                    height: { ideal: engine === 'arcface' ? 480 : 720 },
                 },
                 audio: false,
             });
+            cameraInitMsRef.current = Math.round(performance.now() - cameraStarted);
 
             if (locationBlockedRef.current) {
                 stream.getTracks().forEach((track) => track.stop());
@@ -376,7 +393,7 @@ export default function FaceCaptureModal({
             }
 
             try {
-                const assessment = await assessVideoFrame(videoRef.current);
+                const assessment = engine === 'arcface' ? await assessLocalFrame(videoRef.current) : await assessVideoFrame(videoRef.current);
                 if (processingRef.current || locationBlockedRef.current || haltedRef.current) {
                     return;
                 }
@@ -394,7 +411,8 @@ export default function FaceCaptureModal({
 
                 goodFrameStreakRef.current += 1;
                 const streak = goodFrameStreakRef.current;
-                const readyForAuto = autoCapture && streak >= AUTO_VERIFY_STABLE_TICKS;
+                const stableTicks = engine === 'arcface' ? 2 : AUTO_VERIFY_STABLE_TICKS;
+                const readyForAuto = autoCapture && streak >= stableTicks;
 
                 setStatus('face_detected');
                 setStatusTitle(undefined);
@@ -420,7 +438,7 @@ export default function FaceCaptureModal({
         void tick();
         coachingTimerRef.current = window.setInterval(() => {
             void tick();
-        }, 700);
+        }, engine === 'arcface' ? 280 : 700);
     };
 
     const stopCoaching = () => {
@@ -441,6 +459,75 @@ export default function FaceCaptureModal({
         }
     };
 
+    const captureArcFaceSample = async () => {
+        if (!videoRef.current || processingRef.current || haltedRef.current || successRef.current) {
+            return;
+        }
+
+        setProcessingState(true);
+        goodFrameStreakRef.current = 0;
+        stopCoaching();
+        setStatus('capturing');
+        setStatusTitle(undefined);
+        setStatusMessage('Taking one photo…');
+        setStatusTips(undefined);
+        setLiveGuidance(livenessRequired ? 'Checking whether you are physically present...' : 'Hold still while we verify your identity.');
+        setGuidanceTone('good');
+
+        try {
+            await ensureFreshCsrfToken({ force: true });
+            const burst = await captureLivenessBurst(videoRef.current);
+            if (locationBlockedRef.current) {
+                return;
+            }
+
+            const images = sampleCount > 1 ? burst.frames : [burst.image];
+            samplesRef.current = images;
+
+            setStatus('verifying');
+            setStatusMessage('Checking this photo on the server…');
+            setLiveGuidance('Checking this photo on the server…');
+            await onCapture({
+                image: burst.image,
+                images,
+                livenessFrames: burst.frames,
+                quality: {
+                    detection_confidence: 1,
+                    face_width: 160,
+                    face_height: 160,
+                    frame_count: burst.frames.length,
+                    descriptor_variance: 0,
+                },
+                diagnostics: { cameraInitMs: cameraInitMsRef.current },
+            });
+
+            if (locationBlockedRef.current) {
+                return;
+            }
+
+            setStatus('success');
+            setStatusTitle('Verified');
+            setStatusMessage(
+                livenessRequired
+                    ? 'Liveness verification successful. Face verified. You can now proceed with attendance.'
+                    : 'Face verified successfully. You can now proceed with attendance.',
+            );
+            setLiveGuidance(livenessRequired ? 'Liveness verification successful.' : 'Verified');
+            setGuidanceTone('good');
+            successRef.current = true;
+        } catch (error) {
+            if (locationBlockedRef.current) {
+                return;
+            }
+            applyCaptureFailure(error);
+            haltVerification();
+        } finally {
+            if (!locationBlockedRef.current) {
+                setProcessingState(false);
+            }
+        }
+    };
+
     const handleCapture = async () => {
         if (locationBlockedRef.current || locationPhase === 'blocked' || locationPhase === 'checking') {
             return;
@@ -457,6 +544,11 @@ export default function FaceCaptureModal({
                 setStatusMessage('Camera is not ready.');
                 haltVerification();
             }
+            return;
+        }
+
+        if (engine === 'arcface') {
+            await captureArcFaceSample();
             return;
         }
 
@@ -675,13 +767,6 @@ export default function FaceCaptureModal({
         }
     };
 
-    const guidanceClass =
-        guidanceTone === 'good'
-            ? 'border-emerald-300 bg-emerald-500/90 text-white'
-            : guidanceTone === 'warn'
-              ? 'border-amber-300 bg-amber-500/95 text-white'
-              : 'border-white/30 bg-black/55 text-white';
-
     const showRangeMap = locationPhase === 'blocked' && venueGate !== null && devicePosition !== null;
     const showCamera = locationPhase === 'skipped' || locationPhase === 'allowed';
     const showLocationRetry = locationPhase === 'blocked' || locationPhase === 'checking';
@@ -741,6 +826,7 @@ export default function FaceCaptureModal({
                     ) : null}
 
                     {showCamera ? <FaceVerificationStatus status={status} title={statusTitle} message={statusMessage} tips={statusTips} /> : null}
+                    {showCamera ? <LivenessCheck active={engine === 'arcface' && status === 'capturing'} /> : null}
 
                     {showFaceRetry ? (
                         <div className="flex flex-col gap-2.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between dark:border-slate-700 dark:bg-slate-800/60">
@@ -754,32 +840,13 @@ export default function FaceCaptureModal({
                         </div>
                     ) : null}
 
-                    <div className={showCamera ? 'relative -mx-0.5 overflow-hidden rounded-xl border bg-black sm:mx-0' : 'hidden'}>
-                        {/*
-                              Mirror preview only (selfie-style). face-api reads raw video frames,
-                              so CSS scaleX does not affect detection or descriptor quality.
-                            */}
-                        <video
-                            ref={videoRef}
-                            className="h-[min(64dvh,34rem)] w-full -scale-x-100 object-cover sm:aspect-video sm:h-auto"
-                            muted
-                            playsInline
-                        />
-                        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                            <div
-                                className={`aspect-[3/4] h-[74%] w-auto max-w-[92%] rounded-[50%] border-2 sm:h-[84%] ${
-                                    guidanceTone === 'good'
-                                        ? 'border-emerald-400 shadow-[0_0_0_9999px_rgba(0,0,0,0.28)]'
-                                        : 'border-white/70 shadow-[0_0_0_9999px_rgba(0,0,0,0.28)]'
-                                }`}
-                            />
-                        </div>
-                        <div
-                            className={`absolute inset-x-2 bottom-2 rounded-lg border px-2.5 py-1.5 text-center text-xs font-medium backdrop-blur-sm sm:inset-x-3 sm:bottom-3 sm:px-3 sm:py-2 sm:text-sm ${guidanceClass}`}
-                        >
-                            {liveGuidance}
-                        </div>
-                    </div>
+                    <FaceCamera
+                        ref={videoRef}
+                        active={showCamera}
+                        guidance={liveGuidance}
+                        tone={guidanceTone}
+                        badge={engine === 'arcface' ? 'ArcFace' : undefined}
+                    />
 
                     {status === 'no_face' && showCamera && !statusTips?.length ? (
                         <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-900 dark:border-orange-900 dark:bg-orange-950/30 dark:text-orange-100">
@@ -796,9 +863,11 @@ export default function FaceCaptureModal({
                         <p className="text-xs text-muted-foreground">
                             {halted
                                 ? 'Automatic verification is paused so the same attempt is not repeated. Tap Try Again to start a new attempt.'
-                                : autoCapture
-                                  ? 'Keep only one face in frame. Verification starts automatically when your face is centered, clearly lit, and steady. You can also verify manually if needed.'
-                                  : 'Keep only one face in frame. Use good lighting, look straight at the camera, and hold still during capture.'}
+                                : engine === 'arcface'
+                                  ? 'ArcFace takes one short photo and checks it on the server. It does not capture several recognition frames in the browser.'
+                                  : autoCapture
+                                    ? 'Keep only one face in frame. Verification starts automatically when your face is centered, clearly lit, and steady. You can also verify manually if needed.'
+                                    : 'Keep only one face in frame. Use good lighting, look straight at the camera, and hold still during capture.'}
                         </p>
                     ) : (
                         <p className="text-xs text-muted-foreground">

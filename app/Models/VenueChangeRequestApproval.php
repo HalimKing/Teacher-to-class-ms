@@ -12,6 +12,7 @@ class VenueChangeRequestApproval extends Model
     public const STATUS_PENDING = 'pending';
     public const STATUS_APPROVED = 'approved';
     public const STATUS_REJECTED = 'rejected';
+    public const STATUS_NOT_REQUIRED = 'not_required';
 
     protected $fillable = [
         'venue_change_request_id',
@@ -72,6 +73,7 @@ class VenueChangeRequestApproval extends Model
             self::STATUS_PENDING => 'Awaiting approval',
             self::STATUS_APPROVED => 'Approved',
             self::STATUS_REJECTED => 'Rejected',
+            self::STATUS_NOT_REQUIRED => 'No longer required',
             default => ucfirst((string) $this->status),
         };
     }

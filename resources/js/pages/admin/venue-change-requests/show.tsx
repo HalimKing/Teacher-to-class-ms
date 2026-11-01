@@ -138,7 +138,7 @@ export default function VenueChangeRequestShow({ requestRecord, approvals = [], 
                             />
                         </label>
                         <p className="text-xs text-slate-500">
-                            Your approval is one of the required reviews. The venue change is authorized only after all required approvers approve.
+                            Your approval is enough to authorize this venue change. A Director/Dean or Head of Department can also approve it.
                         </p>
                         <div className="flex gap-3">
                             <button

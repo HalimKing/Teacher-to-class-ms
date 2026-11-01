@@ -1,0 +1,11 @@
+Place locally licensed ONNX weights in this directory.
+
+Required for recognition:
+- det_10g.onnx
+- w600k_r50.onnx
+
+Optional liveness upgrade:
+- liveness.onnx
+
+Do not commit model weights. Official InsightFace buffalo_l weights are not bundled.
+See README.md for license notes.

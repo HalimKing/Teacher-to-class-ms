@@ -5,8 +5,9 @@
 export const MAX_ACCEPTABLE_ACCURACY_METERS = 200;
 
 /**
- * When the reported point is already inside the venue, allow coarser indoor GPS
- * rather than blocking staff who are standing at the location.
+ * A phone fix this precise is good enough to stop waiting for a better sample.
+ * Desktop Windows often reports ±10 km even when the pin is on the venue, so
+ * this is not a reason to reject a point that is already inside the fence.
  */
 export const MAX_INSIDE_ACCURACY_METERS = 300;
 
@@ -81,9 +82,13 @@ export function evaluateAttendanceLocation(input: {
     }
 
     const insideVenue = distanceMeters <= radiusMeters;
-    const accuracyCap = insideVenue ? MAX_INSIDE_ACCURACY_METERS : MAX_ACCEPTABLE_ACCURACY_METERS;
 
-    if (accuracy > accuracyCap) {
+    // A pin already inside the venue is the staff member's reported position.
+    // Windows and desktop browsers often attach a ±10 km accuracy figure to an
+    // otherwise usable Wi-Fi fix. Rejecting that figure blocks people who are
+    // standing at the venue. A coarse reading outside the fence stays rejected,
+    // so a 10 km uncertainty circle cannot pull a distant pin into range.
+    if (!insideVenue && accuracy > MAX_ACCEPTABLE_ACCURACY_METERS) {
         return { status: 'accuracy_too_low', distanceMeters, message: POOR_ACCURACY_MESSAGE };
     }
 

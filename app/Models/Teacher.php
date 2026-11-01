@@ -143,6 +143,16 @@ class Teacher extends Authenticatable
         return $this->hasMany(StaffAttendance::class, 'staff_id');
     }
 
+    public function faceProfiles()
+    {
+        return $this->hasMany(StaffFaceProfile::class);
+    }
+
+    public function activeFaceProfile()
+    {
+        return $this->hasOne(StaffFaceProfile::class)->where('is_active', true)->where('migration_required', false);
+    }
+
     public function courses()
     {
         return $this->hasMany(Course::class);
@@ -225,6 +235,19 @@ class Teacher extends Authenticatable
 
     public function faceEnrollmentStatus(): string
     {
+        try {
+            $service = app(FacialRecognitionService::class);
+            if ($service->usesArcFace()) {
+                if ($service->hasValidEnrollment($this)) {
+                    return 'enrolled';
+                }
+
+                return $service->requiresMigration($this) ? 'migration_required' : 'not_enrolled';
+            }
+        } catch (\Throwable) {
+            // Fall back to the stored enrollment timestamp.
+        }
+
         if ($this->face_registered_at) {
             return 'enrolled';
         }

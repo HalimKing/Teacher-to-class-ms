@@ -2,7 +2,7 @@ import { type TeacherListItem, type TeacherQuickViewData, type TeachersIndexPage
 import TeacherQuickViewPanel from '@/components/teachers/TeacherQuickViewPanel';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem, type PagePropsWithFlash } from '@/types';
-import { Head, Link, router, usePage } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
 import { ToastContainer, toast, Bounce } from 'react-toastify';
 
@@ -66,8 +66,8 @@ export default function UnitStaffPage({
                 <div>
                     <h1 className="text-xl font-semibold text-sidebar-foreground sm:text-2xl">Unit Staff</h1>
                     <p className="mt-1 text-sm text-sidebar-foreground/70">
-                        {leadershipScope?.role_label || 'Leadership'} · {unitLabel}. You still keep your original
-                        lecturer or administrator features.
+                        {leadershipScope?.role_label || 'Leadership'} · {unitLabel}. You can view staff in this unit.
+                        Staff records are maintained by administrators.
                     </p>
                 </div>
 
@@ -95,9 +95,6 @@ export default function UnitStaffPage({
                                     >
                                         View
                                     </button>
-                                    <Link href={route('teacher.unit.staff.edit', teacher.id)} className="inline-flex min-h-10 items-center text-sm font-medium text-primary hover:underline">
-                                        Edit
-                                    </Link>
                                 </div>
                             </div>
                         ))
@@ -150,9 +147,6 @@ export default function UnitStaffPage({
                                             >
                                                 View
                                             </button>
-                                            <Link href={route('teacher.unit.staff.edit', teacher.id)} className="text-primary hover:underline">
-                                                Edit
-                                            </Link>
                                         </div>
                                     </td>
                                 </tr>
@@ -201,6 +195,7 @@ export default function UnitStaffPage({
                 teacher={quickViewTeacher}
                 data={quickViewData}
                 onClose={() => setQuickViewTeacher(null)}
+                readOnly
             />
             <ToastContainer />
         </AppLayout>
