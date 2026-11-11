@@ -101,7 +101,6 @@ class StaffAttendanceController extends Controller
             'holidayContext' => $this->holidayBreaks->portalContext($teacher, $date),
             'upcomingSchedules' => $schedules->filter(fn (TimeTable $schedule) => $this->isUpcoming($schedule))->map(fn (TimeTable $schedule) => $this->formatSchedule($schedule))->values(),
             'facialRecognitionEnabled' => $facialRecognition->isEnabled(),
-            'faceRecognitionEngine' => $facialRecognition->engine(),
         ]);
     }
 
@@ -310,9 +309,9 @@ class StaffAttendanceController extends Controller
             'arrival_category' => $checkInOutcome['arrival_category'],
             'minutes_early' => $checkInOutcome['minutes_early'],
             'minutes_late' => $checkInOutcome['minutes_late'],
-            ...$facialRecognition->verifiedAttendanceAttributes(
-                $faceVerificationPayload ? ['payload' => $faceVerificationPayload, 'score' => $faceMatchScore] : null
-            ),
+            'face_verified' => $faceVerificationPayload !== null,
+            'face_match_score' => $faceMatchScore ?? ($faceVerificationPayload['score'] ?? null),
+            'face_verified_at' => $faceVerificationPayload ? now() : null,
         ]);
 
         app(ActivityLogService::class)->logAttendance(

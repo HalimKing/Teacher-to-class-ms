@@ -14,7 +14,6 @@ use App\Http\Controllers\Admin\SystemSettingsController;
 use App\Http\Controllers\Admin\TeacherAttendanceAnalysisController;
 use App\Http\Controllers\Admin\TeacherAttendanceReportController;
 use App\Http\Controllers\Admin\TeacherController;
-use App\Http\Controllers\Admin\FaceServiceHealthController;
 use App\Http\Controllers\Admin\TeacherFaceEnrollmentController;
 use App\Http\Controllers\AttendancePortalController;
 use App\Http\Controllers\AttendanceRecordController;
@@ -499,9 +498,6 @@ Route::middleware(['auth:web', 'verified', 'password.changed'])->group(function 
                     Route::put('settings', [SystemSettingsController::class, 'update'])
                         ->name('settings.update')
                         ->middleware('permission:admin.settings.edit');
-                    Route::get('face-service/health', FaceServiceHealthController::class)
-                        ->name('face-service.health')
-                        ->middleware('permission:admin.settings.view');
 
                     // Teacher Attendance Analysis Routes
                     Route::get('attendance-analysis', [TeacherAttendanceAnalysisController::class, 'index'])
@@ -551,9 +547,6 @@ Route::middleware(['auth:web', 'verified', 'password.changed'])->group(function 
                 ->middleware('permission:admin.teachers.edit');
             Route::delete('teachers/{teacher}/face-enrollment', [TeacherFaceEnrollmentController::class, 'destroy'])
                 ->name('teachers.face-enrollment.destroy')
-                ->middleware('permission:admin.teachers.edit');
-            Route::post('teachers/{teacher}/face-reenrollment', [TeacherFaceEnrollmentController::class, 'requireReenrollment'])
-                ->name('teachers.face-reenrollment.store')
                 ->middleware('permission:admin.teachers.edit');
             Route::get('teachers/template', [TeacherController::class, 'template'])
                 ->name('teachers.template');

@@ -124,7 +124,6 @@ class AttendancePortalController extends Controller
             'staffType' => $teacher->staff_type,
             'roleLabel' => $teacher->isLecturer() ? 'Lecturer' : 'Administrator',
             'facialRecognitionEnabled' => $facialRecognition->isEnabled(),
-            'faceRecognitionEngine' => $facialRecognition->engine(),
             'holidayContext' => $this->holidayBreaks->portalContext($teacher, now()),
         ]);
     }

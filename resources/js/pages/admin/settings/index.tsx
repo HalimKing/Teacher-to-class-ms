@@ -30,13 +30,6 @@ const SETTING_LABELS: Record<string, string> = {
     gps_enforcement_enabled: 'GPS Enforcement Enabled',
     facial_recognition_enabled: 'Facial Recognition Enabled',
     face_enrollment_required: 'Face Enrollment Required',
-    face_recognition_engine: 'Face Recognition Engine',
-    arcface_match_threshold: 'ArcFace Match Threshold',
-    face_liveness_enabled: 'Face Liveness Detection',
-    face_quality_threshold: 'Face Quality Threshold',
-    face_service_timeout: 'Face Service Timeout (seconds)',
-    face_match_threshold: 'Face API Match Distance',
-    face_verification_timeout: 'Face Verification Timeout (seconds)',
     auto_mark_absent_after_end: 'Auto Mark Absent After End',
     send_email_on_auto_absence: 'Send Email for Absent Lecturer/Administrator',
     allow_manual_override: 'Allow Manual Override',
@@ -242,17 +235,7 @@ export default function AdminSystemSettingsPage() {
                                             absent as usual, and in-app alerts are still recorded.
                                         </p>
                                     )}
-                                    {key === 'face_recognition_engine' ? (
-                                        <select
-                                            id={key}
-                                            value={String(settingsData[key] ?? 'face_api')}
-                                            onChange={(e) => handleChange(key, e.target.value)}
-                                            className="h-10 max-w-md rounded-md border border-sidebar-border/50 bg-transparent px-3 text-sm dark:bg-sidebar-accent"
-                                        >
-                                            <option value="face_api">face-api.js (current)</option>
-                                            <option value="arcface">ArcFace</option>
-                                        </select>
-                                    ) : isBoolean(key) ? (
+                                    {isBoolean(key) ? (
                                         <div className="flex items-center gap-2">
                                             <input
                                                 id={key}

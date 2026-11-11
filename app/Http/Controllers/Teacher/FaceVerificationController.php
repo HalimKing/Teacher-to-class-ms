@@ -8,7 +8,6 @@ use App\Models\StaffAttendance;
 use App\Models\Teacher;
 use App\Models\TimeTable;
 use App\Services\AttendanceTimingService;
-use App\Services\FaceServiceException;
 use App\Services\FacialRecognitionService;
 use App\Services\LecturerNotificationService;
 use App\Services\RescheduledAttendanceService;
@@ -60,10 +59,6 @@ class FaceVerificationController extends Controller
                 'verification_token' => null,
                 'score' => null,
             ], 422);
-        }
-
-        if ($facialRecognition->usesArcFace()) {
-            return $this->performArcFaceVerification($request, $facialRecognition, $teacher, $timetableId);
         }
 
         return $this->performVerification(
@@ -121,10 +116,6 @@ class FaceVerificationController extends Controller
             ], 422);
         }
 
-        if ($facialRecognition->usesArcFace()) {
-            return $this->performArcFaceVerification($request, $facialRecognition, $teacher, $timetableId);
-        }
-
         return $this->performVerification(
             $facialRecognition,
             $teacher,
@@ -134,65 +125,6 @@ class FaceVerificationController extends Controller
             'Face enrollment is required before staff attendance can be marked.',
             'Face verification failed. A face was detected, but it does not match the enrolled profile.',
         );
-    }
-
-    private function performArcFaceVerification(
-        VerifyFaceRequest $request,
-        FacialRecognitionService $facialRecognition,
-        Teacher $teacher,
-        int $timetableId,
-    ): JsonResponse {
-        try {
-            $match = $facialRecognition->verifyArcFaceCapture(
-                $teacher,
-                (string) $request->validated('image'),
-                $request->validated('liveness_frames'),
-            );
-        } catch (FaceServiceException $exception) {
-            $facialRecognition->logAttempt($teacher, $timetableId, 'failed', null, 'service_unavailable', [
-                'engine' => 'arcface',
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => $exception->publicMessage,
-            ], 503);
-        }
-
-        $context = [
-            'engine' => 'arcface',
-            'threshold' => $match['threshold'] ?? null,
-            'liveness_passed' => $match['liveness_passed'] ?? null,
-            'quality_score' => $match['quality_score'] ?? null,
-            'processing_time_ms' => $match['processing_time_ms'] ?? null,
-            'model' => $match['model'] ?? 'w600k_r50',
-        ];
-
-        if (! $match['matched']) {
-            $reason = (string) ($match['reason'] ?? 'failed');
-            $facialRecognition->logAttempt($teacher, $timetableId, 'failed', $match['score'], $reason, $context);
-            $status = strtoupper((string) ($match['status'] ?? 'SERVICE_UNAVAILABLE'));
-
-            return response()->json([
-                'success' => false,
-                'message' => FacialRecognitionService::staffMessage($status),
-            ], 422);
-        }
-
-        $facialRecognition->logAttempt($teacher, $timetableId, 'passed', $match['score'], null, $context);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Face verification successful.',
-            'verification_token' => $facialRecognition->issueVerificationToken(
-                $teacher,
-                $timetableId,
-                (float) $match['score'],
-                $context,
-            ),
-            'score' => $match['score'],
-            'threshold' => $match['threshold'],
-        ]);
     }
 
     /**

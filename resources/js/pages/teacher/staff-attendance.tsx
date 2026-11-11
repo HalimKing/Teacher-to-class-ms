@@ -7,8 +7,7 @@ import { acquireFreshDeviceLocation } from '@/lib/device-location';
 import { evaluateAttendanceLocation } from '@/lib/geo';
 import { apiJsonRequest, getApiErrorMessage } from '@/lib/http';
 import { getBooleanSetting } from '@/lib/system-settings';
-import { buildFaceAttendanceProof } from '@/lib/teacher-api';
-import { verifyFace } from '@/services/faceVerification';
+import { buildFaceVerificationPayload } from '@/lib/teacher-api';
 import { cn } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
@@ -130,12 +129,10 @@ function isScheduleMissed(schedule: StaffSchedule | null): boolean {
 export default function StaffAttendancePage({
     todaySchedules = [],
     facialRecognitionEnabled: facialRecognitionEnabledProp,
-    faceRecognitionEngine = 'face_api',
     holidayContext: initialHolidayContext,
 }: {
     todaySchedules?: StaffSchedule[];
     facialRecognitionEnabled?: boolean;
-    faceRecognitionEngine?: 'face_api' | 'arcface';
     holidayContext?: HolidayContext;
 }) {
     const { system_settings: systemSettings, flash } = usePage().props as {
@@ -510,7 +507,10 @@ export default function StaffAttendancePage({
         setMessage(null);
 
         try {
-            const verification = await verifyFace<ApiResponse>('/teacher/staff-attendance/verify-face', selectedSchedule.id, result);
+            const verification = await requestJson<ApiResponse>('/teacher/staff-attendance/verify-face', {
+                method: 'POST',
+                body: JSON.stringify(buildFaceVerificationPayload(selectedSchedule.id, result.descriptor, result.quality)),
+            });
 
             if (!verification.success || !verification.verification_token) {
                 throw new Error(verification.message || 'Face verification failed.');
@@ -518,7 +518,10 @@ export default function StaffAttendancePage({
 
             const scheduleForAction = pendingAttendanceAction === 'check-out' && activeSchedule ? activeSchedule : selectedSchedule;
             const locationPayload = await getVerifiedLocationPayload(scheduleForAction);
-            const facePayload = buildFaceAttendanceProof(result, verification.verification_token);
+            const facePayload = {
+                face_descriptor: result.descriptor,
+                face_verification_token: verification.verification_token,
+            };
 
             if (pendingAttendanceAction === 'check-in') {
                 await submitCheckIn({
@@ -885,7 +888,6 @@ export default function StaffAttendancePage({
                 title="Verify your face"
                 description="Look at the camera to confirm it is you before attendance is saved."
                 captureLabel="Verify and continue"
-                engine={faceRecognitionEngine}
                 requireLocation={gpsEnforcementEnabled}
                 locationGate={faceLocationGate}
                 onCapture={handleFaceVerified}

@@ -12,19 +12,13 @@ export type FaceDetectionIssue =
     | 'camera_not_ready';
 
 export interface FaceCaptureResult {
-    descriptor?: number[];
-    image?: string;
-    images?: string[];
-    livenessFrames?: string[];
+    descriptor: number[];
     quality: {
         detection_confidence: number;
         face_width: number;
         face_height: number;
         frame_count: number;
         descriptor_variance: number;
-    };
-    diagnostics?: {
-        cameraInitMs?: number;
     };
 }
 

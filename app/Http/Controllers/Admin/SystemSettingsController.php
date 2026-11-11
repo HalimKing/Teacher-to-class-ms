@@ -18,6 +18,20 @@ use Inertia\Response;
  */
 class SystemSettingsController extends Controller
 {
+    /**
+     * Settings left behind by the retired InsightFace migration.
+     * They are ignored so attendance always uses face-api.js.
+     *
+     * @var list<string>
+     */
+    private const RETIRED_FACE_ENGINE_KEYS = [
+        'face_recognition_engine',
+        'arcface_match_threshold',
+        'face_liveness_enabled',
+        'face_quality_threshold',
+        'face_service_timeout',
+    ];
+
     public function __construct(
         private ActivityLogService $activityLogService
     ) {}
@@ -30,6 +44,7 @@ class SystemSettingsController extends Controller
         // $this->authorize('viewAny', SystemSetting::class);
 
         $grouped = SystemSetting::getGrouped();
+        $grouped = $this->hideRetiredFaceEngineKeys($grouped);
 
         // Mask sensitive keys for display (e.g. API key show only last 4 chars)
         $grouped = $this->maskSensitiveKeys($grouped);
@@ -49,6 +64,9 @@ class SystemSettingsController extends Controller
         // $this->authorize('update', SystemSetting::class);
 
         $keyValues = $request->getSettingsArray();
+        foreach (self::RETIRED_FACE_ENGINE_KEYS as $key) {
+            unset($keyValues[$key]);
+        }
         $sensitiveKeys = ['google_maps_api_key'];
         foreach ($sensitiveKeys as $key) {
             if (array_key_exists($key, $keyValues) && (string) $keyValues[$key] === '') {
@@ -136,6 +154,17 @@ class SystemSettingsController extends Controller
     /**
      * Mask sensitive values (e.g. google_maps_api_key) for frontend display.
      */
+    private function hideRetiredFaceEngineKeys(array $grouped): array
+    {
+        foreach ($grouped as $group => $settings) {
+            foreach (self::RETIRED_FACE_ENGINE_KEYS as $key) {
+                unset($grouped[$group][$key]);
+            }
+        }
+
+        return $grouped;
+    }
+
     private function maskSensitiveKeys(array $grouped): array
     {
         if (!empty($grouped['map']['google_maps_api_key']['value'])) {

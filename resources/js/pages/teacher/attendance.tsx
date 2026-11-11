@@ -6,8 +6,7 @@ import { type FaceCaptureResult } from '@/lib/face-recognition';
 import { acquireFreshDeviceLocation } from '@/lib/device-location';
 import { evaluateAttendanceLocation } from '@/lib/geo';
 import { getBooleanSetting } from '@/lib/system-settings';
-import { buildFaceAttendanceProof, getApiErrorMessage, teacherJsonRequest } from '@/lib/teacher-api';
-import { verifyFace } from '@/services/faceVerification';
+import { buildFaceVerificationPayload, getApiErrorMessage, teacherJsonRequest } from '@/lib/teacher-api';
 import { BreadcrumbItem } from '@/types';
 import { router, usePage } from '@inertiajs/react';
 import { Circle, GoogleMap, LoadScript, Marker } from '@react-google-maps/api';
@@ -238,13 +237,12 @@ export default function AttendancePage() {
     const [isWithinRange, setIsWithinRange] = useState(false);
     const [isLoadingLocation, setIsLoadingLocation] = useState(false);
     const [locationError, setLocationError] = useState<string | null>(null);
-    const { system_settings: systemSettings, facialRecognitionEnabled: facialRecognitionEnabledProp, faceRecognitionEngine: faceRecognitionEngineProp, flash } = usePage().props as {
+    const { system_settings: systemSettings, facialRecognitionEnabled: facialRecognitionEnabledProp, flash } = usePage().props as {
         system_settings?: {
             attendance?: Record<string, { value?: string | number | boolean }>;
             map?: Record<string, { value?: string | number | boolean }>;
         };
         facialRecognitionEnabled?: boolean;
-        faceRecognitionEngine?: 'face_api' | 'arcface';
         flash?: { success?: string; error?: string };
     };
 
@@ -735,14 +733,20 @@ export default function AttendancePage() {
         setApiSuccess(null);
 
         try {
-            const verification = await verifyFace<ApiResponse>('/teacher/attendance/verify-face', selectedClass.timetable_id, result);
+            const verification = await teacherJsonRequest<ApiResponse>('/teacher/attendance/verify-face', {
+                method: 'POST',
+                body: JSON.stringify(buildFaceVerificationPayload(selectedClass.timetable_id, result.descriptor, result.quality)),
+            });
 
             if (!verification.success || !verification.verification_token) {
                 throw new Error(verification.message || 'Face verification failed.');
             }
 
             const locationPayload = await getVerifiedLocationPayload(selectedClass);
-            const facePayload = buildFaceAttendanceProof(result, verification.verification_token);
+            const facePayload = {
+                face_descriptor: result.descriptor,
+                face_verification_token: verification.verification_token,
+            };
 
             if (pendingAttendanceAction === 'check-in') {
                 const now = new Date();
@@ -1716,7 +1720,6 @@ export default function AttendancePage() {
                 title="Facial Verification Required"
                 description="Please verify your identity with a live face capture before attendance is submitted."
                 captureLabel="Verify Face"
-                engine={faceRecognitionEngineProp === 'arcface' || systemSettings?.attendance?.face_recognition_engine?.value === 'arcface' ? 'arcface' : 'face_api'}
                 requireLocation={gpsEnforcementEnabled}
                 locationGate={
                     selectedClass && Number(selectedClass.radius) > 0
