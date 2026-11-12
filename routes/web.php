@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Teacher\AttendanceReminderController as TeacherAttendanceReminderController;
 use App\Http\Controllers\Admin\SchoolManagement\AcademicPeriodController;
 use App\Http\Controllers\Admin\SchoolManagement\AcademicYearController;
 use App\Http\Controllers\Admin\SchoolManagement\ClassRoomController;
@@ -206,6 +207,30 @@ Route::middleware(['auth:teacher', 'attendance.portal.restrict'])->group(functio
         Route::get('/teacher/staff-reports', [TeacherStaffAttendanceReportController::class, 'index'])->name('teacher.staff-reports');
         Route::get('/teacher/staff-reports/data', [TeacherStaffAttendanceReportController::class, 'data'])->name('teacher.staff-reports.data');
     });
+
+    Route::prefix('teacher/attendance-reminders')
+        ->name('teacher.attendance-reminders.')
+        ->middleware('teacher.staff_type:administrator')
+        ->group(function () {
+            Route::get('/', [TeacherAttendanceReminderController::class, 'index'])->name('index');
+            Route::get('/create', [TeacherAttendanceReminderController::class, 'create'])->name('create');
+            Route::post('/', [TeacherAttendanceReminderController::class, 'store'])->name('store');
+            Route::get('/{attendanceReminder}', [TeacherAttendanceReminderController::class, 'show'])
+                ->whereNumber('attendanceReminder')
+                ->name('show');
+            Route::get('/{attendanceReminder}/edit', [TeacherAttendanceReminderController::class, 'edit'])
+                ->whereNumber('attendanceReminder')
+                ->name('edit');
+            Route::put('/{attendanceReminder}', [TeacherAttendanceReminderController::class, 'update'])
+                ->whereNumber('attendanceReminder')
+                ->name('update');
+            Route::patch('/{attendanceReminder}/toggle', [TeacherAttendanceReminderController::class, 'toggle'])
+                ->whereNumber('attendanceReminder')
+                ->name('toggle');
+            Route::delete('/{attendanceReminder}', [TeacherAttendanceReminderController::class, 'destroy'])
+                ->whereNumber('attendanceReminder')
+                ->name('destroy');
+        });
 
     Route::get('/teacher/records', [AttendanceRecordController::class, 'index'])
         ->middleware('teacher.staff_type:lecturer')

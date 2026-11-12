@@ -18,5 +18,9 @@ Schedule::command('attendance:expire-venue-authorizations')
 Schedule::command('reminders:process')
     ->everyMinute();
 
+Schedule::command('attendance-reminders:process')
+    ->everyMinute()
+    ->withoutOverlapping();
+
 Schedule::command('activity-logs:prune')
     ->dailyAt('02:00');

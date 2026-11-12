@@ -39,7 +39,7 @@ class SmsService
                 ->asForm()
                 ->post($url, [
                     'From' => $from,
-                    'To' => $phone,
+                    'To' => self::toE164($phone),
                     'Body' => $message,
                 ]);
 
@@ -54,5 +54,32 @@ class SmsService
 
         // Unknown driver
         throw new \RuntimeException('SMS driver "' . $driver . '" is not implemented');
+    }
+
+    /**
+     * Twilio requires E.164. Staff numbers are often stored as a local
+     * Ghana number, for example 0540000000.
+     */
+    private static function toE164(string $phone): string
+    {
+        $normalized = preg_replace('/[^\d+]/', '', $phone) ?? '';
+
+        if (str_starts_with($normalized, '+')) {
+            return $normalized;
+        }
+
+        if (str_starts_with($normalized, '00')) {
+            return '+'.substr($normalized, 2);
+        }
+
+        if (str_starts_with($normalized, '233') && strlen($normalized) === 12) {
+            return '+'.$normalized;
+        }
+
+        if (str_starts_with($normalized, '0') && strlen($normalized) === 10) {
+            return '+233'.substr($normalized, 1);
+        }
+
+        return $normalized;
     }
 }

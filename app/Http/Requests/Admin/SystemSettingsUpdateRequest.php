@@ -36,6 +36,7 @@ class SystemSettingsUpdateRequest extends FormRequest
             'face_verification_timeout'    => 'nullable|integer|min:30|max:600',
             'face_enrollment_required'     => 'nullable|boolean',
             'administrator_venue_change_requests_enabled' => 'nullable|boolean',
+            'max_reminders_per_administrator' => 'nullable|integer|min:1|max:100',
         ],
         'map' => [
             'google_maps_api_key'          => 'nullable|string|max:512',

@@ -38,6 +38,7 @@ class SystemSettingsSeeder extends Seeder
             ['key' => 'face_verification_timeout', 'value' => '120', 'group' => 'attendance', 'type' => 'integer', 'description' => 'Face verification token lifetime in seconds.'],
             ['key' => 'face_enrollment_required', 'value' => '0', 'group' => 'attendance', 'type' => 'boolean', 'description' => 'Block attendance when a lecturer has no enrolled face descriptor.'],
             ['key' => 'administrator_venue_change_requests_enabled', 'value' => '1', 'group' => 'attendance', 'type' => 'boolean', 'description' => 'When enabled, administrator staff can submit venue change requests for approval. When disabled, the request option is hidden and new submissions are blocked. Existing approved authorizations still work. Direct admin authorizations are unaffected.'],
+            ['key' => 'max_reminders_per_administrator', 'value' => '5', 'group' => 'attendance', 'type' => 'integer', 'description' => 'Maximum number of attendance reminders each administrator staff member can create for themselves. Reminders stay active until that staff member disables or deletes them.'],
 
             // Map & Location
             ['key' => 'google_maps_api_key', 'value' => '', 'group' => 'map', 'type' => 'string', 'description' => 'Google Maps API key (optional)'],

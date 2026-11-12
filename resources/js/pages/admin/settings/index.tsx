@@ -33,6 +33,7 @@ const SETTING_LABELS: Record<string, string> = {
     auto_mark_absent_after_end: 'Auto Mark Absent After End',
     send_email_on_auto_absence: 'Send Email for Absent Lecturer/Administrator',
     allow_manual_override: 'Allow Manual Override',
+    max_reminders_per_administrator: 'Maximum Reminders Per Administrator',
     attendance_logs_enabled: 'Attendance Logs Enabled',
     log_gps_attempts: 'Log GPS Attempts',
     log_failed_attempts: 'Log Failed Attempts',

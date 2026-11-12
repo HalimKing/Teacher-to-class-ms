@@ -62,6 +62,12 @@ const teacherNavGroups: NavGroup[] = [
                 staffTypes: ['administrator'],
             },
             {
+                title: 'My Reminders',
+                href: '/teacher/attendance-reminders',
+                icon: Bell,
+                staffTypes: ['administrator'],
+            },
+            {
                 title: 'Explanations',
                 href: '/teacher/attendance-explanations',
                 icon: ClipboardList,
