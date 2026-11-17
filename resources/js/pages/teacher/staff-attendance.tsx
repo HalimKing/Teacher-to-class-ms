@@ -2,7 +2,7 @@ import { HolidayBreakBanner, type HolidayContext } from '@/components/attendance
 import FaceCaptureModal from '@/components/face/FaceCaptureModal';
 import AppLayout from '@/layouts/app-layout';
 import { ATTENDANCE_LOCK_MESSAGE } from '@/lib/attendance-lock';
-import { type FaceCaptureResult } from '@/lib/face-recognition';
+import { preloadFaceModels, type FaceCaptureResult } from '@/lib/face-recognition';
 import { acquireFreshDeviceLocation } from '@/lib/device-location';
 import { evaluateAttendanceLocation } from '@/lib/geo';
 import { apiJsonRequest, getApiErrorMessage } from '@/lib/http';
@@ -179,6 +179,13 @@ export default function StaffAttendancePage({
         typeof facialRecognitionEnabledProp === 'boolean'
             ? facialRecognitionEnabledProp
             : getBooleanSetting(systemSettings?.attendance, 'facial_recognition_enabled');
+
+    useEffect(() => {
+        if (!facialRecognitionEnabled) {
+            return;
+        }
+        void preloadFaceModels();
+    }, [facialRecognitionEnabled]);
     const defaultLat = Number(systemSettings?.map?.default_campus_lat?.value ?? import.meta.env.VITE_DEFAULT_CAMPUS_LAT ?? 40.7128);
     const defaultLng = Number(systemSettings?.map?.default_campus_lng?.value ?? import.meta.env.VITE_DEFAULT_CAMPUS_LNG ?? -74.006);
     const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';

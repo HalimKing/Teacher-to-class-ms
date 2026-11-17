@@ -4,12 +4,17 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { ensureFreshCsrfToken } from '@/lib/csrf';
 import {
     assessVideoFrame,
+    beginFaceSession,
+    cameraConstraints,
     captureDescriptorFromImage,
     captureDescriptorFromVideo,
     DEFAULT_NO_FACE_TIPS,
+    FACE_PIPELINE,
     isFaceCaptureError,
     isFaceEnrollmentRequiredMessage,
     isFaceMismatchMessage,
+    loadFaceApiModels,
+    noteFaceTiming,
     type FaceCaptureResult,
     type FaceDetectionIssue,
 } from '@/lib/face-recognition';
@@ -19,9 +24,6 @@ import { getApiErrorMessage } from '@/lib/http';
 import { Camera, ImageUp, Loader2, MapPin, RefreshCw } from 'lucide-react';
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import FaceVerificationStatus, { type FaceStatus } from './FaceVerificationStatus';
-
-/** Consecutive “ok” coaching ticks required before auto-verification starts. */
-const AUTO_VERIFY_STABLE_TICKS = 3;
 
 export type FaceLocationGate = {
     /** Decimal columns reach the frontend as strings, so both shapes are accepted. */
@@ -37,6 +39,28 @@ type VenueGate = {
     radiusMeters: number;
     venueName?: string;
 };
+
+function waitForVideoFrame(video: HTMLVideoElement): Promise<void> {
+    if (video.readyState >= 2 && video.videoWidth > 0) {
+        return Promise.resolve();
+    }
+
+    return new Promise((resolve, reject) => {
+        const ready = () => {
+            if (video.videoWidth === 0) {
+                return;
+            }
+            window.clearTimeout(timer);
+            video.removeEventListener('loadeddata', ready);
+            resolve();
+        };
+        const timer = window.setTimeout(() => {
+            video.removeEventListener('loadeddata', ready);
+            reject(new Error('Camera video did not become ready.'));
+        }, 8000);
+        video.addEventListener('loadeddata', ready);
+    });
+}
 
 function distanceFromGate(latitude: number, longitude: number, gate: VenueGate): number {
     return distanceInMeters(latitude, longitude, gate.latitude, gate.longitude);
@@ -107,6 +131,7 @@ export default function FaceCaptureModal({
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
     const coachingTimerRef = useRef<number | null>(null);
+    const coachingGenerationRef = useRef(0);
     const processingRef = useRef(false);
     const locationBlockedRef = useRef(false);
     const successRef = useRef(false);
@@ -313,19 +338,34 @@ export default function FaceCaptureModal({
         }
 
         cameraStartingRef.current = true;
-        setStatus('camera_initializing');
+        setStatus('models_loading');
         setStatusTitle(undefined);
-        setStatusMessage('Please allow camera access if prompted.');
+        setStatusMessage('Loading face recognition models...');
         setStatusTips(undefined);
         try {
+            try {
+                await loadFaceApiModels();
+            } catch {
+                setStatus('failed');
+                setStatusTitle('Face Recognition Unavailable');
+                setStatusMessage('Face recognition models could not be loaded. Tap Try Again.');
+                setStatusTips(['Check your connection, then try again.', 'Models stay loaded after the first successful download.']);
+                haltVerification();
+                return;
+            }
+
+            if (locationBlockedRef.current) {
+                return;
+            }
+
+            setStatus('camera_initializing');
+            setStatusMessage('Initializing camera...');
+            const cameraStarted = performance.now();
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    facingMode: 'user',
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 },
-                },
+                video: cameraConstraints(),
                 audio: false,
             });
+            noteFaceTiming('camera_init_ms', performance.now() - cameraStarted);
 
             if (locationBlockedRef.current) {
                 stream.getTracks().forEach((track) => track.stop());
@@ -336,18 +376,17 @@ export default function FaceCaptureModal({
             if (videoRef.current) {
                 videoRef.current.srcObject = stream;
                 await videoRef.current.play();
+                await waitForVideoFrame(videoRef.current);
             }
-            setStatus('idle');
-            setStatusMessage(
-                autoCapture
-                    ? 'Location confirmed. Center your face in the oval — verification starts automatically.'
-                    : 'Location confirmed. Center your face, then capture.',
-            );
+            beginFaceSession();
+            setStatus('coaching');
+            setStatusMessage('Position your face in the camera.');
+            setLiveGuidance('Position your face in the camera.');
             startCoaching();
         } catch {
             setStatus('failed');
             setStatusTitle('Camera Unavailable');
-            setStatusMessage('Camera permission was denied or the camera is unavailable.');
+            setStatusMessage('Camera unavailable. Check camera permissions.');
             setStatusTips([
                 'Allow camera access in your browser settings.',
                 'Close other apps that may be using the camera.',
@@ -369,15 +408,45 @@ export default function FaceCaptureModal({
 
     const startCoaching = () => {
         stopCoaching();
+        const generation = coachingGenerationRef.current;
+        const startedAt = performance.now();
+
+        const schedule = () => {
+            if (generation !== coachingGenerationRef.current) {
+                return;
+            }
+            coachingTimerRef.current = window.setTimeout(() => {
+                void tick();
+            }, FACE_PIPELINE.coachingGapMs);
+        };
 
         const tick = async () => {
+            if (generation !== coachingGenerationRef.current) {
+                return;
+            }
+            if (document.hidden) {
+                schedule();
+                return;
+            }
             if (!videoRef.current || processingRef.current || locationBlockedRef.current || haltedRef.current) {
+                if (!processingRef.current && !locationBlockedRef.current && !haltedRef.current) {
+                    schedule();
+                }
+                return;
+            }
+            if (performance.now() - startedAt > FACE_PIPELINE.detectionTimeoutMs) {
+                setStatus('detection_timeout');
+                setStatusTitle('Face Not Detected');
+                setStatusMessage('Face detection is taking longer than expected. Please reposition your face or try again.');
+                setLiveGuidance('Face detection is taking longer than expected. Please reposition your face or try again.');
+                setGuidanceTone('warn');
+                haltVerification();
                 return;
             }
 
             try {
                 const assessment = await assessVideoFrame(videoRef.current);
-                if (processingRef.current || locationBlockedRef.current || haltedRef.current) {
+                if (generation !== coachingGenerationRef.current || processingRef.current || locationBlockedRef.current || haltedRef.current) {
                     return;
                 }
 
@@ -389,43 +458,44 @@ export default function FaceCaptureModal({
                     setStatusTitle(undefined);
                     setStatusMessage(assessment.guidance);
                     setStatusTips(undefined);
+                    schedule();
                     return;
                 }
 
                 goodFrameStreakRef.current += 1;
                 const streak = goodFrameStreakRef.current;
-                const readyForAuto = autoCapture && streak >= AUTO_VERIFY_STABLE_TICKS;
+                const readyForAuto = autoCapture && streak >= FACE_PIPELINE.stableDetections;
 
                 setStatus('face_detected');
                 setStatusTitle(undefined);
                 setStatusTips(undefined);
 
                 if (autoCapture && !readyForAuto) {
-                    setStatusMessage('Face positioned correctly. Hold still…');
-                    setLiveGuidance('Hold still — verifying automatically…');
+                    setStatusMessage('Face detected. Hold still...');
+                    setLiveGuidance('Face detected. Hold still...');
                     setGuidanceTone('good');
+                    schedule();
                 } else if (autoCapture && readyForAuto) {
-                    setStatusMessage('Starting verification…');
-                    setLiveGuidance('Hold still while we verify your identity.');
+                    setStatusMessage('Capturing face...');
+                    setLiveGuidance('Capturing face...');
                     setGuidanceTone('good');
                     void handleCaptureRef.current();
                 } else {
                     setStatusMessage(assessment.guidance);
+                    schedule();
                 }
             } catch {
-                // Keep last guidance if a single assessment frame fails.
+                schedule();
             }
         };
 
         void tick();
-        coachingTimerRef.current = window.setInterval(() => {
-            void tick();
-        }, 700);
     };
 
     const stopCoaching = () => {
+        coachingGenerationRef.current += 1;
         if (coachingTimerRef.current) {
-            window.clearInterval(coachingTimerRef.current);
+            window.clearTimeout(coachingTimerRef.current);
             coachingTimerRef.current = null;
         }
     };
@@ -493,10 +563,11 @@ export default function FaceCaptureModal({
 
             setStatus('success');
             setStatusTitle('Face Verified Successfully');
-            setStatusMessage('Face verified successfully. You can now proceed with attendance.');
-            setLiveGuidance('Face verified successfully. You can now proceed with attendance.');
+            setStatusMessage('Face verified successfully.');
+            setLiveGuidance('Face verified successfully.');
             setGuidanceTone('good');
             successRef.current = true;
+            stopCamera();
         } catch (error) {
             if (locationBlockedRef.current) {
                 return;
@@ -540,8 +611,10 @@ export default function FaceCaptureModal({
             }
             setStatus('success');
             setStatusTitle('Face Verified Successfully');
-            setStatusMessage('Face verified successfully. You can now proceed with attendance.');
+            setStatusMessage('Face verified successfully.');
+            setLiveGuidance('Face verified successfully.');
             successRef.current = true;
+            stopCamera();
         } catch (error) {
             if (locationBlockedRef.current) {
                 return;
@@ -563,10 +636,8 @@ export default function FaceCaptureModal({
             const isNoFace = error.code === 'no_face' || error.code === 'low_confidence';
 
             setStatus(isNoFace ? 'no_face' : 'failed');
-            setStatusTitle(isNoFace ? 'Face Not Recognized' : error.title);
-            setStatusMessage(
-                isNoFace ? 'Face not recognized. Please position your face clearly in front of the camera and try again.' : error.message,
-            );
+            setStatusTitle(error.title);
+            setStatusMessage(error.message);
             setStatusTips(error.tips);
             setLiveGuidance('Verification stopped. Tap Try Again when you are ready.');
             setGuidanceTone('warn');

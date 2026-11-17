@@ -3,6 +3,7 @@ import { type ReactNode } from 'react';
 
 export type FaceStatus =
     | 'idle'
+    | 'models_loading'
     | 'camera_initializing'
     | 'coaching'
     | 'face_detected'
@@ -11,6 +12,7 @@ export type FaceStatus =
     | 'success'
     | 'no_face'
     | 'mismatch'
+    | 'detection_timeout'
     | 'failed';
 
 interface FaceVerificationStatusProps {
@@ -52,10 +54,17 @@ function statusConfig(status: FaceStatus): {
     icon: ReactNode;
 } {
     switch (status) {
+        case 'models_loading':
+            return {
+                title: 'Loading Face Recognition',
+                message: 'Loading face recognition models...',
+                className: 'border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-200',
+                icon: <Loader2 className="h-4 w-4 animate-spin" />,
+            };
         case 'camera_initializing':
             return {
                 title: 'Starting Camera',
-                message: 'Please allow camera access if prompted.',
+                message: 'Initializing camera...',
                 className: 'border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-200',
                 icon: <Loader2 className="h-4 w-4 animate-spin" />,
             };
@@ -107,6 +116,13 @@ function statusConfig(status: FaceStatus): {
                 message: 'A face was detected, but it does not match the enrolled profile for this account.',
                 className: 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200',
                 icon: <XCircle className="h-4 w-4" />,
+            };
+        case 'detection_timeout':
+            return {
+                title: 'Face Not Detected',
+                message: 'Face detection is taking longer than expected. Please reposition your face or try again.',
+                className: 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100',
+                icon: <AlertCircle className="h-4 w-4" />,
             };
         case 'failed':
             return {

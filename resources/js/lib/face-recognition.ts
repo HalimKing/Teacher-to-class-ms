@@ -1,5 +1,39 @@
 type FaceApi = typeof import('face-api.js');
 
+/**
+ * Live coaching uses TinyFaceDetector on a small input.
+ * The 128-number descriptor is still produced by SSD MobileNet + the 68-point
+ * landmark net + the recognition net, which is the same pipeline used when
+ * faces were enrolled. Do not lower the match threshold to compensate.
+ */
+export const FACE_PIPELINE = {
+    modelUrl: '/models/face-api',
+    cameraWidth: 640,
+    cameraHeight: 480,
+    tinyInputSize: 224,
+    tinyScoreThreshold: 0.5,
+    detectMinConfidence: 0.5,
+    /** Matches the backend quality gate (detection_confidence min 0.7). */
+    acceptMinConfidence: 0.7,
+    minFaceSize: 90,
+    maxFaceSize: 520,
+    centerTolerance: 0.28,
+    /** Consecutive suitable live frames before automatic capture. */
+    stableDetections: 2,
+    /** Backend rejects fewer than 3 real samples. */
+    descriptorSamples: 3,
+    maxDescriptorAttempts: 6,
+    sampleGapMs: 80,
+    /** Pause between live checks. A new check never starts while one is running. */
+    coachingGapMs: 280,
+    detectionTimeoutMs: 20_000,
+    minLuminance: 38,
+    minSharpness: 10,
+    minAspect: 0.55,
+    maxAspect: 1.45,
+    maxDescriptorVariance: 0.16,
+} as const;
+
 export type FaceDetectionIssue =
     | 'ok'
     | 'no_face'
@@ -8,8 +42,21 @@ export type FaceDetectionIssue =
     | 'too_large'
     | 'off_center'
     | 'low_confidence'
+    | 'too_dark'
+    | 'blurry'
+    | 'not_frontal'
     | 'unstable'
     | 'camera_not_ready';
+
+export interface FaceTimings {
+    model_init_ms?: number;
+    camera_init_ms?: number;
+    first_detection_ms?: number;
+    quality_eval_ms?: number;
+    capture_ms?: number;
+    descriptor_ms?: number;
+    total_ms?: number;
+}
 
 export interface FaceCaptureResult {
     descriptor: number[];
@@ -20,6 +67,7 @@ export interface FaceCaptureResult {
         frame_count: number;
         descriptor_variance: number;
     };
+    timings: FaceTimings;
 }
 
 export interface FaceFrameAssessment {
@@ -50,46 +98,86 @@ export const DEFAULT_NO_FACE_TIPS = [
     'Move slightly closer to the camera if necessary, then try again.',
 ];
 
-const MODEL_URL = '/models/face-api';
-
-/** Frames averaged into the final descriptor. */
-const FRAME_COUNT = 4;
-/** Consecutive good frames required before a sample is accepted. */
-const STABLE_FRAMES_REQUIRED = 2;
-/** Max detection attempts before giving up with guidance. */
-const MAX_DETECTION_ATTEMPTS = 10;
-/** Slightly lower than before to reduce false “no face” in dim light. */
-const DETECT_MIN_CONFIDENCE = 0.5;
-/** Quality gate for accepted frames — keeps false positives in check. */
-const ACCEPT_MIN_CONFIDENCE = 0.62;
-const IDEAL_MIN_FACE_SIZE = 100;
-const MAX_FACE_SIZE = 520;
-const MAX_DESCRIPTOR_VARIANCE = 0.16;
-const FRAME_INTERVAL_MS = 220;
-
 let faceApiPromise: Promise<FaceApi> | null = null;
-let modelsLoaded = false;
+let modelsPromise: Promise<FaceApi> | null = null;
+let tinyReady = false;
+let captureInFlight = false;
+const faceTimings: FaceTimings = {};
+let sessionStartedAt = 0;
+let firstDetectionMarked = false;
+let sampleCanvas: HTMLCanvasElement | null = null;
 
-export async function loadFaceApiModels(): Promise<FaceApi> {
-    if (!faceApiPromise) {
-        faceApiPromise = import('face-api.js');
+export function preloadFaceModels(): Promise<void> {
+    return loadFaceApiModels().then(() => undefined);
+}
+
+export function loadFaceApiModels(): Promise<FaceApi> {
+    if (!modelsPromise) {
+        const started = performance.now();
+        modelsPromise = (async () => {
+            if (!faceApiPromise) {
+                faceApiPromise = import('face-api.js');
+            }
+
+            const faceapi = await faceApiPromise;
+            await Promise.all([
+                faceapi.nets.ssdMobilenetv1.loadFromUri(FACE_PIPELINE.modelUrl),
+                faceapi.nets.faceLandmark68Net.loadFromUri(FACE_PIPELINE.modelUrl),
+                faceapi.nets.faceRecognitionNet.loadFromUri(FACE_PIPELINE.modelUrl),
+            ]);
+
+            try {
+                await faceapi.nets.tinyFaceDetector.loadFromUri(FACE_PIPELINE.modelUrl);
+                tinyReady = faceapi.nets.tinyFaceDetector.isLoaded;
+            } catch {
+                tinyReady = false;
+            }
+
+            noteFaceTiming('model_init_ms', performance.now() - started);
+
+            return faceapi;
+        })().catch((error: unknown) => {
+            modelsPromise = null;
+            tinyReady = false;
+            throw error;
+        });
     }
 
-    const faceapi = await faceApiPromise;
-    if (!modelsLoaded) {
-        await Promise.all([
-            faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
-            faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-            faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
-        ]);
-        modelsLoaded = true;
-    }
+    return modelsPromise;
+}
 
-    return faceapi;
+/** Starts the clock used for first-detection timing. Models stay loaded. */
+export function beginFaceSession(): void {
+    sessionStartedAt = performance.now();
+    firstDetectionMarked = false;
+    delete faceTimings.first_detection_ms;
+    delete faceTimings.quality_eval_ms;
+    delete faceTimings.capture_ms;
+    delete faceTimings.descriptor_ms;
+    delete faceTimings.total_ms;
+}
+
+export function noteFaceTiming(key: keyof FaceTimings, milliseconds: number): void {
+    faceTimings[key] = Math.round(milliseconds);
+    if (import.meta.env.DEV) {
+        console.info(`[face] ${key}=${faceTimings[key]}`);
+    }
+}
+
+export function getFaceTimings(): FaceTimings {
+    return { ...faceTimings };
+}
+
+export function cameraConstraints(): MediaTrackConstraints {
+    return {
+        facingMode: { ideal: 'user' },
+        width: { ideal: FACE_PIPELINE.cameraWidth },
+        height: { ideal: FACE_PIPELINE.cameraHeight },
+    };
 }
 
 /**
- * Lightweight live assessment for camera coaching (no descriptor required).
+ * Lightweight live assessment. Does not compute a recognition descriptor.
  */
 export async function assessVideoFrame(video: HTMLVideoElement): Promise<FaceFrameAssessment> {
     if (!video || video.readyState < 2 || video.videoWidth === 0) {
@@ -102,12 +190,20 @@ export async function assessVideoFrame(video: HTMLVideoElement): Promise<FaceFra
     }
 
     const faceapi = await loadFaceApiModels();
-    const detections = await faceapi.detectAllFaces(video, new faceapi.SsdMobilenetv1Options({ minConfidence: DETECT_MIN_CONFIDENCE }));
+    const detections = tinyReady
+        ? await faceapi.detectAllFaces(
+              video,
+              new faceapi.TinyFaceDetectorOptions({
+                  inputSize: FACE_PIPELINE.tinyInputSize,
+                  scoreThreshold: FACE_PIPELINE.tinyScoreThreshold,
+              }),
+          )
+        : await faceapi.detectAllFaces(video, new faceapi.SsdMobilenetv1Options({ minConfidence: FACE_PIPELINE.detectMinConfidence }));
 
     if (detections.length === 0) {
         return {
             issue: 'no_face',
-            guidance: 'Center your face in the frame and improve lighting.',
+            guidance: guidanceForIssue('no_face'),
             confidence: null,
             faceBox: null,
         };
@@ -116,7 +212,7 @@ export async function assessVideoFrame(video: HTMLVideoElement): Promise<FaceFra
     if (detections.length > 1) {
         return {
             issue: 'multiple_faces',
-            guidance: 'Only one face should be in the frame.',
+            guidance: guidanceForIssue('multiple_faces'),
             confidence: null,
             faceBox: null,
         };
@@ -131,103 +227,116 @@ export async function assessVideoFrame(video: HTMLVideoElement): Promise<FaceFra
         width: Number(box.width),
         height: Number(box.height),
     };
+    const qualityStarted = performance.now();
+    const issue = classifyFaceBox(faceBox, confidence, video.videoWidth, video.videoHeight, true, tinyReady ? FACE_PIPELINE.tinyScoreThreshold : FACE_PIPELINE.acceptMinConfidence);
+    const appearance = issue === 'ok' ? sampleAppearance(video, faceBox) : null;
+    noteFaceTiming('quality_eval_ms', performance.now() - qualityStarted);
+    const resolved = appearance?.dark ? 'too_dark' : appearance?.blurry ? 'blurry' : issue;
 
-    const issue = classifyFaceBox(faceBox, confidence, video.videoWidth, video.videoHeight);
+    if (resolved === 'ok' && !firstDetectionMarked && sessionStartedAt > 0) {
+        firstDetectionMarked = true;
+        noteFaceTiming('first_detection_ms', performance.now() - sessionStartedAt);
+    }
 
     return {
-        issue,
-        guidance: guidanceForIssue(issue),
+        issue: resolved,
+        guidance: guidanceForIssue(resolved),
         confidence,
         faceBox,
     };
 }
 
 export async function captureDescriptorFromVideo(video: HTMLVideoElement, onProgress?: (message: string) => void): Promise<FaceCaptureResult> {
-    const faceapi = await loadFaceApiModels();
-    const captures: Array<{ descriptor: number[]; confidence: number; width: number; height: number }> = [];
-    let stableStreak = 0;
-    let attempts = 0;
-    let lastIssue: FaceDetectionIssue = 'no_face';
-
-    onProgress?.('Looking for a clear face… Hold still.');
-
-    while (captures.length < FRAME_COUNT && attempts < MAX_DETECTION_ATTEMPTS) {
-        attempts += 1;
-        await wait(FRAME_INTERVAL_MS);
-
-        const detections = await faceapi
-            .detectAllFaces(video, new faceapi.SsdMobilenetv1Options({ minConfidence: DETECT_MIN_CONFIDENCE }))
-            .withFaceLandmarks()
-            .withFaceDescriptors();
-
-        if (detections.length === 0) {
-            stableStreak = 0;
-            lastIssue = 'no_face';
-            onProgress?.(guidanceForIssue('no_face'));
-            continue;
-        }
-
-        if (detections.length > 1) {
-            stableStreak = 0;
-            lastIssue = 'multiple_faces';
-            onProgress?.(guidanceForIssue('multiple_faces'));
-            continue;
-        }
-
-        const detection = detections[0];
-        const box = detection.detection.box;
-        const confidence = Number(detection.detection.score);
-        const faceBox = {
-            x: Number(box.x),
-            y: Number(box.y),
-            width: Number(box.width),
-            height: Number(box.height),
-        };
-
-        const issue = classifyFaceBox(faceBox, confidence, video.videoWidth, video.videoHeight);
-        if (issue !== 'ok') {
-            stableStreak = 0;
-            lastIssue = issue;
-            onProgress?.(guidanceForIssue(issue));
-            continue;
-        }
-
-        stableStreak += 1;
-        onProgress?.(
-            stableStreak < STABLE_FRAMES_REQUIRED
-                ? 'Face detected. Hold still while we lock on…'
-                : `Capturing frame ${captures.length + 1} of ${FRAME_COUNT}…`,
-        );
-
-        if (stableStreak < STABLE_FRAMES_REQUIRED) {
-            continue;
-        }
-
-        captures.push({
-            descriptor: Array.from(detection.descriptor).map(Number),
-            confidence,
-            width: faceBox.width,
-            height: faceBox.height,
-        });
-
-        // Require stability again between accepted samples.
-        stableStreak = 0;
+    if (captureInFlight) {
+        throw new FaceCaptureError('A face capture is already in progress.', 'unstable', 'Please Wait', ['Wait for the current attempt to finish, then try again.']);
     }
 
-    if (captures.length < FRAME_COUNT) {
-        throw faceErrorForIssue(lastIssue);
+    captureInFlight = true;
+    const started = performance.now();
+
+    try {
+        const faceapi = await loadFaceApiModels();
+        const captures: Array<{ descriptor: number[]; confidence: number; width: number; height: number }> = [];
+        let attempts = 0;
+        let lastIssue: FaceDetectionIssue = 'no_face';
+        let descriptorMs = 0;
+
+        onProgress?.('Capturing face...');
+
+        while (captures.length < FACE_PIPELINE.descriptorSamples && attempts < FACE_PIPELINE.maxDescriptorAttempts) {
+            attempts += 1;
+            if (attempts > 1) {
+                await wait(FACE_PIPELINE.sampleGapMs);
+            }
+
+            const inferenceStarted = performance.now();
+            const detections = await faceapi
+                .detectAllFaces(video, new faceapi.SsdMobilenetv1Options({ minConfidence: FACE_PIPELINE.detectMinConfidence }))
+                .withFaceLandmarks()
+                .withFaceDescriptors();
+            descriptorMs += performance.now() - inferenceStarted;
+
+            if (detections.length === 0) {
+                lastIssue = 'no_face';
+                onProgress?.(guidanceForIssue('no_face'));
+                continue;
+            }
+
+            if (detections.length > 1) {
+                lastIssue = 'multiple_faces';
+                onProgress?.(guidanceForIssue('multiple_faces'));
+                continue;
+            }
+
+            const detection = detections[0];
+            const box = detection.detection.box;
+            const confidence = Number(detection.detection.score);
+            const faceBox = {
+                x: Number(box.x),
+                y: Number(box.y),
+                width: Number(box.width),
+                height: Number(box.height),
+            };
+            const issue = classifyCapturedFace(video, faceBox, confidence);
+
+            if (issue !== 'ok') {
+                lastIssue = issue;
+                onProgress?.(guidanceForIssue(issue));
+                continue;
+            }
+
+            captures.push({
+                descriptor: Array.from(detection.descriptor).map(Number),
+                confidence,
+                width: faceBox.width,
+                height: faceBox.height,
+            });
+            onProgress?.(`Capturing face... ${captures.length} of ${FACE_PIPELINE.descriptorSamples}`);
+        }
+
+        noteFaceTiming('descriptor_ms', descriptorMs);
+
+        if (captures.length < FACE_PIPELINE.descriptorSamples) {
+            throw faceErrorForIssue(lastIssue);
+        }
+
+        onProgress?.('Verifying your identity...');
+        const result = buildCaptureResult(captures);
+        noteFaceTiming('capture_ms', performance.now() - started);
+        noteFaceTiming('total_ms', (faceTimings.model_init_ms ?? 0) + (faceTimings.camera_init_ms ?? 0) + (performance.now() - (sessionStartedAt || started)));
+        result.timings = getFaceTimings();
+
+        return result;
+    } finally {
+        captureInFlight = false;
     }
-
-    onProgress?.('Validating capture quality…');
-
-    return buildCaptureResult(captures);
 }
 
 export async function captureDescriptorFromImage(file: File): Promise<FaceCaptureResult> {
     const faceapi = await loadFaceApiModels();
     const image = await fileToImage(file);
     const detections = await faceapi
-        .detectAllFaces(image, new faceapi.SsdMobilenetv1Options({ minConfidence: DETECT_MIN_CONFIDENCE }))
+        .detectAllFaces(image, new faceapi.SsdMobilenetv1Options({ minConfidence: FACE_PIPELINE.detectMinConfidence }))
         .withFaceLandmarks()
         .withFaceDescriptors();
 
@@ -248,8 +357,8 @@ export async function captureDescriptorFromImage(file: File): Promise<FaceCaptur
         width: Number(box.width),
         height: Number(box.height),
     };
+    const issue = classifyFaceBox(faceBox, confidence, image.width, image.height, false, FACE_PIPELINE.acceptMinConfidence);
 
-    const issue = classifyFaceBox(faceBox, confidence, image.width, image.height, false);
     if (issue !== 'ok') {
         throw faceErrorForIssue(issue);
     }
@@ -261,7 +370,7 @@ export async function captureDescriptorFromImage(file: File): Promise<FaceCaptur
         height: faceBox.height,
     };
 
-    return buildCaptureResult([sample, sample, sample, sample]);
+    return buildCaptureResult([sample, sample, sample]);
 }
 
 export function isFaceCaptureError(error: unknown): error is FaceCaptureError {
@@ -303,23 +412,50 @@ export function isFaceEnrollmentRequiredMessage(message: string | null | undefin
     );
 }
 
+function classifyCapturedFace(
+    video: HTMLVideoElement,
+    faceBox: { x: number; y: number; width: number; height: number },
+    confidence: number,
+): FaceDetectionIssue {
+    const issue = classifyFaceBox(faceBox, confidence, video.videoWidth, video.videoHeight, true, FACE_PIPELINE.acceptMinConfidence);
+    if (issue !== 'ok') {
+        return issue;
+    }
+
+    const appearance = sampleAppearance(video, faceBox);
+    if (appearance.dark) {
+        return 'too_dark';
+    }
+    if (appearance.blurry) {
+        return 'blurry';
+    }
+
+    return 'ok';
+}
+
 function classifyFaceBox(
     box: { x: number; y: number; width: number; height: number },
     confidence: number,
     frameWidth: number,
     frameHeight: number,
-    checkCenter = true,
+    checkCenter: boolean,
+    minimumConfidence: number,
 ): FaceDetectionIssue {
-    if (confidence < ACCEPT_MIN_CONFIDENCE) {
+    if (confidence < minimumConfidence) {
         return 'low_confidence';
     }
 
-    if (box.width < IDEAL_MIN_FACE_SIZE || box.height < IDEAL_MIN_FACE_SIZE) {
+    const aspect = box.height > 0 ? box.width / box.height : 0;
+    if (aspect < FACE_PIPELINE.minAspect || aspect > FACE_PIPELINE.maxAspect) {
+        return 'not_frontal';
+    }
+
+    if (box.width < FACE_PIPELINE.minFaceSize || box.height < FACE_PIPELINE.minFaceSize) {
         return 'too_small';
     }
 
     const minDim = Math.min(frameWidth, frameHeight);
-    const maxFace = frameWidth > 0 && frameHeight > 0 ? Math.max(MAX_FACE_SIZE, minDim * 0.88) : MAX_FACE_SIZE;
+    const maxFace = frameWidth > 0 && frameHeight > 0 ? Math.max(FACE_PIPELINE.maxFaceSize, minDim * 0.88) : FACE_PIPELINE.maxFaceSize;
 
     if (box.width > maxFace || box.height > maxFace) {
         return 'too_large';
@@ -331,7 +467,7 @@ function classifyFaceBox(
         const offsetX = Math.abs(centerX - frameWidth / 2) / frameWidth;
         const offsetY = Math.abs(centerY - frameHeight / 2) / frameHeight;
 
-        if (offsetX > 0.28 || offsetY > 0.28) {
+        if (offsetX > FACE_PIPELINE.centerTolerance || offsetY > FACE_PIPELINE.centerTolerance) {
             return 'off_center';
         }
     }
@@ -339,12 +475,53 @@ function classifyFaceBox(
     return 'ok';
 }
 
+function sampleAppearance(video: HTMLVideoElement, box: { x: number; y: number; width: number; height: number }): { dark: boolean; blurry: boolean } {
+    const size = 32;
+    const canvas = sampleCanvas ?? document.createElement('canvas');
+    sampleCanvas = canvas;
+    canvas.width = size;
+    canvas.height = size;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context || box.width < 8 || box.height < 8) {
+        return { dark: false, blurry: false };
+    }
+
+    context.drawImage(video, box.x, box.y, box.width, box.height, 0, 0, size, size);
+    const pixels = context.getImageData(0, 0, size, size).data;
+    const gray = new Float32Array(size * size);
+    let sum = 0;
+
+    for (let index = 0, pixel = 0; index < pixels.length; index += 4, pixel += 1) {
+        const value = 0.299 * pixels[index] + 0.587 * pixels[index + 1] + 0.114 * pixels[index + 2];
+        gray[pixel] = value;
+        sum += value;
+    }
+
+    const mean = sum / gray.length;
+    let energy = 0;
+    let count = 0;
+
+    for (let y = 1; y < size - 1; y += 1) {
+        for (let x = 1; x < size - 1; x += 1) {
+            const offset = y * size + x;
+            const lap = 4 * gray[offset] - gray[offset - 1] - gray[offset + 1] - gray[offset - size] - gray[offset + size];
+            energy += lap * lap;
+            count += 1;
+        }
+    }
+
+    return {
+        dark: mean < FACE_PIPELINE.minLuminance,
+        blurry: energy / count < FACE_PIPELINE.minSharpness,
+    };
+}
+
 function guidanceForIssue(issue: FaceDetectionIssue): string {
     switch (issue) {
         case 'ok':
-            return 'Looking good. Hold still while we verify your identity.';
+            return 'Face detected. Hold still...';
         case 'no_face':
-            return 'Center your face in the frame and improve lighting.';
+            return 'No face detected. Position your face within the camera.';
         case 'multiple_faces':
             return 'Only one face should be in the frame.';
         case 'too_small':
@@ -352,13 +529,18 @@ function guidanceForIssue(issue: FaceDetectionIssue): string {
         case 'too_large':
             return 'Move a little farther from the camera.';
         case 'off_center':
-            return 'Center your face in the oval guide.';
+            return 'Position your face in the camera.';
         case 'low_confidence':
-            return 'Improve lighting and face the camera directly.';
+        case 'too_dark':
+            return 'Face not clear. Improve lighting and try again.';
+        case 'blurry':
+            return 'Hold still. The image is not clear yet.';
+        case 'not_frontal':
+            return 'Look directly at the camera.';
         case 'unstable':
             return 'Hold still while we capture your face.';
         case 'camera_not_ready':
-            return 'Starting camera…';
+            return 'Initializing camera...';
         default:
             return 'Adjust your position and try again.';
     }
@@ -395,13 +577,26 @@ function faceErrorForIssue(issue: FaceDetectionIssue, overrideMessage?: string):
                 'Look directly at the camera.',
                 'Keep your head level and try again.',
             ]);
+        case 'too_dark':
         case 'low_confidence':
             return new FaceCaptureError(
-                overrideMessage || 'We couldn’t clearly see your face.',
-                'low_confidence',
+                overrideMessage || 'Face not clear. Improve lighting and try again.',
+                issue,
                 'Improve Lighting',
                 DEFAULT_NO_FACE_TIPS,
             );
+        case 'blurry':
+            return new FaceCaptureError(overrideMessage || 'The image is not clear. Hold still and try again.', 'blurry', 'Hold Still', [
+                'Hold the device steady.',
+                'Wait until your face is in focus.',
+                'Improve the lighting and try again.',
+            ]);
+        case 'not_frontal':
+            return new FaceCaptureError(overrideMessage || 'Look directly at the camera.', 'not_frontal', 'Face the Camera', [
+                'Look straight into the camera.',
+                'Keep your head level.',
+                'Remove anything covering the sides of your face.',
+            ]);
         case 'unstable':
             return new FaceCaptureError(
                 overrideMessage || 'Face capture was inconsistent. Please keep your head steady and try again.',
@@ -412,7 +607,7 @@ function faceErrorForIssue(issue: FaceDetectionIssue, overrideMessage?: string):
         case 'no_face':
         default:
             return new FaceCaptureError(
-                overrideMessage || 'We couldn’t clearly detect your face. Please follow the tips below and try again.',
+                overrideMessage || 'No face detected. Position your face within the camera.',
                 'no_face',
                 'Face Not Detected',
                 DEFAULT_NO_FACE_TIPS,
@@ -424,7 +619,7 @@ function buildCaptureResult(captures: Array<{ descriptor: number[]; confidence: 
     const descriptor = averageDescriptors(captures.map((capture) => capture.descriptor));
     const variance = descriptorVariance(captures.map((capture) => capture.descriptor));
 
-    if (variance > MAX_DESCRIPTOR_VARIANCE) {
+    if (variance > FACE_PIPELINE.maxDescriptorVariance) {
         throw faceErrorForIssue('unstable');
     }
 
@@ -437,6 +632,7 @@ function buildCaptureResult(captures: Array<{ descriptor: number[]; confidence: 
             frame_count: captures.length,
             descriptor_variance: variance,
         },
+        timings: getFaceTimings(),
     };
 }
 
@@ -467,10 +663,17 @@ function euclideanDistance(left: number[], right: number[]): number {
 
 function fileToImage(file: File): Promise<HTMLImageElement> {
     return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
         const image = new Image();
-        image.onload = () => resolve(image);
-        image.onerror = () => reject(new Error('Unable to read uploaded image.'));
-        image.src = URL.createObjectURL(file);
+        image.onload = () => {
+            URL.revokeObjectURL(url);
+            resolve(image);
+        };
+        image.onerror = () => {
+            URL.revokeObjectURL(url);
+            reject(new Error('Unable to read uploaded image.'));
+        };
+        image.src = url;
     });
 }
 

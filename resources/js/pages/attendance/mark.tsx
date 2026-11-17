@@ -2,7 +2,7 @@ import { RescheduleSessionBanner, type RescheduleBannerInfo } from '@/components
 import FaceCaptureModal from '@/components/face/FaceCaptureModal';
 import AttendancePortalLayout from '@/layouts/attendance-portal-layout';
 import { ATTENDANCE_LOCK_MESSAGE } from '@/lib/attendance-lock';
-import { type FaceCaptureResult } from '@/lib/face-recognition';
+import { preloadFaceModels, type FaceCaptureResult } from '@/lib/face-recognition';
 import { acquireFreshDeviceLocation } from '@/lib/device-location';
 import { evaluateAttendanceLocation } from '@/lib/geo';
 import { apiJsonRequest, getApiErrorMessage } from '@/lib/http';
@@ -112,6 +112,13 @@ export default function AttendancePortalMarkPage({
         typeof facialRecognitionEnabledProp === 'boolean'
             ? facialRecognitionEnabledProp
             : getBooleanSetting(systemSettings?.attendance, 'facial_recognition_enabled');
+
+    useEffect(() => {
+        if (!facialRecognitionEnabled) {
+            return;
+        }
+        void preloadFaceModels();
+    }, [facialRecognitionEnabled]);
 
     const [sessions, setSessions] = useState<PortalSession[]>([]);
     const [selected, setSelected] = useState<PortalSession | null>(null);

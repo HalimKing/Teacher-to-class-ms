@@ -2,7 +2,7 @@ import { RescheduleSessionBanner } from '@/components/attendance/RescheduleSessi
 import FaceCaptureModal from '@/components/face/FaceCaptureModal';
 import AppLayout from '@/layouts/app-layout';
 import { ATTENDANCE_LOCK_MESSAGE } from '@/lib/attendance-lock';
-import { type FaceCaptureResult } from '@/lib/face-recognition';
+import { preloadFaceModels, type FaceCaptureResult } from '@/lib/face-recognition';
 import { acquireFreshDeviceLocation } from '@/lib/device-location';
 import { evaluateAttendanceLocation } from '@/lib/geo';
 import { getBooleanSetting } from '@/lib/system-settings';
@@ -300,6 +300,13 @@ export default function AttendancePage() {
         typeof facialRecognitionEnabledProp === 'boolean'
             ? facialRecognitionEnabledProp
             : getBooleanSetting(systemSettings?.attendance, 'facial_recognition_enabled');
+
+    useEffect(() => {
+        if (!facialRecognitionEnabled) {
+            return;
+        }
+        void preloadFaceModels();
+    }, [facialRecognitionEnabled]);
 
     const fetchTodaysClasses = async (options: { silent?: boolean } = {}) => {
         if (!options.silent) {
